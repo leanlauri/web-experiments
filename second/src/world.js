@@ -53,6 +53,13 @@ export class World {
     dir.position.set(8, 16, 6);
     dir.castShadow = true;
     dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.camera.near = 1;
+    dir.shadow.camera.far = 150;
+    dir.shadow.camera.left = -80;
+    dir.shadow.camera.right = 80;
+    dir.shadow.camera.top = 80;
+    dir.shadow.camera.bottom = -80;
+    dir.shadow.bias = -0.0003;
     scene.add(dir);
 
     // Contact material - snowballs have higher friction and lower bounce
