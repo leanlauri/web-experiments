@@ -3,23 +3,23 @@
 ## Install
 
 ```bash
-npm install
+bun install
 ```
 
 ## Run (dev)
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ## Tests
 
 ```bash
-npm test
+bun run test
 ```
 
 Full validation (typecheck + lint + test + build):
 
 ```bash
-npm run validate
+bun run validate
 ```
