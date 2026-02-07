@@ -31,8 +31,7 @@ export class World {
       chunks: new Map(),
       slope: 0.08,
       mountainHeight: 8,
-      heightOffset: -0.35,
-      yaw: Math.PI / 2,
+      heightOffset: 0,
     };
   }
 
@@ -251,7 +250,6 @@ export class World {
     const mat = new THREE.MeshStandardMaterial({ color: 0xf5f9fc, roughness: 0.9, metalness: 0 });
     const mesh = new THREE.Mesh(geometry, mat);
     mesh.position.set(centerX, 0, centerZ);
-    mesh.rotation.y = this.terrain.yaw;
     mesh.receiveShadow = true;
 
     const vertices = Array.from(positions.array);
@@ -265,7 +263,6 @@ export class World {
     });
     body.addShape(shape);
     body.position.set(centerX, this.terrain.heightOffset, centerZ);
-    body.quaternion.setFromEuler(0, this.terrain.yaw, 0);
 
     const entity = new Entity(`terrain-${zIndex}`);
     entity.addComponent(new MeshComponent(mesh));
