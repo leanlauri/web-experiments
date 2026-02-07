@@ -1,15 +1,25 @@
 # second
 
-To install dependencies:
+## Install
 
 ```bash
-bun install
+npm install
 ```
 
-To run:
+## Run (dev)
 
 ```bash
-bun run 
+npm run dev
 ```
 
-This project was created using `bun init` in bun v1.3.8. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Tests
+
+```bash
+npm test
+```
+
+Full validation (typecheck + lint + test + build):
+
+```bash
+npm run validate
+```
