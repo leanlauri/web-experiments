@@ -48,7 +48,7 @@ export class AssetLoader {
 
   createCloudMesh() {
     const puffGeom = new THREE.SphereGeometry(0.7, 16, 16);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xf6fbff, roughness: 0.95, metalness: 0 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xfff2a8, roughness: 0.9, metalness: 0 });
 
     const puffs = [
       new THREE.Mesh(puffGeom, mat),
@@ -69,6 +69,20 @@ export class AssetLoader {
     });
 
     return group;
+  }
+
+  createCoinMesh() {
+    const geom = new THREE.CylinderGeometry(0.35, 0.35, 0.08, 20);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffd54a,
+      roughness: 0.35,
+      metalness: 0.8,
+      emissive: new THREE.Color(0xffd54a),
+      emissiveIntensity: 0.15,
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.castShadow = true;
+    return mesh;
   }
 
   createSkierMesh() {

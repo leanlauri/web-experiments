@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Entity, MeshComponent, PhysicsComponent } from './entity.js';
 import { SphereController } from './scripts/SphereController.js';
+import { CloudController } from './scripts/CloudController.js';
 import { AssetLoader } from './assets.js';
 
 export class World {
@@ -20,6 +21,7 @@ export class World {
     this.treeMat = new CANNON.Material('tree');
     this.rampMat = new CANNON.Material('ramp');
     this.skierMat = new CANNON.Material('skier');
+    this.coinMat = new CANNON.Material('coin');
   }
 
   addEntity(entity) {
@@ -68,6 +70,12 @@ export class World {
       restitution: 0.15,
     });
     this.physicsWorld.addContactMaterial(sphereContact);
+
+    const coinContact = new CANNON.ContactMaterial(groundBody.material, this.coinMat, {
+      friction: 0.6,
+      restitution: 0.35,
+    });
+    this.physicsWorld.addContactMaterial(coinContact);
 
     const groundEntity = new Entity('ground');
     groundEntity.addComponent(new MeshComponent(ground));
@@ -180,6 +188,31 @@ export class World {
 
     const entity = new Entity('cloud');
     entity.addComponent(new MeshComponent(group));
+    entity.addScript(new CloudController(this));
+    this.engine.addEntity(entity);
+  }
+
+  addCoin(
+    x = (Math.random() - 0.5) * 6,
+    y = 10 + Math.random() * 4,
+    z = (Math.random() - 0.5) * 6,
+  ) {
+    const mesh = this.assets.createCoinMesh();
+    mesh.position.set(x, y, z);
+    mesh.rotation.x = Math.PI / 2;
+
+    const body = new CANNON.Body({
+      mass: 0.4,
+      shape: new CANNON.Cylinder(0.35, 0.35, 0.08, 12),
+      position: new CANNON.Vec3(x, y, z),
+      material: this.coinMat,
+      linearDamping: 0.1,
+      angularDamping: 0.6,
+    });
+
+    const entity = new Entity('coin');
+    entity.addComponent(new MeshComponent(mesh));
+    entity.addComponent(new PhysicsComponent(body));
     this.engine.addEntity(entity);
   }
 
@@ -211,6 +244,7 @@ export class World {
       () => this.addRamp(),
       () => this.addSkier(),
       () => this.addCloud(),
+      () => this.addCoin(),
     ];
     const pick = spawners[Math.floor(Math.random() * spawners.length)];
     pick();
