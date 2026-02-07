@@ -1,7 +1,7 @@
 import { Engine } from './engine.js';
 import { World } from './world.js';
 import { InputHandler } from './input-handler.js';
-import cannonDebugger from 'https://unpkg.com/cannon-es-debugger@1.0.0/dist/cannon-es-debugger.es.js?module';
+import cannonDebugger from 'https://unpkg.com/cannon-es-debugger@1.0.0/dist/cannon-es-debugger.js?module';
 
 const engine = new Engine();
 const world = new World(engine);
