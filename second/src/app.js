@@ -8,7 +8,13 @@ world.init();
 engine.start();
 engine.run();
 
-window.addEventListener('pointerdown', (e) => {
-  if (e.button && e.button !== 0) return;
+const addSphereFromInput = (event) => {
+  if (event?.button && event.button !== 0) return;
   world.addSphere();
-});
+};
+
+window.addEventListener('pointerdown', addSphereFromInput);
+window.addEventListener('touchstart', (event) => {
+  event.preventDefault();
+  addSphereFromInput(event);
+}, { passive: false });
