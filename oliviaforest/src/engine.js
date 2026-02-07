@@ -9,8 +9,8 @@ export class Engine extends EngineCore {
     const hasWindow = typeof window !== 'undefined';
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xe8f4f8);
-    this.scene.fog = new THREE.Fog(0xe8f4f8, 40, 100);
+    this.scene.background = new THREE.Color(0xbfe3ff);
+    this.scene.fog = new THREE.Fog(0xbfe3ff, 40, 100);
 
     const width = hasWindow ? window.innerWidth : 800;
     const height = hasWindow ? window.innerHeight : 600;
