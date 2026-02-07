@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
 
 const DEFAULT_PLANE_SIZE = 50;
 
@@ -70,16 +71,16 @@ export class PhysicsDebug {
   createWireframeForShape(shape) {
     let geom = null;
     switch (shape.type) {
-      case 1: // Sphere
+      case CANNON.Shape.types.SPHERE:
         geom = new THREE.SphereGeometry(shape.radius, 12, 12);
         break;
-      case 2: // Plane
+      case CANNON.Shape.types.PLANE:
         geom = new THREE.PlaneGeometry(DEFAULT_PLANE_SIZE, DEFAULT_PLANE_SIZE, 4, 4);
         break;
-      case 3: // Box
+      case CANNON.Shape.types.BOX:
         geom = new THREE.BoxGeometry(shape.halfExtents.x * 2, shape.halfExtents.y * 2, shape.halfExtents.z * 2);
         break;
-      case 4: // Cylinder
+      case CANNON.Shape.types.CYLINDER:
         geom = new THREE.CylinderGeometry(shape.radiusTop, shape.radiusBottom, shape.height, 12);
         break;
       default:

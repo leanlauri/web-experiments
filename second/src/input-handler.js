@@ -21,6 +21,7 @@ export class InputHandler {
 
   handlePointerDown(event) {
     if (event?.button && event.button !== 0) return;
+    if (event?.target?.closest?.('#debugToggle')) return;
     this.onTapped(event);
   }
 
@@ -34,6 +35,7 @@ export class InputHandler {
 
   handleTouchEnd(event) {
     if (!this.touchStart || !event.changedTouches?.length) return;
+    if (event?.target?.closest?.('#debugToggle')) return;
     event.preventDefault();
     const touch = [...event.changedTouches].find((t) => t.identifier === this.touchId) || event.changedTouches[0];
     const dx = touch.clientX - this.touchStart.x;

@@ -25,9 +25,15 @@ const setDebug = (enabled) => {
 setDebug(false);
 
 if (debugToggle) {
-  debugToggle.addEventListener('click', () => {
+  debugToggle.addEventListener('click', (event) => {
+    event.stopPropagation();
     setDebug(!physicsDebug.enabled);
   });
+  debugToggle.addEventListener('touchstart', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDebug(!physicsDebug.enabled);
+  }, { passive: false });
 }
 
 window.addEventListener('keydown', (event) => {
