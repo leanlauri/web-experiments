@@ -26,6 +26,7 @@ export class SkierController {
     this.boostMinSpeed = boostMinSpeed;
     this.boostTimer = 0;
     this.boosting = false;
+    this.boostRequested = false;
 
     this.heading = Math.PI; // facing -Z
     this.keys = new Set();
@@ -69,6 +70,10 @@ export class SkierController {
 
     const touchSteer = this.world?.input?.steer ?? 0;
     this.boostTimer = Math.max(0, this.boostTimer - dt);
+    if (this.world?.input?.boost) {
+      this.boostRequested = true;
+      this.world.input.boost = false;
+    }
 
     const steer = Math.max(-1, Math.min(1,
       (this.keys.has('ArrowLeft') || this.keys.has('KeyA') ? 1 : 0)
@@ -105,11 +110,12 @@ export class SkierController {
       }
       if (!wantsJump) this.jumpConsumed = false;
 
-      const wantsBoost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.world?.input?.boost;
+      const wantsBoost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.boostRequested;
       if (!wantsBoost) this.boosting = false;
 
       if (wantsBoost && this.boostTimer === 0) {
         this.boosting = true;
+        this.boostRequested = false;
       }
 
       if (this.boosting) {

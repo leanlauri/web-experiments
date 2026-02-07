@@ -131,8 +131,6 @@ if (boostButton) {
   boostButton.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     setBoost(true);
+    setTimeout(() => setBoost(false), 0);
   });
-  boostButton.addEventListener('pointerup', () => setBoost(false));
-  boostButton.addEventListener('pointercancel', () => setBoost(false));
-  boostButton.addEventListener('pointerleave', () => setBoost(false));
 }
