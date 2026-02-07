@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Entity, MeshComponent, PhysicsComponent } from './entity.js';
 import { SphereController } from './scripts/SphereController.js';
+import { SkierController } from './scripts/SkierController.js';
 import { AssetLoader } from './assets.js';
 
 export class World {
@@ -90,9 +91,22 @@ export class World {
     });
     this.physicsWorld.addContactMaterial(sphereContact);
 
+    const skierTerrain = new CANNON.ContactMaterial(this.skierMat, this.terrainMat, {
+      friction: 0.08,
+      restitution: 0.1,
+    });
+    this.physicsWorld.addContactMaterial(skierTerrain);
+
+    const skierRamp = new CANNON.ContactMaterial(this.skierMat, this.rampMat, {
+      friction: 0.05,
+      restitution: 0.1,
+    });
+    this.physicsWorld.addContactMaterial(skierRamp);
+
     this.initTerrain();
     this.engine.addPostUpdate(() => this.updateTerrain());
 
+    this.addPlayer();
   }
 
   addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z = (Math.random() - 0.5) * 6) {
@@ -179,6 +193,37 @@ export class World {
     const entity = new Entity('skier');
     entity.addComponent(new MeshComponent(group));
     entity.addComponent(new PhysicsComponent(phys));
+    this.engine.addEntity(entity);
+  }
+
+  addPlayer() {
+    const group = this.assets.createSkierMesh();
+    group.position.set(0, 3, 0);
+
+    const radius = 0.35;
+    const height = 1.2;
+    const cyl = new CANNON.Cylinder(radius, radius, height, 8);
+    const sphereTop = new CANNON.Sphere(radius);
+    const sphereBottom = new CANNON.Sphere(radius);
+
+    const body = new CANNON.Body({
+      mass: 4,
+      material: this.skierMat,
+      position: new CANNON.Vec3(0, 3, 0),
+      linearDamping: 0.05,
+      angularDamping: 0.9,
+      fixedRotation: true,
+      collisionFilterGroup: 2,
+      collisionFilterMask: 1,
+    });
+    body.addShape(cyl);
+    body.addShape(sphereTop, new CANNON.Vec3(0, height / 2, 0));
+    body.addShape(sphereBottom, new CANNON.Vec3(0, -height / 2, 0));
+
+    const entity = new Entity('player');
+    entity.addComponent(new MeshComponent(group));
+    entity.addComponent(new PhysicsComponent(body));
+    entity.addScript(new SkierController(this));
     this.engine.addEntity(entity);
   }
 
