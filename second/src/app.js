@@ -7,3 +7,8 @@ engine.setWorld(world);
 world.init();
 engine.start();
 engine.run();
+
+window.addEventListener('pointerdown', (e) => {
+  if (e.button && e.button !== 0) return;
+  world.addSphere();
+});
