@@ -30,6 +30,14 @@
   <button id="debugToggle" title="Toggle physics debug">🧪</button>
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+      }
+    }
+  </script>
   <script type="module" src="./src/app.js"></script>
 </body>
 </html>
