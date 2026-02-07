@@ -30,8 +30,8 @@ export class World {
       viewAhead: 4,
       viewBehind: 1,
       chunks: new Map(),
-      slope: 0.08,
-      mountainHeight: 8,
+      slope: 0.12,
+      mountainHeight: 14,
       heightOffset: 0,
       scatter: {
         trees: 8,
@@ -484,12 +484,12 @@ export class World {
 
   getHeight(x, z) {
     const { slope, mountainHeight } = this.terrain;
-    const baseSlope = z * slope;
+    const baseSlope = -z * slope;
 
-    const ridge = 1 - Math.abs(this.fbm(x * 0.018, z * 0.018, 4) * 2 - 1);
-    const detail = this.fbm(x * 0.08, z * 0.08, 3);
+    const ridge = 1 - Math.abs(this.fbm(x * 0.014, z * 0.014, 5) * 2 - 1);
+    const detail = this.fbm(x * 0.07, z * 0.07, 4);
 
-    return baseSlope + ridge * mountainHeight + detail * 1.8;
+    return baseSlope + ridge * mountainHeight + detail * 2.4;
   }
 
   fbm(x, z, octaves = 4) {
