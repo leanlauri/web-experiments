@@ -36,6 +36,15 @@ export class World {
         trees: 8,
         ramps: 2,
         spheres: 6,
+        minSpacing: {
+          tree: 6,
+          ramp: 10,
+          sphere: 4,
+        },
+        maxSlopeDeg: {
+          tree: 30,
+          ramp: 18,
+        },
       },
     };
   }
@@ -84,11 +93,6 @@ export class World {
     this.initTerrain();
     this.engine.addPostUpdate(() => this.updateTerrain());
 
-    // Seed a few objects
-    for (let i = 0; i < 5; i++) this.addSphere();
-    for (let i = 0; i < 3; i++) this.addTree();
-    for (let i = 0; i < 2; i++) this.addRamp();
-    for (let i = 0; i < 2; i++) this.addSkier();
   }
 
   addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z = (Math.random() - 0.5) * 6) {
@@ -199,17 +203,6 @@ export class World {
     this.engine.addEntity(entity);
   }
 
-  spawnRandomEntity() {
-    const spawners = [
-      () => this.addSphere(),
-      () => this.addTree(),
-      () => this.addRamp(),
-      () => this.addSkier(),
-    ];
-    const pick = spawners[Math.floor(Math.random() * spawners.length)];
-    pick();
-  }
-
   initTerrain() {
     this.terrain.chunks.clear();
     this.updateTerrain(true);
@@ -292,26 +285,71 @@ export class World {
   scatterTerrainEntities(centerX, centerZ, width, depth) {
     const scatter = this.terrain.scatter;
     const created = [];
+    const placed = [];
 
-    for (let i = 0; i < scatter.trees; i++) {
-      const { x, z } = this.randomPointInChunk(centerX, centerZ, width, depth);
-      const y = this.getHeight(x, z);
-      created.push(this.addTreeAt(x, y, z));
-    }
+    this.tryScatter(scatter.trees, 20, (pos) => {
+      if (!this.isSlopeOk(pos.x, pos.z, scatter.maxSlopeDeg.tree)) return null;
+      return {
+        x: pos.x,
+        z: pos.z,
+        min: scatter.minSpacing.tree,
+        place: () => this.addTreeAt(pos.x, this.getHeight(pos.x, pos.z), pos.z),
+      };
+    }, placed, created, centerX, centerZ, width, depth);
 
-    for (let i = 0; i < scatter.ramps; i++) {
-      const { x, z } = this.randomPointInChunk(centerX, centerZ, width, depth);
-      const y = this.getHeight(x, z) + 0.05;
-      created.push(this.addRampAt(x, y, z));
-    }
+    this.tryScatter(scatter.ramps, 30, (pos) => {
+      if (!this.isSlopeOk(pos.x, pos.z, scatter.maxSlopeDeg.ramp)) return null;
+      return {
+        x: pos.x,
+        z: pos.z,
+        min: scatter.minSpacing.ramp,
+        place: () => this.addRampAt(pos.x, this.getHeight(pos.x, pos.z) + 0.05, pos.z),
+      };
+    }, placed, created, centerX, centerZ, width, depth);
 
-    for (let i = 0; i < scatter.spheres; i++) {
-      const { x, z } = this.randomPointInChunk(centerX, centerZ, width, depth);
-      const y = this.getHeight(x, z) + 1.2;
-      created.push(this.addSphere(x, y, z));
-    }
+    this.tryScatter(scatter.spheres, 20, (pos) => {
+      return {
+        x: pos.x,
+        z: pos.z,
+        min: scatter.minSpacing.sphere,
+        place: () => this.addSphere(pos.x, this.getHeight(pos.x, pos.z) + 1.2, pos.z),
+      };
+    }, placed, created, centerX, centerZ, width, depth);
 
     return created;
+  }
+
+  tryScatter(count, maxAttempts, planFn, placed, created, centerX, centerZ, width, depth) {
+    let added = 0;
+    let attempts = 0;
+    while (added < count && attempts < count * maxAttempts) {
+      attempts += 1;
+      const pos = this.randomPointInChunk(centerX, centerZ, width, depth);
+      const plan = planFn(pos);
+      if (!plan) continue;
+      if (!this.isFarEnough(plan, placed)) continue;
+      const entity = plan.place();
+      placed.push({ x: plan.x, z: plan.z, min: plan.min });
+      created.push(entity);
+      added += 1;
+    }
+  }
+
+  isFarEnough(pos, placed) {
+    for (const other of placed) {
+      const dx = pos.x - other.x;
+      const dz = pos.z - other.z;
+      const dist = Math.hypot(dx, dz);
+      const min = Math.max(pos.min, other.min);
+      if (dist < min) return false;
+    }
+    return true;
+  }
+
+  isSlopeOk(x, z, maxSlopeDeg) {
+    const normal = this.getNormal(x, z);
+    const slopeDeg = Math.acos(Math.max(-1, Math.min(1, normal.y))) * (180 / Math.PI);
+    return slopeDeg <= maxSlopeDeg;
   }
 
   randomPointInChunk(centerX, centerZ, width, depth) {

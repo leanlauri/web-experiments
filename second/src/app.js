@@ -44,7 +44,6 @@ window.addEventListener('keydown', (event) => {
 
 new InputHandler({
   element: window,
-  onTapped: () => world.spawnRandomEntity(),
   onSwiped: (direction) => {
     // Placeholder for future controls.
     console.log('Swiped:', direction);
