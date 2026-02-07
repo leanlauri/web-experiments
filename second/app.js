@@ -1,6 +1,9 @@
 import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js?module';
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
+import { Engine } from './engine.js';
+import { Entity, MeshComponent, PhysicsComponent } from './entity.js';
+import { SphereController } from './scripts/SphereController.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe8f4f8);
@@ -32,14 +35,13 @@ const groundMat = new THREE.MeshStandardMaterial({ color: 0xf5f9fc, roughness: 0
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
-scene.add(ground);
 
 // Physics world
-const world = new CANNON.World({
+const physicsWorld = new CANNON.World({
   gravity: new CANNON.Vec3(0, -9.82, 0),
 });
-world.broadphase = new CANNON.SAPBroadphase(world);
-world.allowSleep = true;
+physicsWorld.broadphase = new CANNON.SAPBroadphase(physicsWorld);
+physicsWorld.allowSleep = true;
 
 // Physics ground
 const groundBody = new CANNON.Body({
@@ -48,7 +50,6 @@ const groundBody = new CANNON.Body({
   material: new CANNON.Material('ground'),
 });
 groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-world.addBody(groundBody);
 
 // Contact material - snowballs have higher friction and lower bounce
 const sphereMat = new CANNON.Material('sphere');
@@ -56,67 +57,28 @@ const contact = new CANNON.ContactMaterial(groundBody.material, sphereMat, {
   friction: 0.8,
   restitution: 0.2,
 });
-world.addContactMaterial(contact);
+physicsWorld.addContactMaterial(contact);
 // Snowball-to-snowball interactions
 const sphereContact = new CANNON.ContactMaterial(sphereMat, sphereMat, {
   friction: 0.7,
   restitution: 0.15,
 });
-world.addContactMaterial(sphereContact);
+physicsWorld.addContactMaterial(sphereContact);
 
-class Entity {
-  constructor(name) {
-    this.name = name;
-    this.components = new Map();
-  }
-
-  addComponent(component) {
-    this.components.set(component.type, component);
-    component.entity = this;
-    return this;
-  }
-
-  getComponent(type) {
-    return this.components.get(type);
-  }
-
-  hasComponents(...types) {
-    return types.every((type) => this.components.has(type));
-  }
-}
-
-class MeshComponent {
-  static type = 'mesh';
-
-  constructor(mesh) {
-    this.type = MeshComponent.type;
-    this.mesh = mesh;
-  }
-}
-
-class PhysicsComponent {
-  static type = 'physics';
-
-  constructor(body) {
-    this.type = PhysicsComponent.type;
-    this.body = body;
-  }
-}
-
-const entities = [];
+const engine = new Engine({ scene, physicsWorld });
 
 const groundEntity = new Entity('ground');
 groundEntity.addComponent(new MeshComponent(ground));
 groundEntity.addComponent(new PhysicsComponent(groundBody));
-entities.push(groundEntity);
+engine.addEntity(groundEntity);
 
 function addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z = (Math.random() - 0.5) * 6) {
   const r = 0.5 + Math.random() * 0.6;
   const geom = new THREE.SphereGeometry(r, 24, 24);
-  
+
   // Snowballs: white base with slight variations and roughness
   const snowColor = new THREE.Color().setHSL(0.55, 0.15, 0.92 + Math.random() * 0.08);
-  const mat = new THREE.MeshStandardMaterial({ 
+  const mat = new THREE.MeshStandardMaterial({
     color: snowColor,
     roughness: 0.95,
     metalness: 0,
@@ -125,7 +87,6 @@ function addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z 
   });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
-  scene.add(mesh);
 
   // Snowballs are slightly heavier due to compacted snow
   const body = new CANNON.Body({
@@ -136,16 +97,18 @@ function addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z 
     linearDamping: 0.15,
     angularDamping: 0.3,
   });
-  world.addBody(body);
 
   const entity = new Entity('snowball');
   entity.addComponent(new MeshComponent(mesh));
   entity.addComponent(new PhysicsComponent(body));
-  entities.push(entity);
+  entity.addScript(new SphereController());
+  engine.addEntity(entity);
 }
 
 // Seed a few spheres
 for (let i = 0; i < 8; i++) addSphere();
+
+engine.start();
 
 // Click/touch to add more
 window.addEventListener('pointerdown', (e) => {
@@ -167,16 +130,7 @@ function animate(time) {
   requestAnimationFrame(animate);
   if (lastTime != null) {
     const dt = Math.min(0.033, (time - lastTime) / 1000);
-    world.step(1 / 60, dt, 3);
-
-    for (const entity of entities) {
-      if (entity.hasComponents(MeshComponent.type, PhysicsComponent.type)) {
-        const mesh = entity.getComponent(MeshComponent.type).mesh;
-        const body = entity.getComponent(PhysicsComponent.type).body;
-        mesh.position.copy(body.position);
-        mesh.quaternion.copy(body.quaternion);
-      }
-    }
+    engine.update(dt);
   }
   lastTime = time;
   controls.update();

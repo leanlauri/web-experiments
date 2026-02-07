@@ -1,0 +1,97 @@
+import { World } from './world.js';
+import { MeshComponent, PhysicsComponent } from './entity.js';
+
+export class Engine {
+  constructor({ scene = null, physicsWorld = null } = {}) {
+    this.scene = scene;
+    this.physicsWorld = physicsWorld;
+    this.world = new World();
+    this.bodyToEntity = new Map();
+    this.started = false;
+  }
+
+  addEntity(entity) {
+    this.world.addEntity(entity);
+
+    if (this.scene && entity.hasComponents(MeshComponent.type)) {
+      const mesh = entity.getComponent(MeshComponent.type).mesh;
+      this.scene.add(mesh);
+    }
+
+    if (this.physicsWorld && entity.hasComponents(PhysicsComponent.type)) {
+      const body = entity.getComponent(PhysicsComponent.type).body;
+      this.physicsWorld.addBody(body);
+      this.bodyToEntity.set(body, entity);
+
+      body.addEventListener('collide', (event) => {
+        const other = this.bodyToEntity.get(event.body);
+        this.notifyCollision(entity, other, event);
+      });
+    }
+
+    if (this.started) this.runStart(entity);
+  }
+
+  removeEntity(entity) {
+    this.runDestroy(entity);
+
+    if (this.scene && entity.hasComponents(MeshComponent.type)) {
+      const mesh = entity.getComponent(MeshComponent.type).mesh;
+      this.scene.remove(mesh);
+    }
+
+    if (this.physicsWorld && entity.hasComponents(PhysicsComponent.type)) {
+      const body = entity.getComponent(PhysicsComponent.type).body;
+      this.physicsWorld.removeBody(body);
+      this.bodyToEntity.delete(body);
+    }
+
+    this.world.removeEntity(entity);
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    for (const entity of this.world.entities) this.runStart(entity);
+  }
+
+  update(dt) {
+    if (this.physicsWorld) {
+      this.physicsWorld.step(1 / 60, dt, 3);
+
+      for (const entity of this.world.entities) {
+        if (entity.hasComponents(MeshComponent.type, PhysicsComponent.type)) {
+          const mesh = entity.getComponent(MeshComponent.type).mesh;
+          const body = entity.getComponent(PhysicsComponent.type).body;
+          mesh.position.copy(body.position);
+          mesh.quaternion.copy(body.quaternion);
+        }
+      }
+    }
+
+    for (const entity of this.world.entities) {
+      for (const script of entity.scripts) {
+        if (typeof script.update === 'function') script.update(dt);
+      }
+    }
+  }
+
+  runStart(entity) {
+    for (const script of entity.scripts) {
+      if (typeof script.onStart === 'function') script.onStart();
+    }
+  }
+
+  runDestroy(entity) {
+    for (const script of entity.scripts) {
+      if (typeof script.onDestroy === 'function') script.onDestroy();
+    }
+  }
+
+  notifyCollision(entity, other, event) {
+    if (!entity) return;
+    for (const script of entity.scripts) {
+      if (typeof script.onCollide === 'function') script.onCollide(other, event);
+    }
+  }
+}
