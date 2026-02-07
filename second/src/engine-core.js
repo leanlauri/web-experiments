@@ -1,22 +1,21 @@
-import { World } from './world.js';
 import { MeshComponent, PhysicsComponent } from './entity.js';
 
-export class Engine {
-  constructor({ scene = null, physicsWorld = null } = {}) {
-    this.scene = scene;
-    this.physicsWorld = physicsWorld;
-    this.world = new World();
+export class EngineCore {
+  constructor() {
+    this.world = null;
+    this.physicsWorld = null;
     this.bodyToEntity = new Map();
     this.started = false;
   }
 
-  addEntity(entity) {
-    this.world.addEntity(entity);
+  setWorld(world) {
+    this.world = world;
+    this.physicsWorld = world.physicsWorld;
+  }
 
-    if (this.scene && entity.hasComponents(MeshComponent.type)) {
-      const mesh = entity.getComponent(MeshComponent.type).mesh;
-      this.scene.add(mesh);
-    }
+  addEntity(entity) {
+    if (!this.world) throw new Error('Engine world not set');
+    this.world.addEntity(entity);
 
     if (this.physicsWorld && entity.hasComponents(PhysicsComponent.type)) {
       const body = entity.getComponent(PhysicsComponent.type).body;
@@ -34,11 +33,6 @@ export class Engine {
 
   removeEntity(entity) {
     this.runDestroy(entity);
-
-    if (this.scene && entity.hasComponents(MeshComponent.type)) {
-      const mesh = entity.getComponent(MeshComponent.type).mesh;
-      this.scene.remove(mesh);
-    }
 
     if (this.physicsWorld && entity.hasComponents(PhysicsComponent.type)) {
       const body = entity.getComponent(PhysicsComponent.type).body;
@@ -63,8 +57,10 @@ export class Engine {
         if (entity.hasComponents(MeshComponent.type, PhysicsComponent.type)) {
           const mesh = entity.getComponent(MeshComponent.type).mesh;
           const body = entity.getComponent(PhysicsComponent.type).body;
-          mesh.position.copy(body.position);
-          mesh.quaternion.copy(body.quaternion);
+          if (mesh) {
+            mesh.position.copy(body.position);
+            mesh.quaternion.copy(body.quaternion);
+          }
         }
       }
     }

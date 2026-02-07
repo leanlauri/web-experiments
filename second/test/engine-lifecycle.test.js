@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Engine } from '../engine.js';
-import { Entity } from '../entity.js';
+import { EngineCore as Engine } from '../src/engine-core.js';
+import { Entity } from '../src/entity.js';
 
 function createScript() {
   return {
@@ -14,6 +14,17 @@ function createScript() {
 describe('Engine lifecycle callbacks', () => {
   it('calls onStart, update, onDestroy', () => {
     const engine = new Engine();
+    engine.setWorld({
+      entities: [],
+      addEntity(entity) {
+        this.entities.push(entity);
+      },
+      removeEntity(entity) {
+        const index = this.entities.indexOf(entity);
+        if (index !== -1) this.entities.splice(index, 1);
+      },
+      physicsWorld: null,
+    });
     const entity = new Entity('test');
     const script = createScript();
     entity.addScript(script);
@@ -30,6 +41,17 @@ describe('Engine lifecycle callbacks', () => {
 
   it('calls onCollide with other entity', () => {
     const engine = new Engine();
+    engine.setWorld({
+      entities: [],
+      addEntity(entity) {
+        this.entities.push(entity);
+      },
+      removeEntity(entity) {
+        const index = this.entities.indexOf(entity);
+        if (index !== -1) this.entities.splice(index, 1);
+      },
+      physicsWorld: null,
+    });
     const a = new Entity('a');
     const b = new Entity('b');
     const script = createScript();
