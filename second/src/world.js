@@ -228,19 +228,20 @@ export class World {
     const { chunkSize, segments } = this.terrain;
     const width = chunkSize;
     const depth = chunkSize;
-    const startX = -width / 2;
-    const startZ = zIndex * chunkSize;
+    const centerX = 0;
+    const centerZ = (zIndex + 0.5) * chunkSize;
+    const startX = centerX - width / 2;
+    const startZ = centerZ - depth / 2;
 
     const geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
     geometry.rotateX(-Math.PI / 2);
-    geometry.translate(width / 2, 0, depth / 2);
 
     const positions = geometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
       const localX = positions.getX(i);
       const localZ = positions.getZ(i);
-      const worldX = localX + startX;
-      const worldZ = localZ + startZ;
+      const worldX = localX + centerX;
+      const worldZ = localZ + centerZ;
       const height = this.getHeight(worldX, worldZ);
       positions.setY(i, height);
     }
@@ -249,7 +250,7 @@ export class World {
 
     const mat = new THREE.MeshStandardMaterial({ color: 0xf5f9fc, roughness: 0.9, metalness: 0 });
     const mesh = new THREE.Mesh(geometry, mat);
-    mesh.position.set(startX, 0, startZ);
+    mesh.position.set(centerX, 0, centerZ);
     mesh.rotation.y = this.terrain.yaw;
     mesh.receiveShadow = true;
 
@@ -269,9 +270,11 @@ export class World {
       type: CANNON.Body.STATIC,
       material: this.terrainMat,
     });
-    body.addShape(shape);
-    body.position.set(startX, this.terrain.heightOffset, startZ);
-    body.quaternion.setFromEuler(0, this.terrain.yaw, 0);
+    const shapeOffset = new CANNON.Vec3(-width / 2, 0, -depth / 2);
+    const shapeQuat = new CANNON.Quaternion();
+    shapeQuat.setFromEuler(-Math.PI / 2, this.terrain.yaw, 0);
+    body.addShape(shape, shapeOffset, shapeQuat);
+    body.position.set(centerX, this.terrain.heightOffset, centerZ);
 
     const entity = new Entity(`terrain-${zIndex}`);
     entity.addComponent(new MeshComponent(mesh));
