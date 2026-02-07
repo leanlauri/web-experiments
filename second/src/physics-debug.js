@@ -83,11 +83,41 @@ export class PhysicsDebug {
       case CANNON.Shape.types.CYLINDER:
         geom = new THREE.CylinderGeometry(shape.radiusTop, shape.radiusBottom, shape.height, 12);
         break;
+      case CANNON.Shape.types.HEIGHTFIELD:
+        geom = this.buildHeightfieldGeometry(shape);
+        break;
       default:
         return null;
     }
 
     const edges = new THREE.EdgesGeometry(geom);
     return new THREE.LineSegments(edges, this.material);
+  }
+
+  buildHeightfieldGeometry(shape) {
+    const data = shape.data;
+    if (!data || !data.length) return null;
+
+    const widthSegments = data.length - 1;
+    const depthSegments = data[0].length - 1;
+    const width = widthSegments * shape.elementSize;
+    const depth = depthSegments * shape.elementSize;
+
+    const geometry = new THREE.PlaneGeometry(width, depth, widthSegments, depthSegments);
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(width / 2, 0, depth / 2);
+
+    const positions = geometry.attributes.position;
+    let index = 0;
+    for (let zi = 0; zi <= depthSegments; zi++) {
+      for (let xi = 0; xi <= widthSegments; xi++) {
+        positions.setY(index, data[xi][zi]);
+        index++;
+      }
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+
+    return geometry;
   }
 }

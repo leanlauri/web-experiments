@@ -31,6 +31,7 @@ export class World {
       chunks: new Map(),
       slope: 0.08,
       mountainHeight: 8,
+      heightOffset: -0.35,
     };
   }
 
@@ -267,7 +268,7 @@ export class World {
       material: this.terrainMat,
     });
     body.addShape(shape);
-    body.position.set(startX, 0, startZ);
+    body.position.set(startX, this.terrain.heightOffset, startZ);
     body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
 
     const entity = new Entity(`terrain-${zIndex}`);
