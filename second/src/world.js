@@ -268,6 +268,7 @@ export class World {
     });
     body.addShape(shape);
     body.position.set(startX, 0, startZ);
+    body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
 
     const entity = new Entity(`terrain-${zIndex}`);
     entity.addComponent(new MeshComponent(mesh));
