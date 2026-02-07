@@ -60,6 +60,24 @@
       background: rgba(44,90,160,0.85);
       color: white;
     }
+    #boostButton {
+      position: fixed; right: 20px; bottom: 160px;
+      width: 64px; height: 64px;
+      border-radius: 18px;
+      border: none;
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      font-size: 22px;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #boostButton.active {
+      background: rgba(255,170,60,0.9);
+      color: white;
+    }
+    #boostButton.cooldown {
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body>
@@ -70,6 +88,7 @@
       <div id="joystickBase"></div>
       <div id="joystickThumb"></div>
     </div>
+    <button id="boostButton" aria-label="Boost">⏩</button>
     <button id="jumpButton" aria-label="Jump">⤴️</button>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>

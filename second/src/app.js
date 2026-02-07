@@ -42,13 +42,14 @@ window.addEventListener('keydown', (event) => {
 });
 
 // Touch controls
-const inputState = { steer: 0, jump: false };
+const inputState = { steer: 0, jump: false, boost: false };
 world.input = inputState;
 
 const joystickZone = document.getElementById('joystickZone');
 const joystickBase = document.getElementById('joystickBase');
 const joystickThumb = document.getElementById('joystickThumb');
 const jumpButton = document.getElementById('jumpButton');
+const boostButton = document.getElementById('boostButton');
 
 let joystickActive = false;
 let joystickId = null;
@@ -119,4 +120,25 @@ if (jumpButton) {
   jumpButton.addEventListener('pointerup', () => setJump(false));
   jumpButton.addEventListener('pointercancel', () => setJump(false));
   jumpButton.addEventListener('pointerleave', () => setJump(false));
+}
+
+if (boostButton) {
+  let cooling = false;
+  const setBoost = (state) => {
+    inputState.boost = state;
+    boostButton.classList.toggle('active', state);
+  };
+
+  boostButton.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    if (cooling) return;
+    setBoost(true);
+    cooling = true;
+    boostButton.classList.add('cooldown');
+    setTimeout(() => {
+      setBoost(false);
+      boostButton.classList.remove('cooldown');
+      cooling = false;
+    }, 1000);
+  });
 }
