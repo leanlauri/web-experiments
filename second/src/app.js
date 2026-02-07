@@ -1,7 +1,6 @@
 import { Engine } from './engine.js';
 import { World } from './world.js';
 import { InputHandler } from './input-handler.js';
-import cannonDebugger from 'https://unpkg.com/cannon-es-debugger@1.0.0/dist/cannon-es-debugger.js?module';
 
 const engine = new Engine();
 const world = new World(engine);
@@ -12,15 +11,30 @@ engine.run();
 
 const debugToggle = document.getElementById('debugToggle');
 let debugEnabled = false;
-const debug = cannonDebugger(engine.scene, world.physicsWorld, { color: 0x2c5aa0 });
+let debug = null;
+let debugLoading = false;
 
 engine.addPostUpdate(() => {
-  if (debugEnabled) debug.update();
+  if (debugEnabled && debug) debug.update();
 });
 
-const setDebug = (enabled) => {
+const setDebug = async (enabled) => {
   debugEnabled = enabled;
   debugToggle?.classList.toggle('active', enabled);
+
+  if (enabled && !debug && !debugLoading) {
+    debugLoading = true;
+    try {
+      const mod = await import('https://unpkg.com/cannon-es-debugger@1.0.0/dist/cannon-es-debugger.js?module');
+      debug = mod.default(engine.scene, world.physicsWorld, { color: 0x2c5aa0 });
+    } catch (err) {
+      console.error('Failed to load physics debugger', err);
+      debugEnabled = false;
+      debugToggle?.classList.remove('active');
+    } finally {
+      debugLoading = false;
+    }
+  }
 };
 
 setDebug(false);
