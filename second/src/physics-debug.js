@@ -86,6 +86,9 @@ export class PhysicsDebug {
       case CANNON.Shape.types.HEIGHTFIELD:
         geom = this.buildHeightfieldGeometry(shape);
         break;
+      case CANNON.Shape.types.TRIMESH:
+        geom = this.buildTrimeshGeometry(shape);
+        break;
       default:
         return null;
     }
@@ -118,6 +121,26 @@ export class PhysicsDebug {
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
 
+    return geometry;
+  }
+
+  buildTrimeshGeometry(shape) {
+    const vertices = shape.vertices;
+    const indices = shape.indices;
+    if (!vertices || !indices || !vertices.length || !indices.length) return null;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(indices.length * 3);
+
+    for (let i = 0; i < indices.length; i++) {
+      const vIndex = indices[i] * 3;
+      positions[i * 3] = vertices[vIndex];
+      positions[i * 3 + 1] = vertices[vIndex + 1];
+      positions[i * 3 + 2] = vertices[vIndex + 2];
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
     return geometry;
   }
 }
