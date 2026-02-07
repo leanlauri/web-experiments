@@ -6,6 +6,7 @@ export class EngineCore {
     this.physicsWorld = null;
     this.bodyToEntity = new Map();
     this.started = false;
+    this.postUpdateCallbacks = [];
   }
 
   setWorld(world) {
@@ -70,6 +71,8 @@ export class EngineCore {
         if (typeof script.update === 'function') script.update(dt);
       }
     }
+
+    for (const cb of this.postUpdateCallbacks) cb(dt);
   }
 
   runStart(entity) {
@@ -82,6 +85,10 @@ export class EngineCore {
     for (const script of entity.scripts) {
       if (typeof script.onDestroy === 'function') script.onDestroy();
     }
+  }
+
+  addPostUpdate(callback) {
+    this.postUpdateCallbacks.push(callback);
   }
 
   notifyCollision(entity, other, event) {
