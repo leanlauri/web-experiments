@@ -32,6 +32,11 @@ export class World {
       slope: 0.08,
       mountainHeight: 8,
       heightOffset: 0,
+      scatter: {
+        trees: 8,
+        ramps: 2,
+        spheres: 6,
+      },
     };
   }
 
@@ -224,6 +229,9 @@ export class World {
       for (const [zi, chunk] of this.terrain.chunks) {
         if (zi < minIndex || zi > maxIndex) {
           this.engine.removeEntity(chunk.entity);
+          if (chunk.scatterEntities) {
+            for (const e of chunk.scatterEntities) this.engine.removeEntity(e);
+          }
           this.terrain.chunks.delete(zi);
         }
       }
@@ -276,7 +284,94 @@ export class World {
     entity.addComponent(new PhysicsComponent(body));
     this.engine.addEntity(entity);
 
-    this.terrain.chunks.set(zIndex, { entity, body, mesh });
+    const scatterEntities = this.scatterTerrainEntities(centerX, centerZ, width, depth);
+
+    this.terrain.chunks.set(zIndex, { entity, body, mesh, scatterEntities });
+  }
+
+  scatterTerrainEntities(centerX, centerZ, width, depth) {
+    const scatter = this.terrain.scatter;
+    const created = [];
+
+    for (let i = 0; i < scatter.trees; i++) {
+      const { x, z } = this.randomPointInChunk(centerX, centerZ, width, depth);
+      const y = this.getHeight(x, z);
+      created.push(this.addTreeAt(x, y, z));
+    }
+
+    for (let i = 0; i < scatter.ramps; i++) {
+      const { x, z } = this.randomPointInChunk(centerX, centerZ, width, depth);
+      const y = this.getHeight(x, z) + 0.05;
+      created.push(this.addRampAt(x, y, z));
+    }
+
+    for (let i = 0; i < scatter.spheres; i++) {
+      const { x, z } = this.randomPointInChunk(centerX, centerZ, width, depth);
+      const y = this.getHeight(x, z) + 1.2;
+      created.push(this.addSphere(x, y, z));
+    }
+
+    return created;
+  }
+
+  randomPointInChunk(centerX, centerZ, width, depth) {
+    const x = centerX + (Math.random() - 0.5) * width;
+    const z = centerZ + (Math.random() - 0.5) * depth;
+    return { x, z };
+  }
+
+  getNormal(x, z) {
+    const eps = 0.35;
+    const hL = this.getHeight(x - eps, z);
+    const hR = this.getHeight(x + eps, z);
+    const hD = this.getHeight(x, z - eps);
+    const hU = this.getHeight(x, z + eps);
+    const nx = hL - hR;
+    const ny = 2 * eps;
+    const nz = hD - hU;
+    return new THREE.Vector3(nx, ny, nz).normalize();
+  }
+
+  addTreeAt(x, y, z) {
+    const group = this.assets.createTreeMesh();
+    group.position.set(x, y, z);
+
+    const body = new CANNON.Body({
+      type: CANNON.Body.STATIC,
+      shape: new CANNON.Cylinder(0.6, 0.6, 3.0, 8),
+      position: new CANNON.Vec3(x, y + 1.5, z),
+      material: this.treeMat,
+    });
+
+    const entity = new Entity('tree');
+    entity.addComponent(new MeshComponent(group));
+    entity.addComponent(new PhysicsComponent(body));
+    this.engine.addEntity(entity);
+    return entity;
+  }
+
+  addRampAt(x, y, z) {
+    const mesh = this.assets.createRampMesh();
+    mesh.position.set(x, y, z);
+
+    const normal = this.getNormal(x, z);
+    const up = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(up, normal);
+    mesh.quaternion.copy(quat);
+
+    const body = new CANNON.Body({
+      type: CANNON.Body.STATIC,
+      shape: new CANNON.Box(new CANNON.Vec3(1.5, 0.2, 1.0)),
+      position: new CANNON.Vec3(x, y, z),
+      material: this.rampMat,
+    });
+    body.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+
+    const entity = new Entity('ramp');
+    entity.addComponent(new MeshComponent(mesh));
+    entity.addComponent(new PhysicsComponent(body));
+    this.engine.addEntity(entity);
+    return entity;
   }
 
   getHeight(x, z) {
