@@ -9,7 +9,7 @@ export class SkierController {
     airControl = 0.2,
     jumpImpulse = 4.5,
     sideFriction = 8.0,
-    forwardDrag = 0.4,
+    forwardDrag = 0.2,
     carveStrength = 18.0,
     boostImpulse = 48.0,
     boostCooldown = 0.0,
