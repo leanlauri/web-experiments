@@ -9,6 +9,11 @@ export class SkierController2 {
     uprightDamping = 8.0,
     autoDownhillTorque = 1.5,
     yawDamping = 2.0,
+    forwardForce = 10.0,
+    linearDrag = 0.4,
+    lateralDrag = 6.0,
+    turnDrag = 8.0,
+    speedSteerDrop = 0.15,
     boostSpeed = 3.0,
     jumpSpeed = 3.0,
     groundProbe = 0.20,
@@ -19,6 +24,11 @@ export class SkierController2 {
     this.uprightDamping = uprightDamping;
     this.autoDownhillTorque = autoDownhillTorque;
     this.yawDamping = yawDamping;
+    this.forwardForce = forwardForce;
+    this.linearDrag = linearDrag;
+    this.lateralDrag = lateralDrag;
+    this.turnDrag = turnDrag;
+    this.speedSteerDrop = speedSteerDrop;
     this.boostSpeed = boostSpeed;
     this.jumpSpeed = jumpSpeed;
     this.groundProbe = groundProbe;
@@ -112,6 +122,9 @@ export class SkierController2 {
     const v = new THREE.Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
     const vPlane = v.clone().sub(alignNormal.clone().multiplyScalar(v.dot(alignNormal)));
     const surfaceSpeed = vPlane.length();
+    const lateralVec = forwardOnPlane.lengthSq() > 1e-6
+      ? vPlane.clone().sub(forwardOnPlane.clone().multiplyScalar(vPlane.dot(forwardOnPlane)))
+      : new THREE.Vector3();
 
     if (!this.world.debug) this.world.debug = {};
     this.world.debug.forwardSpeed = forwardOnPlane.lengthSq() > 1e-6 ? vPlane.dot(forwardOnPlane) : 0;
@@ -127,8 +140,9 @@ export class SkierController2 {
 
     // d) Steering torque (air + ground)
     if (steer !== 0) {
+      const steerScale = 1 / (1 + surfaceSpeed * this.speedSteerDrop);
       const axis = new CANNON.Vec3(alignNormal.x, alignNormal.y, alignNormal.z);
-      const torque = axis.scale(this.steerTorque * steer * body.mass);
+      const torque = axis.scale(this.steerTorque * steer * steerScale * body.mass);
       body.applyTorque(torque);
     } else if (grounded && surfaceSpeed > 0.2) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(alignNormal).normalize();
@@ -157,14 +171,31 @@ export class SkierController2 {
     }
 
     if (grounded) {
-      // f) Jump: set normal speed to jumpSpeed
+      // f) Forward drive (french fries)
+      if (forwardOnPlane.lengthSq() > 1e-6) {
+        const drive = forwardOnPlane.clone().multiplyScalar(this.forwardForce * body.mass);
+        body.applyForce(new CANNON.Vec3(drive.x, drive.y, drive.z), body.position);
+      }
+
+      // g) Drag / resistance
+      const drag = vPlane.clone().multiplyScalar(-this.linearDrag * body.mass);
+      body.applyForce(new CANNON.Vec3(drag.x, drag.y, drag.z), body.position);
+
+      const lateralDrag = lateralVec.clone().multiplyScalar(-this.lateralDrag * body.mass);
+      body.applyForce(new CANNON.Vec3(lateralDrag.x, lateralDrag.y, lateralDrag.z), body.position);
+
+      if (Math.abs(steer) > 0.5) {
+        const turnDrag = vPlane.clone().multiplyScalar(-this.turnDrag * body.mass * Math.abs(steer));
+        body.applyForce(new CANNON.Vec3(turnDrag.x, turnDrag.y, turnDrag.z), body.position);
+      }
+
+      // h) Jump: set normal speed to jumpSpeed
       if (wantsJump) {
         const vNormal = Math.max(0, v.dot(alignNormal));
         const dv = Math.max(0, this.jumpSpeed - vNormal);
         if (dv > 0) {
           const impulse = alignNormal.clone().multiplyScalar(dv * body.mass);
           body.applyImpulse(new CANNON.Vec3(impulse.x, impulse.y, impulse.z), body.position);
-          console.log('Jump! dv=', dv, 'impulse=', impulse);
         }
       }
 
