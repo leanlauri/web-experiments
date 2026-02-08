@@ -226,6 +226,7 @@ export class World {
     body.addShape(cyl);
     body.addShape(sphereTop, new CANNON.Vec3(0, height / 2, 0));
     body.addShape(sphereBottom, new CANNON.Vec3(0, -height / 2, 0));
+    body.userData = { footOffset: height / 2 + radius };
 
     const entity = new Entity('player');
     entity.addComponent(new MeshComponent(group));

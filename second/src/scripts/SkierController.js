@@ -13,6 +13,8 @@ export class SkierController {
     alignStrength = 4.0,
     misalignmentDrag = 6.0,
     misalignmentDeg = 30.0,
+    normalAlignRate = 6.0,
+    forwardAlignRate = 3.0,
     carveStrength = 18.0,
     boostImpulse = 48.0,
     boostCooldown = 0.0,
@@ -30,6 +32,8 @@ export class SkierController {
     this.alignStrength = alignStrength;
     this.misalignmentDrag = misalignmentDrag;
     this.misalignmentDeg = misalignmentDeg;
+    this.normalAlignRate = normalAlignRate;
+    this.forwardAlignRate = forwardAlignRate;
     this.carveStrength = carveStrength;
     this.boostImpulse = boostImpulse;
     this.boostCooldown = boostCooldown;
@@ -62,9 +66,12 @@ export class SkierController {
     const mesh = this.entity.getComponent(MeshComponent.type).mesh;
 
     const result = new CANNON.RaycastResult();
-    const from = body.position.clone();
-    const to = body.position.clone();
-    to.y -= 3.0;
+    const footOffset = body.userData?.footOffset ?? 0.95;
+    const down = new CANNON.Vec3(0, -1, 0);
+    body.quaternion.vmult(down, down);
+    const probe = footOffset + 0.15;
+    const from = body.position.vadd(down.scale(footOffset));
+    const to = body.position.vadd(down.scale(probe));
     const ray = new CANNON.Ray(from, to);
     ray.skipBackfaces = true;
     const hasHit = this.world.physicsWorld.raycastClosest(from, to, {
@@ -77,7 +84,7 @@ export class SkierController {
     let grounded = false;
     if (hasHit && result.hasHit) {
       normal = new THREE.Vector3(result.hitNormalWorld.x, result.hitNormalWorld.y, result.hitNormalWorld.z).normalize();
-      grounded = result.distance <= 1.2;
+      grounded = true;
     }
 
     const touchSteer = this.world?.input?.steer ?? 0;
@@ -87,17 +94,28 @@ export class SkierController {
       this.world.input.boost = false;
     }
 
-    const steer = Math.max(-1, Math.min(1,
+    const keySteer =
       (this.keys.has('ArrowLeft') || this.keys.has('KeyA') ? 1 : 0)
-      + (this.keys.has('ArrowRight') || this.keys.has('KeyD') ? -1 : 0)
-      + touchSteer
-    ));
+      + (this.keys.has('ArrowRight') || this.keys.has('KeyD') ? -1 : 0);
+    const steer = Math.max(-1, Math.min(1, keySteer + touchSteer));
 
-    const turnStrength = grounded ? this.turnRate : this.turnRate * this.airControl;
+    const turnBoost = keySteer !== 0 ? 1.35 : 1.0;
+    const baseTurn = grounded ? this.turnRate : this.turnRate * this.airControl;
+    const turnStrength = baseTurn * turnBoost;
     this.heading += steer * turnStrength * dt;
 
     const forward = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading)).normalize();
     const forwardOnSlope = forward.clone().sub(normal.clone().multiplyScalar(forward.dot(normal))).normalize();
+    const right = new THREE.Vector3().crossVectors(forwardOnSlope, normal).normalize();
+    const v = new THREE.Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
+    const speed = v.length();
+    const vDir = speed > 0.001 ? v.clone().multiplyScalar(1 / speed) : forwardOnSlope.clone();
+    const lateralSpeed = v.dot(right);
+    const forwardSpeed = v.dot(forwardOnSlope);
+
+    if (!this.world.debug) this.world.debug = {};
+    this.world.debug.forwardSpeed = forwardSpeed;
+    this.world.debug.lateralSpeed = lateralSpeed;
 
     if (grounded) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(normal).normalize();
@@ -105,18 +123,11 @@ export class SkierController {
       const slide = downhill.multiplyScalar(this.gravitySlide * downhillAlign);
       body.applyForce(new CANNON.Vec3(slide.x, slide.y, slide.z), body.position);
 
-      const right = new THREE.Vector3().crossVectors(forwardOnSlope, normal).normalize();
-      const v = new THREE.Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
-      const speed = v.length();
-      const vDir = speed > 0.001 ? v.clone().multiplyScalar(1 / speed) : forwardOnSlope.clone();
-
-      const lateralSpeed = v.dot(right);
       const lateralForce = right.multiplyScalar(-lateralSpeed * this.sideFriction);
       body.applyForce(new CANNON.Vec3(lateralForce.x, lateralForce.y, lateralForce.z), body.position);
 
       const align = THREE.MathUtils.clamp(vDir.dot(forwardOnSlope), -1, 1);
       const alignFactor = 1 - Math.max(0, align);
-      const forwardSpeed = v.dot(forwardOnSlope);
       const forwardForce = forwardOnSlope.clone().multiplyScalar(-forwardSpeed * this.forwardDrag * alignFactor);
       body.applyForce(new CANNON.Vec3(forwardForce.x, forwardForce.y, forwardForce.z), body.position);
 
@@ -171,11 +182,34 @@ export class SkierController {
       body.applyForce(force.scale(this.accel * this.airControl), body.position);
     }
 
-    // Align body/mesh orientation to slope + heading
-    const look = forwardOnSlope.clone();
-    const right = new THREE.Vector3().crossVectors(normal, look).normalize();
-    const mat = new THREE.Matrix4().makeBasis(right, normal, look);
-    const quat = new THREE.Quaternion().setFromRotationMatrix(mat);
+    // Align body/mesh orientation with separate rates for normal and forward direction.
+    const currentQuat = new THREE.Quaternion(
+      body.quaternion.x,
+      body.quaternion.y,
+      body.quaternion.z,
+      body.quaternion.w,
+    );
+
+    const normalAlignT = THREE.MathUtils.clamp(this.normalAlignRate * dt, 0, 1);
+    const forwardAlignT = THREE.MathUtils.clamp(this.forwardAlignRate * dt, 0, 1);
+
+    const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(currentQuat).normalize();
+    const qToNormal = new THREE.Quaternion().setFromUnitVectors(currentUp, normal);
+    const qNormalStep = new THREE.Quaternion().slerpQuaternions(new THREE.Quaternion(), qToNormal, normalAlignT);
+    const qAfterNormal = qNormalStep.multiply(currentQuat);
+
+    const currentForward = new THREE.Vector3(0, 0, 1).applyQuaternion(qAfterNormal).normalize();
+    let desiredForward = speed > 0.25 ? vDir.clone() : forwardOnSlope.clone();
+    desiredForward = desiredForward.sub(normal.clone().multiplyScalar(desiredForward.dot(normal))).normalize();
+    if (desiredForward.lengthSq() < 1e-6) desiredForward = currentForward.clone();
+
+    const cross = new THREE.Vector3().crossVectors(currentForward, desiredForward);
+    const sin = normal.dot(cross);
+    const cos = THREE.MathUtils.clamp(currentForward.dot(desiredForward), -1, 1);
+    const angle = Math.atan2(sin, cos);
+    const qYaw = new THREE.Quaternion().setFromAxisAngle(normal, angle * forwardAlignT);
+    const quat = qYaw.multiply(qAfterNormal);
+
     body.quaternion.set(quat.x, quat.y, quat.z, quat.w);
     mesh.quaternion.copy(quat);
   }

@@ -10,10 +10,16 @@ engine.start();
 engine.run();
 
 const debugToggle = document.getElementById('debugToggle');
+const hud = document.getElementById('hud');
 const physicsDebug = new PhysicsDebug(engine.scene, world.physicsWorld, { color: 0xff3333 });
 
 engine.addPostUpdate(() => {
   physicsDebug.update();
+  if (hud && world.debug) {
+    const fwd = world.debug.forwardSpeed ?? 0;
+    const lat = world.debug.lateralSpeed ?? 0;
+    hud.textContent = `❄️ Winter Physics — steer with thumbstick, jump on right | fwd ${fwd.toFixed(2)} | lat ${lat.toFixed(2)}`;
+  }
 });
 
 const setDebug = (enabled) => {
