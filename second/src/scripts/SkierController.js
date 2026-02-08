@@ -101,8 +101,8 @@ export class SkierController {
 
     if (grounded) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(normal).normalize();
-      const align = Math.max(this.minSlideAlign, downhill.dot(forwardOnSlope));
-      const slide = downhill.multiplyScalar(this.gravitySlide * align);
+      const downhillAlign = Math.max(this.minSlideAlign, downhill.dot(forwardOnSlope));
+      const slide = downhill.multiplyScalar(this.gravitySlide * downhillAlign);
       body.applyForce(new CANNON.Vec3(slide.x, slide.y, slide.z), body.position);
 
       const right = new THREE.Vector3().crossVectors(forwardOnSlope, normal).normalize();
