@@ -10,7 +10,7 @@ export class SkierController {
     jumpImpulse = 4.5,
     sideFriction = 8.0,
     forwardDrag = 0.2,
-    alignStrength = 12.0,
+    alignStrength = 4.0,
     misalignmentDrag = 6.0,
     misalignmentDeg = 30.0,
     carveStrength = 18.0,
@@ -120,7 +120,10 @@ export class SkierController {
       const forwardForce = forwardOnSlope.clone().multiplyScalar(-forwardSpeed * this.forwardDrag * alignFactor);
       body.applyForce(new CANNON.Vec3(forwardForce.x, forwardForce.y, forwardForce.z), body.position);
 
-      const steerDir = forwardOnSlope.clone().sub(vDir).multiplyScalar(this.alignStrength * Math.max(1, speed));
+      const steerDir = forwardOnSlope
+        .clone()
+        .sub(vDir)
+        .multiplyScalar(this.alignStrength * Math.max(1, speed) * dt);
       body.applyForce(new CANNON.Vec3(steerDir.x, steerDir.y, steerDir.z), body.position);
 
       const angle = Math.acos(Math.max(-1, Math.min(1, align)));
