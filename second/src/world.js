@@ -30,6 +30,7 @@ export class World {
       segments: 64,
       viewAhead: 4,
       viewBehind: 1,
+      viewSide: 2,
       chunks: new Map(),
       slope: 0.24,
       mountainHeight: 70,
@@ -267,32 +268,41 @@ export class World {
 
   updateTerrain(force = false) {
     const focusZ = this.engine.camera?.position?.z ?? 0;
-    const baseIndex = Math.floor(focusZ / this.terrain.chunkSize);
-    const minIndex = baseIndex - this.terrain.viewBehind;
-    const maxIndex = baseIndex + this.terrain.viewAhead;
+    const baseZ = Math.floor(focusZ / this.terrain.chunkSize);
+    const baseX = Math.floor((this.engine.camera?.position?.x ?? 0) / this.terrain.chunkSize);
+    const minZ = baseZ - this.terrain.viewBehind;
+    const maxZ = baseZ + this.terrain.viewAhead;
+    const minX = baseX - this.terrain.viewSide;
+    const maxX = baseX + this.terrain.viewSide;
 
-    for (let zi = minIndex; zi <= maxIndex; zi++) {
-      if (!this.terrain.chunks.has(zi)) this.createTerrainChunk(zi);
+    for (let zi = minZ; zi <= maxZ; zi++) {
+      for (let xi = minX; xi <= maxX; xi++) {
+        const key = `${xi},${zi}`;
+        if (!this.terrain.chunks.has(key)) this.createTerrainChunk(xi, zi);
+      }
     }
 
     if (!force) {
-      for (const [zi, chunk] of this.terrain.chunks) {
-        if (zi < minIndex || zi > maxIndex) {
+      for (const [key, chunk] of this.terrain.chunks) {
+        const [xiStr, ziStr] = key.split(',');
+        const xi = Number(xiStr);
+        const zi = Number(ziStr);
+        if (xi < minX || xi > maxX || zi < minZ || zi > maxZ) {
           this.engine.removeEntity(chunk.entity);
           if (chunk.scatterEntities) {
             for (const e of chunk.scatterEntities) this.engine.removeEntity(e);
           }
-          this.terrain.chunks.delete(zi);
+          this.terrain.chunks.delete(key);
         }
       }
     }
   }
 
-  createTerrainChunk(zIndex) {
+  createTerrainChunk(xIndex, zIndex) {
     const { chunkSize, segments } = this.terrain;
     const width = chunkSize;
     const depth = chunkSize;
-    const centerX = 0;
+    const centerX = (xIndex + 0.5) * chunkSize;
     const centerZ = (zIndex + 0.5) * chunkSize;
     const startX = centerX - width / 2;
     const startZ = centerZ - depth / 2;
@@ -329,14 +339,14 @@ export class World {
     body.addShape(shape);
     body.position.set(centerX, this.terrain.heightOffset, centerZ);
 
-    const entity = new Entity(`terrain-${zIndex}`);
+    const entity = new Entity(`terrain-${xIndex}-${zIndex}`);
     entity.addComponent(new MeshComponent(mesh));
     entity.addComponent(new PhysicsComponent(body));
     this.engine.addEntity(entity);
 
     const scatterEntities = this.scatterTerrainEntities(centerX, centerZ, width, depth);
 
-    this.terrain.chunks.set(zIndex, { entity, body, mesh, scatterEntities });
+    this.terrain.chunks.set(`${xIndex},${zIndex}`, { entity, body, mesh, scatterEntities });
   }
 
   scatterTerrainEntities(centerX, centerZ, width, depth) {
