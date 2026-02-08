@@ -10,6 +10,9 @@ export class SkierController {
     jumpImpulse = 4.5,
     sideFriction = 8.0,
     forwardDrag = 0.2,
+    alignStrength = 12.0,
+    misalignmentDrag = 6.0,
+    misalignmentDeg = 30.0,
     carveStrength = 18.0,
     boostImpulse = 48.0,
     boostCooldown = 0.0,
@@ -24,6 +27,9 @@ export class SkierController {
     this.jumpImpulse = jumpImpulse;
     this.sideFriction = sideFriction;
     this.forwardDrag = forwardDrag;
+    this.alignStrength = alignStrength;
+    this.misalignmentDrag = misalignmentDrag;
+    this.misalignmentDeg = misalignmentDeg;
     this.carveStrength = carveStrength;
     this.boostImpulse = boostImpulse;
     this.boostCooldown = boostCooldown;
@@ -101,13 +107,29 @@ export class SkierController {
 
       const right = new THREE.Vector3().crossVectors(forwardOnSlope, normal).normalize();
       const v = new THREE.Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
+      const speed = v.length();
+      const vDir = speed > 0.001 ? v.clone().multiplyScalar(1 / speed) : forwardOnSlope.clone();
+
       const lateralSpeed = v.dot(right);
       const lateralForce = right.multiplyScalar(-lateralSpeed * this.sideFriction);
       body.applyForce(new CANNON.Vec3(lateralForce.x, lateralForce.y, lateralForce.z), body.position);
 
+      const align = THREE.MathUtils.clamp(vDir.dot(forwardOnSlope), -1, 1);
+      const alignFactor = 1 - Math.max(0, align);
       const forwardSpeed = v.dot(forwardOnSlope);
-      const forwardForce = forwardOnSlope.clone().multiplyScalar(-forwardSpeed * this.forwardDrag);
+      const forwardForce = forwardOnSlope.clone().multiplyScalar(-forwardSpeed * this.forwardDrag * alignFactor);
       body.applyForce(new CANNON.Vec3(forwardForce.x, forwardForce.y, forwardForce.z), body.position);
+
+      const steerDir = forwardOnSlope.clone().sub(vDir).multiplyScalar(this.alignStrength * Math.max(1, speed));
+      body.applyForce(new CANNON.Vec3(steerDir.x, steerDir.y, steerDir.z), body.position);
+
+      const angle = Math.acos(Math.max(-1, Math.min(1, align)));
+      const threshold = THREE.MathUtils.degToRad(this.misalignmentDeg);
+      if (angle > threshold && speed > 0.1) {
+        const t = (angle - threshold) / (Math.PI - threshold);
+        const slow = vDir.clone().multiplyScalar(-this.misalignmentDrag * t * speed);
+        body.applyForce(new CANNON.Vec3(slow.x, slow.y, slow.z), body.position);
+      }
 
       if (steer !== 0) {
         const carveDir = right.clone().multiplyScalar(steer);
