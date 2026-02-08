@@ -7,7 +7,8 @@ export class SkierController2 {
     steerTorque = 18.0,
     uprightTorque = 50.0,
     uprightDamping = 8.0,
-    autoDownhillTorque = 3.0,
+    autoDownhillTorque = 1.5,
+    yawDamping = 2.0,
     boostSpeed = 5.0,
     jumpSpeed = 5.0,
     groundProbe = 0.20,
@@ -17,6 +18,7 @@ export class SkierController2 {
     this.uprightTorque = uprightTorque;
     this.uprightDamping = uprightDamping;
     this.autoDownhillTorque = autoDownhillTorque;
+    this.yawDamping = yawDamping;
     this.boostSpeed = boostSpeed;
     this.jumpSpeed = jumpSpeed;
     this.groundProbe = groundProbe;
@@ -134,8 +136,8 @@ export class SkierController2 {
         const crossY = new THREE.Vector3().crossVectors(forwardOnPlane, downhill).y;
         const align = THREE.MathUtils.clamp(forwardOnPlane.dot(downhill), -1, 1);
         const angle = Math.acos(align);
-        const turn = Math.sign(crossY) * angle;
-        const torque = new CANNON.Vec3(0, 1, 0).scale(this.autoDownhillTorque * turn * body.mass);
+        const turn = Math.sign(crossY) * Math.min(angle, Math.PI / 4);
+        const torque = new CANNON.Vec3(0, 1, 0).scale(this.autoDownhillTorque * turn * body.mass * dt);
         body.applyTorque(torque);
       }
     }
@@ -149,6 +151,9 @@ export class SkierController2 {
       const angVel = new THREE.Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z);
       const damp = new THREE.Vector3(angVel.x, 0, angVel.z).multiplyScalar(-this.uprightDamping * body.mass);
       body.applyTorque(new CANNON.Vec3(damp.x, damp.y, damp.z));
+
+      const yawDamp = -angVel.y * this.yawDamping * body.mass;
+      body.applyTorque(new CANNON.Vec3(0, yawDamp, 0));
     }
 
     if (grounded) {
