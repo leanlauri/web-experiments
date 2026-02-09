@@ -17,15 +17,20 @@ const physicsDebug = new PhysicsDebug(engine.scene, world.physicsWorld, { color:
 engine.addPostUpdate(() => {
   physicsDebug.update();
   if (hud && world.debug) {
-    const fwd = Number(world.debug.forwardSpeed) || 0;
-    const lat = Number(world.debug.lateralSpeed) || 0;
-    hud.textContent = `❄️ Winter Physics — steer with thumbstick, jump on right | fwd ${fwd.toFixed(2)} | lat ${lat.toFixed(2)}`;
+    const yaw = Number(world.debug.yawAngularVelocity) || 0;
+    hud.textContent = `❄️ Winter Physics — steer with thumbstick, jump on right | yaw ${yaw.toFixed(2)} rad/s`;
   }
   if (physicsDebug.enabled && world.debug?.groundNormal) {
     physicsDebug.setGroundNormal(world.debug.groundNormal.position, world.debug.groundNormal.direction);
   }
-  if (physicsDebug.enabled && world.debug?.forwardOnPlane) {
-    physicsDebug.setForwardOnPlane(world.debug.forwardOnPlane.position, world.debug.forwardOnPlane.direction);
+  if (physicsDebug.enabled && world.debug?.forwardVelocity) {
+    physicsDebug.setForwardVelocity(world.debug.forwardVelocity.position, world.debug.forwardVelocity.direction);
+  }
+  if (physicsDebug.enabled && world.debug?.sumForce) {
+    physicsDebug.setSumForce(world.debug.sumForce.position, world.debug.sumForce.direction, world.debug.sumForce.magnitude);
+  }
+  if (physicsDebug.enabled && world.debug?.sumTorque) {
+    physicsDebug.setSumTorque(world.debug.sumTorque.position, world.debug.sumTorque.direction, world.debug.sumTorque.magnitude);
   }
   if (physicsDebug.enabled && world.debug?.frenchFriesForce) {
     physicsDebug.setFrenchFriesForce(world.debug.frenchFriesForce.position, world.debug.frenchFriesForce.direction);

@@ -5,8 +5,6 @@ import { MeshComponent, PhysicsComponent } from '../entity.js';
 export class SkierController2 {
   constructor(world, {
     steerTorque = 18.0,
-    uprightTorque = 50.0,
-    uprightDamping = 8.0,
     autoDownhillTorque = 1.5,
     yawDamping = 2.0,
     forwardForce = 10.0,
@@ -21,8 +19,6 @@ export class SkierController2 {
   } = {}) {
     this.world = world;
     this.steerTorque = steerTorque;
-    this.uprightTorque = uprightTorque;
-    this.uprightDamping = uprightDamping;
     this.autoDownhillTorque = autoDownhillTorque;
     this.yawDamping = yawDamping;
     this.forwardForce = forwardForce;
@@ -57,7 +53,7 @@ export class SkierController2 {
 
     // a) Check ground contact
     const footOffset = body.userData?.footOffset ?? 0.95;
-    const probeRadius = 0.6;
+    const probeRadius = 0.2;
     const probeCount = 6;
     const normals = [];
     const hitPoints = [];
@@ -116,8 +112,9 @@ export class SkierController2 {
 
     // c) Compute vectors on surface
     const currentQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(currentQuat).normalize();
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(currentQuat).normalize();
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(currentQuat).normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(currentQuat).normalize();
     const worldUp = new THREE.Vector3(0, 1, 0);
     const alignNormal = grounded ? normal : worldUp;
 
@@ -142,23 +139,35 @@ export class SkierController2 {
       : new THREE.Vector3();
 
     if (!this.world.debug) this.world.debug = {};
-    this.world.debug.forwardSpeed = forwardOnPlane.lengthSq() > 1e-6 ? vPlane.dot(forwardOnPlane) : 0;
-    this.world.debug.lateralSpeed = forwardOnPlane.lengthSq() > 1e-6 ? vPlane.clone().sub(forwardOnPlane.clone().multiplyScalar(vPlane.dot(forwardOnPlane))).length() : 0;
 
-    // Debug: expose ground normal for physics debug view
+    const debugForce = new THREE.Vector3();
+    const debugTorque = new THREE.Vector3();
+
+    // Debug: expose ground normal + forward velocity direction for physics debug view
     if (this.world.debug) {
       const arrowPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
       // this.world.debug.groundNormal = { position: arrowPos, direction: normal.clone().normalize() };
       this.world.debug.groundNormal = { position: arrowPos, direction: alignNormal.clone().normalize() };
-      this.world.debug.forwardOnPlane = { position: arrowPos, direction: forwardOnPlane.clone() };
+
+      const speed = v.length();
+      const debugForwardScale = 0.25;
+      const debugForwardMax = 6.0;
+      const forwardLen = THREE.MathUtils.clamp(speed * debugForwardScale, 0, debugForwardMax);
+      this.world.debug.forwardVelocity = {
+        position: arrowPos,
+        direction: forward.clone().normalize().multiplyScalar(forwardLen),
+      };
+      this.world.debug.yawAngularVelocity = body.angularVelocity.y;
     }
 
     // d) Steering torque (air + ground)
     if (steer !== 0) {
       const steerScale = 1 / (1 + surfaceSpeed * this.speedSteerDrop);
-      const axis = new CANNON.Vec3(alignNormal.x, alignNormal.y, alignNormal.z);
+      // const axis = new CANNON.Vec3(alignNormal.x, alignNormal.y, alignNormal.z);
+      const axis = new CANNON.Vec3(0, 1, 0);
       const torque = axis.scale(this.steerTorque * steer * steerScale * body.mass);
       body.applyTorque(torque);
+      debugTorque.add(new THREE.Vector3(torque.x, torque.y, torque.z));
     } else if (grounded && surfaceSpeed > 0.2) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(alignNormal).normalize();
       if (downhill.lengthSq() > 1e-6 && forwardOnPlane.lengthSq() > 1e-6) {
@@ -171,30 +180,26 @@ export class SkierController2 {
           const maxTurn = THREE.MathUtils.degToRad(10) * dt;
           const turn = Math.sign(crossY) * Math.min(angle, maxTurn);
           const torque = new CANNON.Vec3(0, 1, 0).scale(this.autoDownhillTorque * turn * body.mass);
-          body.applyTorque(torque);
+          // body.applyTorque(torque);
         }
       }
     }
 
-    // e) Align player upright to world Y (no surface alignment)
+    // e) Dampen yaw rotation for stability
     {
-      // const cross = new THREE.Vector3().crossVectors(up, worldUp);
-      // const torqueVec = cross.multiplyScalar(this.uprightTorque * body.mass);
-      // body.applyTorque(new CANNON.Vec3(torqueVec.x, torqueVec.y, torqueVec.z));
-
-      const angVel = new THREE.Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z);
-      // const damp = new THREE.Vector3(angVel.x, 0, angVel.z).multiplyScalar(-this.uprightDamping * body.mass);
-      // body.applyTorque(new CANNON.Vec3(damp.x, damp.y, damp.z));
-
-      const yawDamp = -angVel.y * this.yawDamping * body.mass;
-      body.applyTorque(new CANNON.Vec3(0, yawDamp, 0));
+      const yaw = body.angularVelocity.y;
+      if (Math.abs(yaw) > 1e-6) {
+        const yawDamp = -body.angularVelocity.y * this.yawDamping * body.mass;
+        body.applyTorque(new CANNON.Vec3(0, yawDamp, 0));
+        debugTorque.add(new THREE.Vector3(0, yawDamp, 0));
+      }
     }
 
     if (grounded) {
       // f) Forward drive (french fries)
       if (forwardOnPlane.lengthSq() > 1e-6) {
         const drive = forwardOnPlane.clone().multiplyScalar(this.forwardForce * body.mass);
-        body.applyForce(new CANNON.Vec3(drive.x, drive.y, drive.z), body.position);
+        // body.applyForce(new CANNON.Vec3(drive.x, drive.y, drive.z), body.position);
         if (this.world.debug) {
           this.world.debug.frenchFriesForce = {
             position: new THREE.Vector3(body.position.x, body.position.y, body.position.z),
@@ -205,14 +210,14 @@ export class SkierController2 {
 
       // g) Drag / resistance
       const drag = vPlane.clone().multiplyScalar(-this.linearDrag * body.mass);
-      body.applyForce(new CANNON.Vec3(drag.x, drag.y, drag.z), body.position);
+      // body.applyForce(new CANNON.Vec3(drag.x, drag.y, drag.z), body.position);
 
       const lateralDrag = lateralVec.clone().multiplyScalar(-this.lateralDrag * body.mass);
-      body.applyForce(new CANNON.Vec3(lateralDrag.x, lateralDrag.y, lateralDrag.z), body.position);
+      // body.applyForce(new CANNON.Vec3(lateralDrag.x, lateralDrag.y, lateralDrag.z), body.position);
 
       if (Math.abs(steer) > 0.5) {
         const turnDrag = vPlane.clone().multiplyScalar(-this.turnDrag * body.mass * Math.abs(steer));
-        body.applyForce(new CANNON.Vec3(turnDrag.x, turnDrag.y, turnDrag.z), body.position);
+        // body.applyForce(new CANNON.Vec3(turnDrag.x, turnDrag.y, turnDrag.z), body.position);
       }
 
       // h) Jump: set normal speed to jumpSpeed
@@ -222,6 +227,7 @@ export class SkierController2 {
         if (dv > 0) {
           const impulse = alignNormal.clone().multiplyScalar(dv * body.mass);
           body.applyImpulse(new CANNON.Vec3(impulse.x, impulse.y, impulse.z), body.position);
+          if (dt > 1e-6) debugForce.add(impulse.clone().multiplyScalar(1 / dt));
         }
       }
 
@@ -234,9 +240,39 @@ export class SkierController2 {
           if (dv > 0) {
             const impulse = forwardOnPlane.clone().multiplyScalar(dv * body.mass);
             body.applyImpulse(new CANNON.Vec3(impulse.x, impulse.y, impulse.z), body.position);
+            if (dt > 1e-6) debugForce.add(impulse.clone().multiplyScalar(1 / dt));
           }
         }
       }
+    }
+
+    if (this.world.debug) {
+      const basePos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
+      const rightOffset = right.clone().multiplyScalar(0.6);
+      const forcePos = basePos.clone().add(rightOffset).add(up.clone().multiplyScalar(0.2));
+      const torquePos = basePos.clone().add(rightOffset).add(up.clone().multiplyScalar(-0.2));
+
+      const forceMag = debugForce.length();
+      const torqueMag = debugTorque.length();
+      const forceScale = 0.05;
+      const torqueScale = 0.1;
+      const maxLen = 6.0;
+
+      const forceLen = THREE.MathUtils.clamp(forceMag * forceScale, 0, maxLen);
+      const torqueLen = THREE.MathUtils.clamp(torqueMag * torqueScale, 0, maxLen);
+      // const torqueDir = forward.clone().multiplyScalar(5);// new THREE.Vector3(0, 0, -1);
+      // const torqueLen = 5;
+
+      const forceDir = forceMag > 1e-6
+        ? debugForce.clone().multiplyScalar(forceLen / forceMag)
+        : new THREE.Vector3();
+      const torqueDir = torqueMag > 1e-6
+        ? debugTorque.clone().multiplyScalar(torqueLen / torqueMag)
+        : new THREE.Vector3();
+
+
+      this.world.debug.sumForce = { position: forcePos, direction: forceDir, magnitude: forceMag };
+      this.world.debug.sumTorque = { position: torquePos, direction: torqueDir, magnitude: torqueMag };
     }
     this.wantsJump = false;
     this.wantsBoost = false;

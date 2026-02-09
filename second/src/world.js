@@ -181,7 +181,7 @@ export class World {
     this.engine.addEntity(entity);
   }
 
-  addSkier(x = (Math.random() - 0.5) * 8, y = 0.8, z = (Math.random() - 0.5) * 8) {
+  addNPCSkier(x = (Math.random() - 0.5) * 8, y = 0.8, z = (Math.random() - 0.5) * 8) {
     const group = this.assets.createSkierMesh();
     group.position.set(x, y, z);
 
@@ -226,8 +226,8 @@ export class World {
       collisionFilterGroup: 2,
       collisionFilterMask: 1,
     });
-    body.quaternion.setFromEuler(0, Math.PI, 0);
-    body.addShape(cyl);
+    // body.quaternion.setFromEuler(0, Math.PI, 0);
+    body.addShape(cyl, new CANNON.Vec3(0, 0, 0));
     body.addShape(sphereTop, new CANNON.Vec3(0, height / 2, 0));
     body.addShape(sphereBottom, new CANNON.Vec3(0, -height / 2, 0));
     body.userData = { footOffset: height / 2 + radius };
@@ -486,7 +486,7 @@ export class World {
     const cam = this.engine.camera;
     const headingQuat = this.player.getComponent('mesh').mesh.quaternion;
 
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(headingQuat).normalize();
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(headingQuat).normalize();
     const desired = new THREE.Vector3(
       body.position.x - forward.x * 8,
       body.position.y + 4,
