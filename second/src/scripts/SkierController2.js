@@ -5,15 +5,15 @@ import { MeshComponent, PhysicsComponent } from '../entity.js';
 export class SkierController2 {
   constructor(world, {
     steerTorque = 18.0,
-    autoDownhillTorque = 1.5,
+    autoDownhillTorque = 3, // 1.5
     yawDamping = 2.0,
     forwardForce = 10.0,
     linearDrag = 0.4,
     lateralDrag = 6.0,
     turnDrag = 8.0,
     speedSteerDrop = 0.15,
-    boostSpeed = 3.0,
-    jumpSpeed = 3.0,
+    boostSpeed = 1.0,
+    jumpSpeed = 1.0,
     groundProbe = 0.20,
     smoothNormals = false,
   } = {}) {
@@ -138,6 +138,32 @@ export class SkierController2 {
       ? vPlane.clone().sub(forwardOnPlane.clone().multiplyScalar(vPlane.dot(forwardOnPlane)))
       : new THREE.Vector3();
 
+    // Gameplay correction: resolve any ground penetration for the bottom sphere
+    if (grounded && hitPoints.length > 0) {
+      const bodyPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
+      const footPos = bodyPos.clone().sub(alignNormal.clone().multiplyScalar(footOffset));
+      let maxPenetration = 0;
+      for (let i = 0; i < hitPoints.length; i++) {
+        const pen = hitPoints[i].dot(alignNormal) - footPos.dot(alignNormal);
+        if (pen > maxPenetration) maxPenetration = pen;
+      }
+      if (maxPenetration > 1e-4) {
+        const correction = Math.min(maxPenetration, 0.5);
+        body.position.x += alignNormal.x * correction;
+        body.position.y += alignNormal.y * correction;
+        body.position.z += alignNormal.z * correction;
+
+        const vn = v.dot(alignNormal);
+        if (vn < 0) {
+          const vnVec = alignNormal.clone().multiplyScalar(vn);
+          const vFixed = v.clone().sub(vnVec);
+          body.velocity.x = vFixed.x;
+          body.velocity.y = vFixed.y;
+          body.velocity.z = vFixed.z;
+        }
+      }
+    }
+
     if (!this.world.debug) this.world.debug = {};
 
     const debugForce = new THREE.Vector3();
@@ -168,7 +194,7 @@ export class SkierController2 {
       const torque = axis.scale(this.steerTorque * steer * steerScale * body.mass);
       body.applyTorque(torque);
       debugTorque.add(new THREE.Vector3(torque.x, torque.y, torque.z));
-    } else if (grounded && surfaceSpeed > 0.2) {
+    } else if (grounded && surfaceSpeed > 0.01) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(alignNormal).normalize();
       if (downhill.lengthSq() > 1e-6 && forwardOnPlane.lengthSq() > 1e-6) {
         const crossY = new THREE.Vector3().crossVectors(forwardOnPlane, downhill).y;
@@ -176,11 +202,13 @@ export class SkierController2 {
         const angle = Math.acos(align);
         const minAngle = THREE.MathUtils.degToRad(5);
         const maxAngle = THREE.MathUtils.degToRad(80);
-        if (angle >= minAngle && angle <= maxAngle) {
-          const maxTurn = THREE.MathUtils.degToRad(10) * dt;
+        if (true) {
+        // if (angle >= minAngle && angle <= maxAngle) {
+          const maxTurn = THREE.MathUtils.degToRad(45) * dt; // 10
           const turn = Math.sign(crossY) * Math.min(angle, maxTurn);
           const torque = new CANNON.Vec3(0, 1, 0).scale(this.autoDownhillTorque * turn * body.mass);
           // body.applyTorque(torque);
+          // debugTorque.add(new THREE.Vector3(torque.x, torque.y, torque.z));
         }
       }
     }
@@ -197,7 +225,7 @@ export class SkierController2 {
 
     if (grounded) {
       // f) Forward drive (french fries)
-      if (forwardOnPlane.lengthSq() > 1e-6) {
+      if (forwardOnPlane.lengthSq() > 0.1) {
         const drive = forwardOnPlane.clone().multiplyScalar(this.forwardForce * body.mass);
         // body.applyForce(new CANNON.Vec3(drive.x, drive.y, drive.z), body.position);
         if (this.world.debug) {
@@ -225,8 +253,9 @@ export class SkierController2 {
         const vNormal = Math.max(0, v.dot(alignNormal));
         const dv = Math.max(0, this.jumpSpeed - vNormal);
         if (dv > 0) {
-          const impulse = alignNormal.clone().multiplyScalar(dv * body.mass);
-          body.applyImpulse(new CANNON.Vec3(impulse.x, impulse.y, impulse.z), body.position);
+          const impulse = alignNormal.clone().multiplyScalar(dv * body.mass * 10);
+          body.applyForce(new CANNON.Vec3(impulse.x, impulse.y, impulse.z), body.position);
+          // body.applyImpulse(new CANNON.Vec3(impulse.x, impulse.y, impulse.z), body.position);
           if (dt > 1e-6) debugForce.add(impulse.clone().multiplyScalar(1 / dt));
         }
       }
@@ -234,7 +263,7 @@ export class SkierController2 {
       // i) Boost: set surface speed to boostSpeed
       if (wantsBoost) {
         this.boostRequested = false;
-        if (forwardOnPlane.lengthSq() > 1e-6) {
+        if (forwardOnPlane.lengthSq() > 0.1) {
           const along = Math.max(0, vPlane.dot(forwardOnPlane));
           const dv = Math.max(0, this.boostSpeed - along);
           if (dv > 0) {

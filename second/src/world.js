@@ -226,7 +226,6 @@ export class World {
       collisionFilterGroup: 2,
       collisionFilterMask: 1,
     });
-    // body.quaternion.setFromEuler(0, Math.PI, 0);
     body.addShape(cyl, new CANNON.Vec3(0, 0, 0));
     body.addShape(sphereTop, new CANNON.Vec3(0, height / 2, 0));
     body.addShape(sphereBottom, new CANNON.Vec3(0, -height / 2, 0));
