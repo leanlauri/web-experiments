@@ -165,9 +165,14 @@ export class SkierController2 {
         const crossY = new THREE.Vector3().crossVectors(forwardOnPlane, downhill).y;
         const align = THREE.MathUtils.clamp(forwardOnPlane.dot(downhill), -1, 1);
         const angle = Math.acos(align);
-        const turn = Math.sign(crossY) * Math.min(angle, Math.PI / 4);
-        const torque = new CANNON.Vec3(0, 1, 0).scale(this.autoDownhillTorque * turn * body.mass * dt);
-        body.applyTorque(torque);
+        const minAngle = THREE.MathUtils.degToRad(5);
+        const maxAngle = THREE.MathUtils.degToRad(80);
+        if (angle >= minAngle && angle <= maxAngle) {
+          const maxTurn = THREE.MathUtils.degToRad(10) * dt;
+          const turn = Math.sign(crossY) * Math.min(angle, maxTurn);
+          const torque = new CANNON.Vec3(0, 1, 0).scale(this.autoDownhillTorque * turn * body.mass);
+          body.applyTorque(torque);
+        }
       }
     }
 
