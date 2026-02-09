@@ -13,6 +13,7 @@ export class SkierController2 {
     lateralDrag = 6.0,
     turnDrag = 4.0,
     speedSteerDrop = 0.15,
+    trailStampInterval = 2,
     boostSpeed = 18.0,
     jumpSpeed = 8.0,
     groundProbe = 0.20,
@@ -28,6 +29,7 @@ export class SkierController2 {
     this.lateralDrag = lateralDrag;
     this.turnDrag = turnDrag;
     this.speedSteerDrop = speedSteerDrop;
+    this.trailStampInterval = trailStampInterval;
     this.boostSpeed = boostSpeed;
     this.jumpSpeed = jumpSpeed;
     this.groundProbe = groundProbe;
@@ -36,6 +38,7 @@ export class SkierController2 {
     this.keys = new Set();
     this.boostRequested = false;
     this.prevYaw = null;
+    this.trailStampFrame = 0;
     this.onKeyDown = (e) => this.keys.add(e.code);
     this.onKeyUp = (e) => this.keys.delete(e.code);
   }
@@ -246,16 +249,20 @@ export class SkierController2 {
           };
         }
         if (surfaceSpeed > 0.2) {
-          const rightOnPlane = new THREE.Vector3().crossVectors(alignNormal, forwardOnPlane).normalize();
-          const base = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
-          const side = 0.3;
-          const forwardOffset = 0.2;
-          const leftPos = base.clone().add(forwardOnPlane.clone().multiplyScalar(forwardOffset)).add(rightOnPlane.clone().multiplyScalar(-side));
-          const rightPos = base.clone().add(forwardOnPlane.clone().multiplyScalar(forwardOffset)).add(rightOnPlane.clone().multiplyScalar(side));
-          this.world.trails?.stamp(leftPos.x, leftPos.z);
-          this.world.trails?.stamp(rightPos.x, rightPos.z);
-          this.world.deformationPatch?.stamp(leftPos.x, leftPos.z, 1);
-          this.world.deformationPatch?.stamp(rightPos.x, rightPos.z, 1);
+          this.trailStampFrame += 1;
+          const shouldStamp = this.trailStampInterval <= 1 || (this.trailStampFrame % this.trailStampInterval === 0);
+          if (shouldStamp) {
+            const rightOnPlane = new THREE.Vector3().crossVectors(alignNormal, forwardOnPlane).normalize();
+            const base = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
+            const side = 0.3;
+            const forwardOffset = 0.2;
+            const leftPos = base.clone().add(forwardOnPlane.clone().multiplyScalar(forwardOffset)).add(rightOnPlane.clone().multiplyScalar(-side));
+            const rightPos = base.clone().add(forwardOnPlane.clone().multiplyScalar(forwardOffset)).add(rightOnPlane.clone().multiplyScalar(side));
+            this.world.trails?.stamp(leftPos.x, leftPos.z);
+            this.world.trails?.stamp(rightPos.x, rightPos.z);
+            this.world.deformationPatch?.stamp(leftPos.x, leftPos.z, 1);
+            this.world.deformationPatch?.stamp(rightPos.x, rightPos.z, 1);
+          }
         }
       }
 
