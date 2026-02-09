@@ -54,26 +54,39 @@ export class SkierController2 {
     const mesh = this.entity.getComponent(MeshComponent.type).mesh;
 
     // a) Check ground contact
-    const result = new CANNON.RaycastResult();
     const footOffset = body.userData?.footOffset ?? 0.95;
-    const downDir = new CANNON.Vec3(0, -1, 0);
-    body.quaternion.vmult(downDir, downDir);
-    const from = body.position.vadd(downDir.scale(footOffset));
-    const downDir2 = new CANNON.Vec3(downDir.x, downDir.y, downDir.z);
-    const to = body.position.vadd(downDir2.scale(footOffset + this.groundProbe));
-    const hasHit = this.world.physicsWorld.raycastClosest(from, to, {
-      collisionFilterGroup: 2,
-      collisionFilterMask: 1,
-      skipBackfaces: true,
-    }, result);
+    const probeRadius = 0.6;
+    const probeCount = 6;
+    const normals = [];
+    const hitPoints = [];
 
-    let grounded = false;
+    for (let i = 0; i < probeCount; i++) {
+      const angle = (i / probeCount) * Math.PI * 2;
+      const ox = Math.cos(angle) * probeRadius;
+      const oz = Math.sin(angle) * probeRadius;
+      const from = new CANNON.Vec3(body.position.x + ox, body.position.y + footOffset, body.position.z + oz);
+      const to = new CANNON.Vec3(body.position.x + ox, body.position.y - (footOffset + this.groundProbe), body.position.z + oz);
+      const result = new CANNON.RaycastResult();
+      const hasHit = this.world.physicsWorld.raycastClosest(from, to, {
+        collisionFilterGroup: 2,
+        collisionFilterMask: 1,
+        skipBackfaces: true,
+      }, result);
+      if (hasHit && result.hasHit) {
+        normals.push(new THREE.Vector3(result.hitNormalWorld.x, result.hitNormalWorld.y, result.hitNormalWorld.z).normalize());
+        hitPoints.push(new THREE.Vector3(result.hitPointWorld.x, result.hitPointWorld.y, result.hitPointWorld.z));
+      }
+    }
+
+    let grounded = normals.length > 0;
     let normal = new THREE.Vector3(0, 1, 0);
     let hitPoint = null;
-    if (hasHit && result.hasHit) {
-      grounded = true;
-      normal = new THREE.Vector3(result.hitNormalWorld.x, result.hitNormalWorld.y, result.hitNormalWorld.z).normalize();
-      hitPoint = new THREE.Vector3(result.hitPointWorld.x, result.hitPointWorld.y, result.hitPointWorld.z);
+    if (grounded) {
+      const avg = normals.reduce((acc, n) => acc.add(n), new THREE.Vector3()).normalize();
+      const filtered = normals.filter((n) => n.dot(avg) > 0.7);
+      const use = filtered.length > 0 ? filtered : normals;
+      normal = use.reduce((acc, n) => acc.add(n), new THREE.Vector3()).normalize();
+      hitPoint = hitPoints[0];
     }
     if (grounded) {
       if (!this.smoothedNormal) {
@@ -147,7 +160,7 @@ export class SkierController2 {
     } else if (grounded && surfaceSpeed > 0.2) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(alignNormal).normalize();
       if (downhill.lengthSq() > 1e-6 && forwardOnPlane.lengthSq() > 1e-6) {
-        const crossY = new THREE.Vector3().crossVectors(downhill, forwardOnPlane).y;
+        const crossY = new THREE.Vector3().crossVectors(forwardOnPlane, downhill).y;
         const align = THREE.MathUtils.clamp(forwardOnPlane.dot(downhill), -1, 1);
         const angle = Math.acos(align);
         const turn = Math.sign(crossY) * Math.min(angle, Math.PI / 4);
