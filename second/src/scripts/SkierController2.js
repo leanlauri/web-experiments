@@ -147,7 +147,7 @@ export class SkierController2 {
     } else if (grounded && surfaceSpeed > 0.2) {
       const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(alignNormal).normalize();
       if (downhill.lengthSq() > 1e-6 && forwardOnPlane.lengthSq() > 1e-6) {
-        const crossY = new THREE.Vector3().crossVectors(forwardOnPlane, downhill).y;
+        const crossY = new THREE.Vector3().crossVectors(downhill, forwardOnPlane).y;
         const align = THREE.MathUtils.clamp(forwardOnPlane.dot(downhill), -1, 1);
         const angle = Math.acos(align);
         const turn = Math.sign(crossY) * Math.min(angle, Math.PI / 4);
