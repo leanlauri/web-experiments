@@ -4,6 +4,7 @@ import { Entity, MeshComponent, PhysicsComponent } from './entity.js';
 import { SphereController } from './scripts/SphereController.js';
 // import { SkierController } from './scripts/SkierController.js';
 import { SkierController2 } from './scripts/SkierController2.js';
+import { TrailSystem } from './trail-system.js';
 import { AssetLoader } from './assets.js';
 
 export class World {
@@ -17,6 +18,7 @@ export class World {
     this.physicsWorld.allowSleep = true;
 
     this.assets = new AssetLoader();
+    this.trails = new TrailSystem();
 
     this.sphereMat = new CANNON.Material('sphere');
     this.treeMat = new CANNON.Material('tree');
@@ -116,6 +118,7 @@ export class World {
 
     this.addPlayer();
     this.engine.addPostUpdate((dt) => this.updateCameraFollow(dt));
+    this.engine.addPostUpdate(() => this.trails?.updateUniforms());
   }
 
   addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z = (Math.random() - 0.5) * 6) {
@@ -243,6 +246,10 @@ export class World {
     entity.addScript(new SkierController2(this));
     this.engine.addEntity(entity);
     this.player = entity;
+    if (this.trails) {
+      this.trails.updateOrigin(startX, startZ);
+      this.trails.updateUniforms();
+    }
   }
 
   async addTreeModel(url, position = { x: 0, y: 0, z: 0 }) {
@@ -328,6 +335,7 @@ export class World {
     geometry.computeVertexNormals();
 
     const mat = new THREE.MeshStandardMaterial({ color: 0xf5f9fc, roughness: 0.9, metalness: 0 });
+    this.trails?.applyToMaterial(mat);
     const mesh = new THREE.Mesh(geometry, mat);
     mesh.position.set(centerX, 0, centerZ);
     mesh.receiveShadow = true;
