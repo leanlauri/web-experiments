@@ -27,6 +27,9 @@ engine.addPostUpdate(() => {
   if (physicsDebug.enabled && world.debug?.forwardOnPlane) {
     physicsDebug.setForwardOnPlane(world.debug.forwardOnPlane.position, world.debug.forwardOnPlane.direction);
   }
+  if (physicsDebug.enabled && world.debug?.frenchFriesForce) {
+    physicsDebug.setFrenchFriesForce(world.debug.frenchFriesForce.position, world.debug.frenchFriesForce.direction);
+  }
 });
 
 const setDebug = (enabled) => {

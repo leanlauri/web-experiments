@@ -30,6 +30,14 @@ export class PhysicsDebug {
     );
     this.forwardArrow.visible = false;
     this.root.add(this.forwardArrow);
+    this.frenchFriesArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, 0),
+      2.0,
+      0xff3333,
+    );
+    this.frenchFriesArrow.visible = false;
+    this.root.add(this.frenchFriesArrow);
   }
 
   setEnabled(enabled) {
@@ -37,6 +45,7 @@ export class PhysicsDebug {
     this.root.visible = enabled;
     this.groundNormalArrow.visible = enabled;
     this.forwardArrow.visible = enabled;
+    this.frenchFriesArrow.visible = enabled;
   }
 
   update() {
@@ -63,6 +72,14 @@ export class PhysicsDebug {
     this.forwardArrow.position.copy(position);
     this.forwardArrow.setDirection(dir.normalize());
     this.forwardArrow.visible = this.enabled;
+  }
+
+  setFrenchFriesForce(position, direction) {
+    const dir = direction.clone();
+    if (dir.lengthSq() < 1e-6) return;
+    this.frenchFriesArrow.position.copy(position);
+    this.frenchFriesArrow.setDirection(dir.normalize());
+    this.frenchFriesArrow.visible = this.enabled;
   }
 
   syncBodies() {

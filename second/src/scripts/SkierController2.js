@@ -175,6 +175,12 @@ export class SkierController2 {
       if (forwardOnPlane.lengthSq() > 1e-6) {
         const drive = forwardOnPlane.clone().multiplyScalar(this.forwardForce * body.mass);
         body.applyForce(new CANNON.Vec3(drive.x, drive.y, drive.z), body.position);
+        if (this.world.debug) {
+          this.world.debug.frenchFriesForce = {
+            position: new THREE.Vector3(body.position.x, body.position.y, body.position.z),
+            direction: drive.clone(),
+          };
+        }
       }
 
       // g) Drag / resistance
