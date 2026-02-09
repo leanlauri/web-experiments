@@ -66,6 +66,10 @@ export class AssetLoader {
     ski2.position.set(0.3, -0.7, -0.3);
     ski1.rotation.y = Math.PI / 2;
     ski2.rotation.y = Math.PI / 2;
+    body.castShadow = true;
+    head.castShadow = true;
+    ski1.castShadow = true;
+    ski2.castShadow = true;
 
     const group = new THREE.Group();
     group.add(body, head, ski1, ski2);

@@ -5,7 +5,9 @@ import { MeshComponent, PhysicsComponent } from '../entity.js';
 export class SkierController2 {
   constructor(world, {
     steerYawRate = 2.8,
-    autoDownhillYawRate = 0.4,
+    autoDownhillYawRate = 0.1,
+    maxImpactSpeed = 6.0,
+    maxImpactForce = 1000.0,
     forwardForce = 10.0,
     linearDrag = 0.4,
     lateralDrag = 6.0,
@@ -19,6 +21,8 @@ export class SkierController2 {
     this.world = world;
     this.steerYawRate = steerYawRate;
     this.autoDownhillYawRate = autoDownhillYawRate;
+    this.maxImpactSpeed = maxImpactSpeed;
+    this.maxImpactForce = maxImpactForce;
     this.forwardForce = forwardForce;
     this.linearDrag = linearDrag;
     this.lateralDrag = lateralDrag;
@@ -39,6 +43,21 @@ export class SkierController2 {
   onStart() {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+  }
+
+  onCollide(other, event) {
+    if (!event?.contact) return;
+    // const contact = event.contact;
+    // const impact = Math.abs(contact.getImpactVelocityAlongNormal());
+    // if (!Number.isFinite(impact) || impact <= this.maxImpactSpeed) return;
+
+    // const scale = this.maxImpactSpeed / impact;
+    // if (Number.isFinite(contact.maxForce)) {
+    //   contact.maxForce = Math.min(contact.maxForce, this.maxImpactForce) * scale;
+    // } else {
+    //   contact.maxForce = this.maxImpactForce * scale;
+    // }
+    // contact.restitution = 0;
   }
 
   onDestroy() {
