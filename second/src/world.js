@@ -5,6 +5,7 @@ import { SphereController } from './scripts/SphereController.js';
 // import { SkierController } from './scripts/SkierController.js';
 import { SkierController2 } from './scripts/SkierController2.js';
 import { TrailSystem } from './trail-system.js';
+import { DeformationPatch } from './deformation-patch.js';
 import { AssetLoader } from './assets.js';
 
 export class World {
@@ -19,6 +20,7 @@ export class World {
 
     this.assets = new AssetLoader();
     this.trails = new TrailSystem();
+    this.deformationPatch = new DeformationPatch({ scene: this.engine.scene });
 
     this.sphereMat = new CANNON.Material('sphere');
     this.treeMat = new CANNON.Material('tree');
@@ -119,6 +121,12 @@ export class World {
     this.addPlayer();
     this.engine.addPostUpdate((dt) => this.updateCameraFollow(dt));
     this.engine.addPostUpdate(() => this.trails?.updateUniforms());
+    this.engine.addPostUpdate(() => {
+      if (this.player && this.deformationPatch) {
+        const body = this.player.getComponent(PhysicsComponent.type).body;
+        this.deformationPatch.updateCenter(body.position.x, body.position.z);
+      }
+    });
   }
 
   addSphere(x = (Math.random() - 0.5) * 6, y = 12 + Math.random() * 6, z = (Math.random() - 0.5) * 6) {
@@ -249,6 +257,9 @@ export class World {
     if (this.trails) {
       this.trails.updateOrigin(startX, startZ);
       this.trails.updateUniforms();
+    }
+    if (this.deformationPatch) {
+      this.deformationPatch.updateCenter(startX, startZ);
     }
   }
 
