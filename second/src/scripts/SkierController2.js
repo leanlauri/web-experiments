@@ -17,6 +17,7 @@ export class SkierController2 {
     boostSpeed = 3.0,
     jumpSpeed = 3.0,
     groundProbe = 0.20,
+    smoothNormals = false,
   } = {}) {
     this.world = world;
     this.steerTorque = steerTorque;
@@ -32,6 +33,7 @@ export class SkierController2 {
     this.boostSpeed = boostSpeed;
     this.jumpSpeed = jumpSpeed;
     this.groundProbe = groundProbe;
+    this.smoothNormals = smoothNormals;
 
     this.keys = new Set();
     this.boostRequested = false;
@@ -88,7 +90,7 @@ export class SkierController2 {
       normal = use.reduce((acc, n) => acc.add(n), new THREE.Vector3()).normalize();
       hitPoint = hitPoints[0];
     }
-    if (grounded) {
+    if (grounded && this.smoothNormals) {
       if (!this.smoothedNormal) {
         this.smoothedNormal = normal.clone();
       } else {
