@@ -22,8 +22,8 @@ export class DeformationPatch {
     this.basePositions = new Float32Array(positions.array);
 
     this.material = new THREE.MeshStandardMaterial({
-      color: 0xf2f6fb,
-      roughness: 0.95,
+      color: 0xff3333,
+      roughness: 0.8,
       metalness: 0,
     });
     this.mesh = new THREE.Mesh(this.geometry, this.material);
