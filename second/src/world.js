@@ -130,7 +130,8 @@ export class World {
       }
       if (this.player && this.deformationPatch) {
         const body = this.player.getComponent(PhysicsComponent.type).body;
-        this.deformationPatch.updateCenter(body.position.x, body.position.z);
+        const groundY = this.getHeight(body.position.x, body.position.z);
+        this.deformationPatch.updateCenter(body.position.x, body.position.z, groundY);
       }
     });
   }
@@ -265,7 +266,7 @@ export class World {
       this.trails.updateUniforms();
     }
     if (this.deformationPatch) {
-      this.deformationPatch.updateCenter(startX, startZ);
+      this.deformationPatch.updateCenter(startX, startZ, groundY);
     }
   }
 

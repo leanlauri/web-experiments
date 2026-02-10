@@ -98,7 +98,7 @@ export class TrailSystem {
     if (u < 0 || u > 1 || v < 0 || v > 1) return;
 
     const px = u * this.resolution;
-    const py = (1 - v) * this.resolution;
+    const py = v * this.resolution;
     const radius = (this.stampRadius / this.size) * this.resolution;
 
     const grad = this.ctx.createRadialGradient(px, py, 0, px, py, radius);

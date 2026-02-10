@@ -35,10 +35,10 @@ export class DeformationPatch {
     this.center = new THREE.Vector2(0, 0);
   }
 
-  updateCenter(x, z) {
+  updateCenter(x, z, groundY = 0) {
     if (this.center == null) {
       this.center = new THREE.Vector2(x, z);
-      this.mesh.position.set(x, this.offsetY, z);
+      this.mesh.position.set(x, groundY + this.offsetY, z);
       return;
     }
 
@@ -48,7 +48,7 @@ export class DeformationPatch {
     if (dist > this.resetDistance) this.clear();
 
     this.center.set(x, z);
-    this.mesh.position.set(x, this.offsetY, z);
+    this.mesh.position.set(x, groundY + this.offsetY, z);
   }
 
   clear() {
