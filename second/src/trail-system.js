@@ -4,8 +4,8 @@ export class TrailSystem {
   constructor({
     size = 120,
     resolution = 512,
-    stampRadius = 0.25,
-    stampStrength = 0.35,
+    stampRadius = 0.35,
+    stampStrength = 0.6,
     canvas = null,
   } = {}) {
     this.size = size;
@@ -67,6 +67,8 @@ export class TrailSystem {
 
   applyToMaterial(material) {
     this.materials.push(material);
+    material.userData.trailApplied = true;
+    material.needsUpdate = true;
     material.onBeforeCompile = (shader) => {
       shader.uniforms.trailMap = { value: this.texture };
       shader.uniforms.trailOrigin = { value: new THREE.Vector2(this.origin.x, this.origin.y) };
@@ -87,7 +89,7 @@ export class TrailSystem {
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
-        `#include <color_fragment>\n vec2 trailUV = (vWorldPos.xz - (trailOrigin - vec2(trailSize * 0.5))) / trailSize;\n float trail = texture2D(trailMap, vec2(trailUV.x, 1.0 - trailUV.y)).r;\n diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.65, trail);`,
+        `#include <color_fragment>\n vec2 trailUV = (vWorldPos.xz - (trailOrigin - vec2(trailSize * 0.5))) / trailSize;\n float trail = texture2D(trailMap, vec2(trailUV.x, 1.0 - trailUV.y)).r;\n diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.35, trail);`,
       );
 
       material.userData.trailShader = shader;
