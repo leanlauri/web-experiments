@@ -89,7 +89,7 @@ export class TrailSystem {
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
-        `#include <color_fragment>\n vec2 trailUV = (vWorldPos.xz - (trailOrigin - vec2(trailSize * 0.5))) / trailSize;\n float trail = texture2D(trailMap, vec2(trailUV.x, 1.0 - trailUV.y)).r;\n diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.35, trail);`,
+        `#include <color_fragment>\n vec2 trailUV = (vWorldPos.xz - (trailOrigin - vec2(trailSize * 0.5))) / trailSize;\n float trail = texture2D(trailMap, trailUV).r;\n diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.35, trail);`,
       );
 
       material.userData.trailShader = shader;
