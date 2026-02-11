@@ -38,26 +38,31 @@ export class World {
 
     this.terrain = {
       seed: 1337,
-      chunkSize: 80,
-      segments: 64,
-      viewAhead: 2,
-      viewBehind: 1,
-      viewSide: 1,
+      chunkSize: 40,
       chunks: new Map(),
       slope: 0.24,
       mountainHeight: 70,
       heightOffset: 0,
       renderOffset: 0.4,
-      valleyWidthChunks: 1.5,
+      lod: {
+        highSegments: 64,
+        lowSegments: 24,
+        highRadiusX: 1,
+        highRadiusZ: 1,
+        lowExtraX: 1,
+        lowExtraZ: 1,
+        lowExtraForwardZ: 1,
+      },
+      valleyWidthChunks: 3,
       valleyDepth: 120,
       deform: {
         radius: 0.65,
         maxDepth: 1,//0.18,
       },
       scatter: {
-        trees: 8,
-        ramps: 2,
-        spheres: 6,
+        trees: 4,
+        ramps: 1,
+        spheres: 3,
         minSpacing: {
           tree: 6,
           ramp: 10,
@@ -315,49 +320,85 @@ export class World {
 
   initTerrain() {
     this.terrain.chunks.clear();
-    this.updateTerrain(true);
+    this.updateTerrain();
   }
 
-  updateTerrain(force = false) {
-    const focusZ = this.engine.camera?.position?.z ?? 0;
-    const baseZ = Math.floor(focusZ / this.terrain.chunkSize);
-    const baseX = Math.floor((this.engine.camera?.position?.x ?? 0) / this.terrain.chunkSize);
-    const minZ = baseZ - this.terrain.viewBehind;
-    const maxZ = baseZ + this.terrain.viewAhead;
-    const minX = baseX - this.terrain.viewSide;
-    const maxX = baseX + this.terrain.viewSide;
+  updateTerrain() {
+    const focusPos = this.player
+      ? this.player.getComponent(PhysicsComponent.type).body.position
+      : this.engine.camera?.position;
+    const focusX = focusPos?.x ?? 0;
+    const focusZ = focusPos?.z ?? 0;
+    const { xi: baseX, zi: baseZ } = this.getChunkIndices(focusX, focusZ);
+    const desired = this.getDesiredChunkLods(baseX, baseZ);
 
-    for (let zi = minZ; zi <= maxZ; zi++) {
-      for (let xi = minX; xi <= maxX; xi++) {
-        const key = `${xi},${zi}`;
-        if (!this.terrain.chunks.has(key)) this.createTerrainChunk(xi, zi);
+    for (const [key, lodLevel] of desired) {
+      const [xiStr, ziStr] = key.split(',');
+      const xi = Number(xiStr);
+      const zi = Number(ziStr);
+      const existing = this.terrain.chunks.get(key);
+      if (!existing) {
+        this.createTerrainChunk(xi, zi, lodLevel);
+        continue;
+      }
+      if (existing.lodLevel !== lodLevel) {
+        this.removeTerrainChunk(key, existing);
+        this.createTerrainChunk(xi, zi, lodLevel);
       }
     }
 
-    if (!force) {
-      for (const [key, chunk] of this.terrain.chunks) {
-        const [xiStr, ziStr] = key.split(',');
-        const xi = Number(xiStr);
-        const zi = Number(ziStr);
-        if (xi < minX || xi > maxX || zi < minZ || zi > maxZ) {
-          this.engine.removeEntity(chunk.entity);
-          if (chunk.scatterEntities) {
-            for (const e of chunk.scatterEntities) this.engine.removeEntity(e);
-          }
-          this.terrain.chunks.delete(key);
-        }
-      }
+    for (const [key, chunk] of this.terrain.chunks) {
+      if (desired.has(key)) continue;
+      this.removeTerrainChunk(key, chunk);
     }
   }
 
-  createTerrainChunk(xIndex, zIndex) {
-    const { chunkSize, segments } = this.terrain;
+  getDesiredChunkLods(baseX, baseZ) {
+    const desired = new Map();
+    const lod = this.terrain.lod;
+    const highMinX = baseX - lod.highRadiusX;
+    const highMaxX = baseX + lod.highRadiusX;
+    const highMinZ = baseZ - lod.highRadiusZ;
+    const highMaxZ = baseZ + lod.highRadiusZ;
+    const lowMinX = highMinX - lod.lowExtraX;
+    const lowMaxX = highMaxX + lod.lowExtraX;
+    const lowMinZ = highMinZ - lod.lowExtraZ - lod.lowExtraForwardZ;
+    const lowMaxZ = highMaxZ + lod.lowExtraZ;
+
+    for (let zi = lowMinZ; zi <= lowMaxZ; zi++) {
+      for (let xi = lowMinX; xi <= lowMaxX; xi++) {
+        const inHigh = (
+          xi >= highMinX
+          && xi <= highMaxX
+          && zi >= highMinZ
+          && zi <= highMaxZ
+        );
+        desired.set(`${xi},${zi}`, inHigh ? 'high' : 'low');
+      }
+    }
+    return desired;
+  }
+
+  getSegmentsForLod(lodLevel) {
+    const lod = this.terrain.lod;
+    return lodLevel === 'high' ? lod.highSegments : lod.lowSegments;
+  }
+
+  removeTerrainChunk(key, chunk) {
+    this.engine.removeEntity(chunk.entity);
+    if (chunk.scatterEntities) {
+      for (const e of chunk.scatterEntities) this.engine.removeEntity(e);
+    }
+    this.terrain.chunks.delete(key);
+  }
+
+  createTerrainChunk(xIndex, zIndex, lodLevel = 'high') {
+    const { chunkSize } = this.terrain;
+    const segments = this.getSegmentsForLod(lodLevel);
     const width = chunkSize;
     const depth = chunkSize;
     const centerX = (xIndex + 0.5) * chunkSize;
     const centerZ = (zIndex + 0.5) * chunkSize;
-    const startX = centerX - width / 2;
-    const startZ = centerZ - depth / 2;
 
     const geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
     geometry.rotateX(-Math.PI / 2);
@@ -405,6 +446,7 @@ export class World {
       entity,
       body,
       mesh,
+      lodLevel,
       scatterEntities,
       basePositions,
       centerX,
