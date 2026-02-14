@@ -95,6 +95,7 @@ export class World {
     scene.add(new THREE.AmbientLight(0xb0d8f0, 0.6));
     const dir = new THREE.DirectionalLight(0xf0f8ff, 1.2);
     dir.position.set(8, 16, 6);
+    this.sunLight = dir;
     dir.castShadow = true;
     dir.shadow.mapSize.set(2048, 2048);
     dir.shadow.camera.near = 1;
@@ -105,6 +106,7 @@ export class World {
     dir.shadow.camera.bottom = -80;
     dir.shadow.bias = -0.0003;
     scene.add(dir);
+    scene.add(dir.target);
 
     // Contact material - snowballs have higher friction and lower bounce
     const contact = new CANNON.ContactMaterial(this.terrainMat, this.sphereMat, {
@@ -161,6 +163,16 @@ export class World {
       }
       if (this.snowParticles) {
         this.snowParticles.update(dt);
+      }
+      if (this.sunLight && this.player) {
+        const body = this.player.getComponent(PhysicsComponent.type).body;
+        const targetX = body.position.x;
+        const targetZ = body.position.z;
+        const lightOffset = new THREE.Vector3(8, 16, 6);
+        this.sunLight.position.set(targetX + lightOffset.x, lightOffset.y, targetZ + lightOffset.z);
+        this.sunLight.target.position.set(targetX, 0, targetZ);
+        this.sunLight.target.updateMatrixWorld();
+        this.sunLight.shadow.camera.updateProjectionMatrix();
       }
     });
   }
