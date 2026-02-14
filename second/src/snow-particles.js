@@ -4,9 +4,9 @@ export class SnowParticles {
   constructor({
     scene,
     maxParticles = 1200,
-    size = 0.08,
-    life = 0.9,
-    gravity = -5,
+    size = 0.12,
+    life = 1.1,
+    gravity = -7,
   } = {}) {
     this.maxParticles = maxParticles;
     this.life = life;
@@ -22,10 +22,10 @@ export class SnowParticles {
     this.geometry.setAttribute('life', new THREE.BufferAttribute(this.lifetimes, 1));
 
     this.material = new THREE.PointsMaterial({
-      color: 0xffffff,
+      color: 0xf5f9fc,
       size,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.85,
       depthWrite: false,
     });
 

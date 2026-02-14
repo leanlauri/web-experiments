@@ -275,13 +275,19 @@ export class SkierController2 {
             this.snowParticleTimer += dt;
             if (this.snowParticleTimer >= this.snowParticleInterval) {
               this.snowParticleTimer = 0;
-              const footPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z)
+              const rightOnPlane = new THREE.Vector3().crossVectors(alignNormal, forwardOnPlane).normalize();
+              const base = new THREE.Vector3(body.position.x, body.position.y, body.position.z)
                 .sub(alignNormal.clone().multiplyScalar(footOffset * 0.7));
+              const side = 0.28;
+              const forwardOffset = 0.15;
+              const leftPos = base.clone().add(forwardOnPlane.clone().multiplyScalar(forwardOffset)).add(rightOnPlane.clone().multiplyScalar(-side));
+              const rightPos = base.clone().add(forwardOnPlane.clone().multiplyScalar(forwardOffset)).add(rightOnPlane.clone().multiplyScalar(side));
               const sprayDir = forwardOnPlane.lengthSq() > 1e-6
-                ? forwardOnPlane.clone().multiplyScalar(-0.8).add(alignNormal.clone().multiplyScalar(0.6)).normalize()
+                ? forwardOnPlane.clone().multiplyScalar(-0.7).add(alignNormal.clone().multiplyScalar(0.7)).normalize()
                 : alignNormal.clone();
-              const speed = Math.min(4.5, Math.max(2.0, surfaceSpeed + 0.5));
-              this.world.snowParticles.emit(footPos, sprayDir, speed, 0.7, 6);
+              const speed = Math.min(4.5, Math.max(2.2, surfaceSpeed + 0.4));
+              this.world.snowParticles.emit(leftPos, sprayDir, speed, 0.7, 6);
+              this.world.snowParticles.emit(rightPos, sprayDir, speed, 0.7, 6);
             }
           }
         }
