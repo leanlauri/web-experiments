@@ -991,8 +991,9 @@ export class World {
 
     const pathBlend = this.getPathBlend(x, z);
     if (pathBlend > 0) {
-      const smoothHeight = baseSlope + valley + ridge * mountainHeight * 0.45 + detail * 3.5;
-      return THREE.MathUtils.lerp(baseHeight, smoothHeight, pathBlend) + pathBlend * 0.6;
+      const smoothHeight = baseSlope + valley + ridge * mountainHeight * 0.75 + detail * 6.0;
+      const blend = pathBlend * 0.6;
+      return THREE.MathUtils.lerp(baseHeight, smoothHeight, blend) + pathBlend * 0.25;
     }
 
     return baseHeight;
