@@ -276,6 +276,8 @@ export class World {
     const height = 1.2;
     const startX = 0;
     const startZ = 0;
+    this.playerStart = new THREE.Vector3(startX, 0, startZ);
+    this.playerFallen = false;
     const groundY = this.getHeight(startX, startZ);
     const startY = groundY + height + radius + 0.6;
     group.position.set(startX, startY, startZ);

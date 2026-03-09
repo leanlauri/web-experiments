@@ -16,6 +16,7 @@ const hideObstaclesToggle = document.getElementById('hideObstaclesToggle');
 const slowToggle = document.getElementById('slowToggle');
 const hud = document.getElementById('hud');
 const fpsLabel = document.getElementById('fps');
+const distanceLabel = document.getElementById('distance');
 const physicsDebug = new PhysicsDebug(engine.scene, world.physicsWorld, { color: 0xff3333 });
 const urlParams = new URLSearchParams(window.location.search);
 
@@ -31,6 +32,7 @@ const readFlagFromUrl = (keys, fallback = false) => {
 
 let fpsFrames = 0;
 let fpsLast = typeof performance !== 'undefined' ? performance.now() : 0;
+let frozenDistance = 0;
 
 engine.addPostUpdate(() => {
   physicsDebug.update();
@@ -49,6 +51,16 @@ engine.addPostUpdate(() => {
       fpsLast = now;
     }
   }
+  const body = world.player?.getComponent?.('physics')?.body;
+  if (distanceLabel && body && world.playerStart) {
+    if (!world.playerFallen) {
+      const dx = body.position.x - world.playerStart.x;
+      const dz = body.position.z - world.playerStart.z;
+      frozenDistance = Math.hypot(dx, dz);
+    }
+    distanceLabel.textContent = `${Math.round(frozenDistance)} m`;
+  }
+
   if (physicsDebug.enabled && world.debug?.groundNormal) {
     physicsDebug.setGroundNormal(world.debug.groundNormal.position, world.debug.groundNormal.direction);
   }

@@ -19,6 +19,12 @@
       opacity: 0.8; user-select: none; font-weight: 600;
       text-align: right;
     }
+    #distance {
+      position: fixed; left: 12px; bottom: 16px; color: #2c5aa0;
+      font: 28px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      opacity: 0.9; user-select: none; font-weight: 700;
+      text-shadow: 0 2px 6px rgba(255,255,255,0.7);
+    }
     #debugMenu {
       position: fixed; right: 12px; top: 12px;
       z-index: 20;
@@ -128,6 +134,7 @@
 <body>
   <div id="hud">❄️ Winter Physics — steer with thumbstick, jump on right</div>
   <div id="fps">FPS: --</div>
+  <div id="distance">0 m</div>
   <details id="debugMenu">
     <summary title="Debug options">🧪</summary>
     <div id="debugPanel">
