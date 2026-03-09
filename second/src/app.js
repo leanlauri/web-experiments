@@ -70,10 +70,10 @@ engine.addPostUpdate(() => {
     crashShown = true;
     crashText.textContent = `Crashed. You skied ${Math.round(frozenDistance)} meters`;
     crashOverlay.style.display = 'flex';
-    tryAgain.style.display = 'none';
+    tryAgain.style.visibility = 'hidden';
     if (crashTimer) clearTimeout(crashTimer);
     crashTimer = setTimeout(() => {
-      tryAgain.style.display = 'block';
+      tryAgain.style.visibility = 'visible';
     }, 2000);
   }
 
