@@ -174,7 +174,7 @@ export class SkierController2 {
     const body = this.entity.getComponent(PhysicsComponent.type).body;
     const mesh = this.entity.getComponent(MeshComponent.type).mesh;
 
-    if (this.fallen) {
+    if (this.fallen || !this.world?.gameStarted) {
       mesh.position.copy(body.position);
       mesh.quaternion.copy(body.quaternion);
       return;

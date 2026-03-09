@@ -28,6 +28,7 @@ export class World {
     this.terrainVisible = true;
     this.cameraFollowEnabled = true;
     this.obstaclesVisible = true;
+    this.gameStarted = false;
 
     this.sphereMat = new CANNON.Material('sphere');
     this.treeMat = new CANNON.Material('tree');

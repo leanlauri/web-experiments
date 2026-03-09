@@ -1,6 +1,7 @@
 import { Engine } from './engine.js';
 import { World } from './world.js';
 import { PhysicsDebug } from './physics-debug.js';
+import * as THREE from 'three';
 
 const engine = new Engine();
 const world = new World(engine);
@@ -20,6 +21,8 @@ const distanceLabel = document.getElementById('distance');
 const crashOverlay = document.getElementById('crashOverlay');
 const crashText = document.getElementById('crashText');
 const tryAgain = document.getElementById('tryAgain');
+const startOverlay = document.getElementById('startOverlay');
+const startPrompt = document.getElementById('startPrompt');
 const physicsDebug = new PhysicsDebug(engine.scene, world.physicsWorld, { color: 0xff3333 });
 const urlParams = new URLSearchParams(window.location.search);
 
@@ -38,8 +41,12 @@ let fpsLast = typeof performance !== 'undefined' ? performance.now() : 0;
 let frozenDistance = 0;
 let crashShown = false;
 let crashTimer = null;
+let startTimer = null;
+let startAnimating = false;
+let startAnimTime = 0;
+const startAnimDuration = 1.6;
 
-engine.addPostUpdate(() => {
+engine.addPostUpdate((dt) => {
   physicsDebug.update();
   if (hud && world.debug) {
     const yaw = Number(world.debug.yawAngularVelocity) || 0;
@@ -56,6 +63,7 @@ engine.addPostUpdate(() => {
       fpsLast = now;
     }
   }
+
   const body = world.player?.getComponent?.('physics')?.body;
   if (distanceLabel && body && world.playerStart) {
     if (!world.playerFallen) {
@@ -75,6 +83,26 @@ engine.addPostUpdate(() => {
     crashTimer = setTimeout(() => {
       tryAgain.style.visibility = 'visible';
     }, 2000);
+  }
+
+  if (startAnimating && engine.camera && body) {
+    startAnimTime += dt;
+    const t = Math.min(1, startAnimTime / startAnimDuration);
+    const cam = engine.camera;
+    const heading = world.player?.getComponent?.('mesh')?.mesh?.quaternion;
+    const forward = heading ? new THREE.Vector3(0, 0, -1).applyQuaternion(heading).normalize() : new THREE.Vector3(0, 0, -1);
+    const desired = new THREE.Vector3(
+      body.position.x - forward.x * 8,
+      body.position.y + 4,
+      body.position.z - forward.z * 8,
+    );
+    cam.position.lerp(desired, t);
+    cam.lookAt(body.position.x, body.position.y + 1.2, body.position.z);
+    if (t >= 1) {
+      startAnimating = false;
+      world.gameStarted = true;
+      world.setCameraFollowEnabled(true);
+    }
   }
 
   if (physicsDebug.enabled && world.debug?.groundNormal) {
@@ -118,6 +146,19 @@ setDebugLines(readFlagFromUrl(['debugLines', 'debug', 'physicsDebug'], false));
 setTerrainHidden(readFlagFromUrl(['hideTerrain', 'terrainHidden'], false));
 setFollowCameraDisabled(readFlagFromUrl(['disableFollowCamera', 'freeCamera', 'followCameraOff'], false));
 setHideObstacles(readFlagFromUrl(['hideObstacles', 'obstaclesHidden'], false));
+
+if (engine.camera && world.playerStart) {
+  engine.camera.position.set(world.playerStart.x, world.playerStart.y + 18, world.playerStart.z + 28);
+  engine.camera.lookAt(world.playerStart.x, world.playerStart.y + 2, world.playerStart.z);
+}
+world.setCameraFollowEnabled(false);
+
+if (startOverlay) {
+  if (startTimer) clearTimeout(startTimer);
+  startTimer = setTimeout(() => {
+    if (startPrompt) startPrompt.style.visibility = 'visible';
+  }, 2000);
+}
 
 const setSlow = (enabled) => {
   engine.slowMo1fps = enabled;
@@ -283,6 +324,13 @@ const reloadGame = () => {
   window.location.reload();
 };
 
+const startGame = () => {
+  if (world.gameStarted || startAnimating) return;
+  startAnimating = true;
+  startAnimTime = 0;
+  if (startOverlay) startOverlay.style.display = 'none';
+};
+
 if (tryAgain) {
   tryAgain.addEventListener('pointerdown', (event) => {
     event.preventDefault();
@@ -291,10 +339,22 @@ if (tryAgain) {
   });
 }
 
+if (startOverlay) {
+  startOverlay.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startGame();
+  });
+}
+
 window.addEventListener('keydown', (event) => {
   if (world.playerFallen && (event.code === 'Space' || event.code === 'ArrowUp')) {
     event.preventDefault();
     reloadGame();
+  }
+  if (!world.gameStarted && (event.code === 'Space' || event.code === 'ArrowUp')) {
+    event.preventDefault();
+    startGame();
   }
 });
 
