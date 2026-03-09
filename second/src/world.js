@@ -77,6 +77,15 @@ export class World {
           ramp: 18,
         },
       },
+      path: {
+        width: 6,
+        smoothWidth: 4,
+        avoidRadius: 5,
+        markerSpacing: 24,
+        jitter: 8,
+        wavelength: 140,
+        amplitude: 10,
+      },
     };
   }
 
@@ -534,6 +543,26 @@ export class World {
     return geom;
   }
 
+  getPathX(z) {
+    const { path } = this.terrain;
+    if (!path) return 0;
+    const sine = Math.sin(z / path.wavelength) * path.amplitude;
+    const noise = (this.fbm(0.002, z * 0.01, 3) * 2 - 1) * path.jitter;
+    return sine + noise;
+  }
+
+  getPathBlend(x, z) {
+    const { path } = this.terrain;
+    if (!path) return 0;
+    const dist = Math.abs(x - this.getPathX(z));
+    const t = THREE.MathUtils.clamp((path.width - dist) / Math.max(0.001, path.smoothWidth), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
+  isNearPath(x, z, radius = 4) {
+    return Math.abs(x - this.getPathX(z)) <= radius;
+  }
+
   scatterTerrainEntities(xIndex, zIndex, centerX, centerZ, width, depth) {
     const scatter = this.terrain.scatter;
     const created = [];
@@ -544,7 +573,10 @@ export class World {
     const rampRng = this.makeChunkRng(xIndex, zIndex, 3);
     const sphereRng = this.makeChunkRng(xIndex, zIndex, 4);
 
+    const avoid = this.terrain.path?.avoidRadius ?? 5;
+
     this.tryScatter(scatter.trees, 20, (pos) => {
+      if (this.isNearPath(pos.x, pos.z, avoid)) return null;
       if (!this.isSlopeOk(pos.x, pos.z, scatter.maxSlopeDeg.tree)) return null;
       return {
         x: pos.x,
@@ -555,6 +587,7 @@ export class World {
     }, placed, created, centerX, centerZ, width, depth, treeRng);
 
     this.tryScatter(scatter.rocks, 20, (pos) => {
+      if (this.isNearPath(pos.x, pos.z, avoid)) return null;
       if (!this.isSlopeOk(pos.x, pos.z, scatter.maxSlopeDeg.rock)) return null;
       return {
         x: pos.x,
@@ -565,6 +598,7 @@ export class World {
     }, placed, created, centerX, centerZ, width, depth, rockRng);
 
     this.tryScatter(scatter.ramps, 30, (pos) => {
+      if (this.isNearPath(pos.x, pos.z, avoid)) return null;
       if (!this.isSlopeOk(pos.x, pos.z, scatter.maxSlopeDeg.ramp)) return null;
       return {
         x: pos.x,
@@ -575,6 +609,7 @@ export class World {
     }, placed, created, centerX, centerZ, width, depth, rampRng);
 
     this.tryScatter(scatter.spheres, 20, (pos) => {
+      if (this.isNearPath(pos.x, pos.z, avoid)) return null;
       return {
         x: pos.x,
         z: pos.z,
@@ -582,6 +617,8 @@ export class World {
         place: () => this.addSphere(pos.x, this.getHeight(pos.x, pos.z) + 1.2, pos.z),
       };
     }, placed, created, centerX, centerZ, width, depth, sphereRng);
+
+    this.addPathMarkers(centerX, centerZ, width, depth, created);
 
     return created;
   }
@@ -600,6 +637,48 @@ export class World {
       created.push(entity);
       added += 1;
     }
+  }
+
+  addPathMarkers(centerX, centerZ, width, depth, created) {
+    const { path } = this.terrain;
+    if (!path || !path.markerSpacing) return;
+    const minZ = centerZ - depth / 2;
+    const maxZ = centerZ + depth / 2;
+    const start = Math.floor(minZ / path.markerSpacing);
+    const end = Math.ceil(maxZ / path.markerSpacing);
+    for (let i = start; i <= end; i++) {
+      const z = i * path.markerSpacing;
+      const x = this.getPathX(z);
+      if (x < centerX - width / 2 || x > centerX + width / 2) continue;
+      const y = this.getHeight(x, z);
+      const marker = this.addPathMarkerAt(x, y, z);
+      created.push(marker);
+    }
+  }
+
+  addPathMarkerAt(x, y, z) {
+    const poleGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6);
+    const flagGeom = new THREE.BoxGeometry(0.8, 0.35, 0.05);
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+    const flagMat = new THREE.MeshStandardMaterial({ color: 0x2c5aa0, roughness: 0.7 });
+
+    const pole = new THREE.Mesh(poleGeom, poleMat);
+    const flag = new THREE.Mesh(flagGeom, flagMat);
+    pole.castShadow = true;
+    flag.castShadow = true;
+
+    pole.position.set(0, 1.2, 0);
+    flag.position.set(0.5, 1.6, 0);
+
+    const group = new THREE.Group();
+    group.add(pole);
+    group.add(flag);
+    group.position.set(x, y, z);
+
+    const entity = new Entity('marker');
+    entity.addComponent(new MeshComponent(group, { syncFromBody: false }));
+    this.engine.addEntity(entity);
+    return entity;
   }
 
   isFarEnough(pos, placed) {
@@ -908,7 +987,15 @@ export class World {
     const ridge = 1 - Math.abs(this.fbm(x * 0.014, z * 0.014, 5) * 2 - 1);
     const detail = this.fbm(x * 0.07, z * 0.07, 4);
 
-    return baseSlope + valley + ridge * mountainHeight + detail * 12.0;
+    const baseHeight = baseSlope + valley + ridge * mountainHeight + detail * 12.0;
+
+    const pathBlend = this.getPathBlend(x, z);
+    if (pathBlend > 0) {
+      const smoothHeight = baseSlope + valley + ridge * mountainHeight * 0.45 + detail * 3.5;
+      return THREE.MathUtils.lerp(baseHeight, smoothHeight, pathBlend) + pathBlend * 0.6;
+    }
+
+    return baseHeight;
   }
 
   fbm(x, z, octaves = 4) {
