@@ -17,6 +17,9 @@ const slowToggle = document.getElementById('slowToggle');
 const hud = document.getElementById('hud');
 const fpsLabel = document.getElementById('fps');
 const distanceLabel = document.getElementById('distance');
+const crashOverlay = document.getElementById('crashOverlay');
+const crashText = document.getElementById('crashText');
+const tryAgain = document.getElementById('tryAgain');
 const physicsDebug = new PhysicsDebug(engine.scene, world.physicsWorld, { color: 0xff3333 });
 const urlParams = new URLSearchParams(window.location.search);
 
@@ -33,6 +36,8 @@ const readFlagFromUrl = (keys, fallback = false) => {
 let fpsFrames = 0;
 let fpsLast = typeof performance !== 'undefined' ? performance.now() : 0;
 let frozenDistance = 0;
+let crashShown = false;
+let crashTimer = null;
 
 engine.addPostUpdate(() => {
   physicsDebug.update();
@@ -59,6 +64,17 @@ engine.addPostUpdate(() => {
       frozenDistance = Math.hypot(dx, dz);
     }
     distanceLabel.textContent = `${Math.round(frozenDistance)} m`;
+  }
+
+  if (world.playerFallen && !crashShown && crashOverlay && crashText && tryAgain) {
+    crashShown = true;
+    crashText.textContent = `Crashed. You skied ${Math.round(frozenDistance)} meters`;
+    crashOverlay.style.display = 'flex';
+    tryAgain.style.display = 'none';
+    if (crashTimer) clearTimeout(crashTimer);
+    crashTimer = setTimeout(() => {
+      tryAgain.style.display = 'block';
+    }, 2000);
   }
 
   if (physicsDebug.enabled && world.debug?.groundNormal) {
@@ -262,6 +278,25 @@ if (jumpButton) {
   jumpButton.addEventListener('pointercancel', () => setJump(false));
   jumpButton.addEventListener('pointerleave', () => setJump(false));
 }
+
+const reloadGame = () => {
+  window.location.reload();
+};
+
+if (tryAgain) {
+  tryAgain.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    reloadGame();
+  });
+}
+
+window.addEventListener('keydown', (event) => {
+  if (world.playerFallen && (event.code === 'Space' || event.code === 'ArrowUp')) {
+    event.preventDefault();
+    reloadGame();
+  }
+});
 
 if (boostButton) {
   const setBoost = (state) => {
