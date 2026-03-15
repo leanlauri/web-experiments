@@ -285,7 +285,7 @@ export class World {
     const radius = 0.35;
     const height = 1.2;
     const startX = 0;
-    const startZ = -10;
+    const startZ = -4;
     this.playerStart = new THREE.Vector3(startX, 0, startZ);
     this.playerFallen = false;
     const groundY = this.getHeight(startX, startZ);

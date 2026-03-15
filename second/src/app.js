@@ -148,7 +148,7 @@ setFollowCameraDisabled(readFlagFromUrl(['disableFollowCamera', 'freeCamera', 'f
 setHideObstacles(readFlagFromUrl(['hideObstacles', 'obstaclesHidden'], false));
 
 if (engine.camera && world.playerStart) {
-  engine.camera.position.set(world.playerStart.x, world.playerStart.y + 18, world.playerStart.z + 28);
+  engine.camera.position.set(world.playerStart.x, world.playerStart.y + 10, world.playerStart.z);
   engine.camera.lookAt(world.playerStart.x, world.playerStart.y + 2, world.playerStart.z);
 }
 world.setCameraFollowEnabled(false);
