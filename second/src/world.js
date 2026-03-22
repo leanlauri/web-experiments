@@ -89,6 +89,32 @@ export class World {
     };
   }
 
+  createClouds() {
+    const group = new THREE.Group();
+    const geom = new THREE.SphereGeometry(1, 12, 8);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.85 });
+    const cloudCount = 12;
+    for (let i = 0; i < cloudCount; i++) {
+      const cluster = new THREE.Group();
+      const parts = 4 + Math.floor(Math.random() * 4);
+      for (let j = 0; j < parts; j++) {
+        const puff = new THREE.Mesh(geom, mat);
+        const scale = 1.2 + Math.random() * 1.8;
+        puff.scale.setScalar(scale);
+        puff.position.set((Math.random() - 0.5) * 4, Math.random() * 1.2, (Math.random() - 0.5) * 3);
+        puff.castShadow = false;
+        puff.receiveShadow = false;
+        cluster.add(puff);
+      }
+      const x = (Math.random() - 0.5) * 120;
+      const z = (Math.random() - 0.5) * 120;
+      const y = 30 + Math.random() * 10;
+      cluster.position.set(x, y, z);
+      group.add(cluster);
+    }
+    return group;
+  }
+
   addEntity(entity) {
     this.entities.push(entity);
   }
@@ -117,6 +143,9 @@ export class World {
     dir.shadow.bias = -0.0003;
     scene.add(dir);
     scene.add(dir.target);
+
+    this.clouds = this.createClouds();
+    if (this.clouds) scene.add(this.clouds);
 
     // Contact material - snowballs have higher friction and very low bounce
     const contact = new CANNON.ContactMaterial(this.terrainMat, this.sphereMat, {
