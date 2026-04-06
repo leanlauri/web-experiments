@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
   <title>Experiment 2 — 3D Physics</title>
   <style>
     html, body { height: 100%; margin: 0; }
@@ -50,6 +51,29 @@
       text-align: center;
       background: rgba(232, 244, 248, 0.2);
       pointer-events: auto;
+    }
+    #fatalOverlay {
+      position: fixed; inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      padding: 24px;
+      z-index: 40;
+      color: #2c5aa0;
+      text-align: center;
+      background: rgba(232, 244, 248, 0.96);
+    }
+    #fatalTitle {
+      font: 34px/1.1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-weight: 800;
+    }
+    #fatalMessage {
+      max-width: 720px;
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      opacity: 0.9;
+      white-space: pre-wrap;
     }
     #startTitle {
       font: 40px/1.1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -189,6 +213,10 @@
     <div id="crashText">Crashed. You skied 0 meters</div>
     <div id="tryAgain">Try again?</div>
   </div>
+  <div id="fatalOverlay">
+    <div id="fatalTitle">Renderer startup failed</div>
+    <div id="fatalMessage">The 3D scene could not start.</div>
+  </div>
   <div id="startOverlay">
     <div id="startTitle">Downhill Skier</div>
     <div id="startPrompt">Tap to start</div>
@@ -223,14 +251,14 @@
     <div id="boostButton" role="button" aria-label="Boost">⏩</div>
     <div id="jumpButton" role="button" aria-label="Jump">⤴️</div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.182.0/build/three.module.js",
-        "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
-      }
+  <script>
+    const bootUrl = new URL(window.location.href);
+    const shouldEnableEruda = !bootUrl.searchParams.has('e2e');
+    if (shouldEnableEruda) {
+      const erudaScript = document.createElement('script');
+      erudaScript.src = 'https://cdn.jsdelivr.net/npm/eruda';
+      erudaScript.onload = () => window.eruda?.init?.();
+      document.head.appendChild(erudaScript);
     }
   </script>
   <script type="module" src="./src/app.js"></script>

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'https://unpkg.com/three@0.182.0/examples/jsm/controls/OrbitControls.js?module';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EngineCore } from './engine-core.js';
 import { MeshComponent } from './entity.js';
 
@@ -22,7 +22,12 @@ export class Engine extends EngineCore {
     this.controls = null;
 
     if (!headless) {
-      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      try {
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`WebGL renderer initialization failed: ${detail}`);
+      }
       this.renderer.setSize(width, height);
       this.renderer.setPixelRatio(hasWindow ? Math.min(2, window.devicePixelRatio) : 1);
       this.renderer.shadowMap.enabled = true;

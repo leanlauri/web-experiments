@@ -3,6 +3,19 @@ import { World } from './world.js';
 import { PhysicsDebug } from './physics-debug.js';
 import * as THREE from 'three';
 
+const showFatalError = (error) => {
+  const overlay = document.getElementById('fatalOverlay');
+  const message = document.getElementById('fatalMessage');
+  const detail = error instanceof Error ? error.message : String(error);
+  if (message) {
+    message.textContent = `The 3D scene could not start.\n\n${detail}`;
+  }
+  if (overlay) {
+    overlay.style.display = 'flex';
+  }
+};
+
+try {
 const engine = new Engine();
 const world = new World(engine);
 engine.setWorld(world);
@@ -373,4 +386,8 @@ if (boostButton) {
   boostButton.addEventListener('pointerup', () => setBoost(false));
   boostButton.addEventListener('pointercancel', () => setBoost(false));
   boostButton.addEventListener('pointerleave', () => setBoost(false));
+}
+} catch (error) {
+  console.error('App bootstrap failed:', error);
+  showFatalError(error);
 }
