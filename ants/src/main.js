@@ -28,7 +28,7 @@ const updateHud = ({ camera, terrain, antSystem }) => {
 
   if (antInfo && antSystem) {
     const summary = antSystem.getSummary();
-    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, ${summary.active} active, ${summary.idle} idle. LOD tiers near/mid/far: ${summary.near}/${summary.mid}/${summary.far}. Brains and steering run less often for distant ants while motion continues between decisions.`;
+    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, ${summary.active} active, ${summary.idle} idle. LOD tiers near/mid/far: ${summary.near}/${summary.mid}/${summary.far}. Render full/impostor: ${summary.fullMesh}/${summary.impostor}. Brains and steering run less often for distant ants while motion continues between decisions.`;
   }
 };
 
@@ -89,10 +89,22 @@ const bootstrap = () => {
   });
 
   const clock = new THREE.Clock();
+  const fixedStep = 1 / 60;
+  const maxFrameDt = 0.1;
+  const maxSubsteps = 4;
+  let accumulator = 0;
   const animate = () => {
-    const dt = clock.getDelta();
+    const dt = Math.min(maxFrameDt, clock.getDelta());
+    accumulator += dt;
+
     controls.update();
-    antSystem.update(dt);
+    let substeps = 0;
+    while (accumulator >= fixedStep && substeps < maxSubsteps) {
+      antSystem.update(fixedStep);
+      accumulator -= fixedStep;
+      substeps += 1;
+    }
+
     updateHud({ camera, terrain, antSystem });
     renderer.render(scene, camera);
     window.requestAnimationFrame(animate);

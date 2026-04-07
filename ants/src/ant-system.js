@@ -17,6 +17,7 @@ export const ANT_CONFIG = Object.freeze({
   midDistance: 28,
   cullDistance: 95,
   cellSize: 3,
+  fullMeshDistance: 42,
 });
 
 export const ANT_LOD = Object.freeze({
@@ -232,7 +233,20 @@ export class AntSystem {
     this.frustum = new THREE.Frustum();
     this.projectionMatrix = new THREE.Matrix4();
     this.tmpVec = new THREE.Vector3();
+    this.tmpMatrix = new THREE.Matrix4();
+    this.tmpQuaternion = new THREE.Quaternion();
+    this.tmpEuler = new THREE.Euler();
+    this.tmpScale = new THREE.Vector3(1, 1, 1);
     this.spatialHash = new Map();
+    this.farInstanceCount = 0;
+
+    const farGeometry = new THREE.SphereGeometry(0.22, 8, 6);
+    const farMaterial = new THREE.MeshToonMaterial({ color: 0x5c3017 });
+    this.farInstances = new THREE.InstancedMesh(farGeometry, farMaterial, this.ants.length);
+    this.farInstances.castShadow = true;
+    this.farInstances.receiveShadow = true;
+    this.farInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(this.farInstances);
 
     for (const ant of this.ants) {
       const mesh = createAntVisual();
@@ -248,6 +262,7 @@ export class AntSystem {
     this.projectionMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projectionMatrix);
     this.spatialHash = buildSpatialHash(this.ants);
+    this.farInstanceCount = 0;
 
     for (let i = 0; i < this.ants.length; i += 1) {
       const ant = this.ants[i];
@@ -284,13 +299,39 @@ export class AntSystem {
       }
 
       ant.gaitPhase += dt * (2.5 + ant.velocity.length() * 1.8);
-      mesh.position.copy(ant.position);
-      mesh.position.y += Math.sin(ant.gaitPhase) * 0.04;
-      mesh.rotation.y = Math.atan2(ant.heading.x, ant.heading.z);
-      mesh.rotation.z = Math.sin(ant.gaitPhase) * 0.05;
+      const bobY = Math.sin(ant.gaitPhase) * 0.04;
+      const rotationY = Math.atan2(ant.heading.x, ant.heading.z);
+      const rollZ = Math.sin(ant.gaitPhase) * 0.05;
 
       updateVisibility(ant, mesh, distanceToCamera, this.frustum);
+
+      const useFullMesh = ant.visible && distanceToCamera <= ANT_CONFIG.fullMeshDistance;
+      if (useFullMesh) {
+        mesh.visible = true;
+        mesh.position.copy(ant.position);
+        mesh.position.y += bobY;
+        mesh.rotation.y = rotationY;
+        mesh.rotation.z = rollZ;
+      } else {
+        mesh.visible = false;
+      }
+
+      const useFarInstance = ant.visible && !useFullMesh;
+      if (useFarInstance) {
+        this.tmpEuler.set(0, rotationY, rollZ);
+        this.tmpQuaternion.setFromEuler(this.tmpEuler);
+        this.tmpMatrix.compose(
+          new THREE.Vector3(ant.position.x, ant.position.y + bobY, ant.position.z),
+          this.tmpQuaternion,
+          this.tmpScale,
+        );
+        this.farInstances.setMatrixAt(this.farInstanceCount, this.tmpMatrix);
+        this.farInstanceCount += 1;
+      }
     }
+
+    this.farInstances.count = this.farInstanceCount;
+    this.farInstances.instanceMatrix.needsUpdate = true;
   }
 
   getSummary() {
@@ -299,14 +340,20 @@ export class AntSystem {
     let near = 0;
     let mid = 0;
     let far = 0;
+    let fullMesh = 0;
+    let impostor = 0;
 
-    for (const ant of this.ants) {
+    for (let i = 0; i < this.ants.length; i += 1) {
+      const ant = this.ants[i];
       if (ant.visible) visible += 1;
       if (ant.action === 'idle') idle += 1;
       if (ant.lodBand === ANT_LOD.near) near += 1;
       else if (ant.lodBand === ANT_LOD.mid) mid += 1;
       else far += 1;
+      if (this.meshes[i]?.visible) fullMesh += 1;
     }
+
+    impostor = this.farInstanceCount;
 
     return {
       total: this.ants.length,
@@ -316,6 +363,8 @@ export class AntSystem {
       near,
       mid,
       far,
+      fullMesh,
+      impostor,
     };
   }
 }

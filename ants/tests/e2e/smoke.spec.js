@@ -37,6 +37,7 @@ test('renders the ants terrain prototype without runtime errors', async ({ page 
   await expect(page.locator('#meshInfo')).toContainText('y ∈ [-5, 5]');
   await expect(page.locator('#antInfo')).toContainText('Ants: 50 total');
   await expect(page.locator('#antInfo')).toContainText('LOD tiers near/mid/far');
+  await expect(page.locator('#antInfo')).toContainText('Render full/impostor');
   await expect(page.locator('#antInfo')).toContainText('Brains and steering run less often for distant ants');
   await expect(page.locator('body > canvas').first()).toBeVisible();
   await expect(page.locator('#fatalOverlay')).toBeHidden();
