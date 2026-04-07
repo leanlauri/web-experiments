@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AntSystem } from './ant-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, getTriangleCount } from './terrain.js';
 
@@ -18,7 +19,7 @@ const updateHud = ({ camera, terrain, antSystem }) => {
   camera.getWorldDirection(direction);
 
   if (cameraInfo) {
-    cameraInfo.textContent = `Camera: position (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}) looking ${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}, ${direction.z.toFixed(2)} toward the origin.`;
+    cameraInfo.textContent = `Camera: drag or touch to orbit. Position (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}) looking ${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}, ${direction.z.toFixed(2)} toward the colony center.`;
   }
 
   if (meshInfo) {
@@ -27,7 +28,7 @@ const updateHud = ({ camera, terrain, antSystem }) => {
 
   if (antInfo && antSystem) {
     const summary = antSystem.getSummary();
-    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, ${summary.active} active, ${summary.idle} idle. Brains run less often for distant ants while motion continues between decisions.`;
+    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, ${summary.active} active, ${summary.idle} idle. LOD tiers near/mid/far: ${summary.near}/${summary.mid}/${summary.far}. Brains and steering run less often for distant ants while motion continues between decisions.`;
   }
 };
 
@@ -46,6 +47,15 @@ const bootstrap = () => {
   camera.position.set(36, 26, 36);
   camera.up.set(0, 1, 0);
   camera.lookAt(0, 0, 0);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(0, 2, 0);
+  controls.minDistance = 10;
+  controls.maxDistance = 120;
+  controls.maxPolarAngle = Math.PI * 0.48;
+  controls.enablePan = true;
 
   const ambient = new THREE.HemisphereLight(0xf2f7ff, 0x7e93a8, 1.4);
   scene.add(ambient);
@@ -81,10 +91,7 @@ const bootstrap = () => {
   const clock = new THREE.Clock();
   const animate = () => {
     const dt = clock.getDelta();
-    const elapsed = clock.elapsedTime;
-    camera.position.x = Math.cos(elapsed * 0.18) * 36;
-    camera.position.z = Math.sin(elapsed * 0.18) * 36;
-    camera.lookAt(0, 0, 0);
+    controls.update();
     antSystem.update(dt);
     updateHud({ camera, terrain, antSystem });
     renderer.render(scene, camera);

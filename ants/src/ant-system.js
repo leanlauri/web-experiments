@@ -10,14 +10,68 @@ export const ANT_CONFIG = Object.freeze({
   closeBrainInterval: 0.2,
   midBrainInterval: 0.55,
   farBrainInterval: 1.3,
+  closeLogicInterval: 1 / 30,
+  midLogicInterval: 1 / 12,
+  farLogicInterval: 1 / 5,
   farDistance: 55,
   midDistance: 28,
   cullDistance: 95,
+  cellSize: 3,
+});
+
+export const ANT_LOD = Object.freeze({
+  near: 'near',
+  mid: 'mid',
+  far: 'far',
 });
 
 const clampToTerrainBounds = (value, extent, padding = 1) => THREE.MathUtils.clamp(value, -extent / 2 + padding, extent / 2 - padding);
-
 const randomRange = (min, max) => min + Math.random() * (max - min);
+const cellCoord = (value, size) => Math.floor(value / size);
+const cellKey = (x, z) => `${x},${z}`;
+
+export const getLodBandForDistance = (distanceToCamera) => {
+  if (distanceToCamera > ANT_CONFIG.farDistance) return ANT_LOD.far;
+  if (distanceToCamera > ANT_CONFIG.midDistance) return ANT_LOD.mid;
+  return ANT_LOD.near;
+};
+
+export const getBrainIntervalForDistance = (distanceToCamera) => {
+  const band = getLodBandForDistance(distanceToCamera);
+  if (band === ANT_LOD.far) return ANT_CONFIG.farBrainInterval;
+  if (band === ANT_LOD.mid) return ANT_CONFIG.midBrainInterval;
+  return ANT_CONFIG.closeBrainInterval;
+};
+
+export const getLogicIntervalForDistance = (distanceToCamera) => {
+  const band = getLodBandForDistance(distanceToCamera);
+  if (band === ANT_LOD.far) return ANT_CONFIG.farLogicInterval;
+  if (band === ANT_LOD.mid) return ANT_CONFIG.midLogicInterval;
+  return ANT_CONFIG.closeLogicInterval;
+};
+
+export const buildSpatialHash = (ants, cellSize = ANT_CONFIG.cellSize) => {
+  const grid = new Map();
+  for (const ant of ants) {
+    const key = cellKey(cellCoord(ant.position.x, cellSize), cellCoord(ant.position.z, cellSize));
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(ant);
+  }
+  return grid;
+};
+
+export const querySpatialHash = (grid, x, z, cellSize = ANT_CONFIG.cellSize) => {
+  const originX = cellCoord(x, cellSize);
+  const originZ = cellCoord(z, cellSize);
+  const neighbors = [];
+  for (let dz = -1; dz <= 1; dz += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      const bucket = grid.get(cellKey(originX + dx, originZ + dz));
+      if (bucket) neighbors.push(...bucket);
+    }
+  }
+  return neighbors;
+};
 
 export const createAntVisual = () => {
   const group = new THREE.Group();
@@ -80,8 +134,11 @@ export const createAntState = (id, x, z) => ({
   target: new THREE.Vector3(x, 0, z),
   brainCooldown: Math.random() * 0.6,
   brainInterval: ANT_CONFIG.closeBrainInterval,
+  logicCooldown: Math.random() * ANT_CONFIG.closeLogicInterval,
+  logicInterval: ANT_CONFIG.closeLogicInterval,
   gaitPhase: Math.random() * Math.PI * 2,
   visible: true,
+  lodBand: ANT_LOD.near,
 });
 
 export const createRandomAntStates = (count = ANT_CONFIG.count) => {
@@ -92,12 +149,6 @@ export const createRandomAntStates = (count = ANT_CONFIG.count) => {
     ants.push(createAntState(i, x, z));
   }
   return ants;
-};
-
-export const getBrainIntervalForDistance = (distanceToCamera) => {
-  if (distanceToCamera > ANT_CONFIG.farDistance) return ANT_CONFIG.farBrainInterval;
-  if (distanceToCamera > ANT_CONFIG.midDistance) return ANT_CONFIG.midBrainInterval;
-  return ANT_CONFIG.closeBrainInterval;
 };
 
 const chooseNextAction = (ant) => {
@@ -119,29 +170,10 @@ const chooseNextAction = (ant) => {
   ant.desiredVelocity.copy(ant.heading).multiplyScalar(ANT_CONFIG.speed * randomRange(0.55, 1.1));
 };
 
-const applySeparation = (ant, ants) => {
-  const push = new THREE.Vector3();
-  for (const other of ants) {
-    if (other === ant) continue;
-    const dx = ant.position.x - other.position.x;
-    const dz = ant.position.z - other.position.z;
-    const distanceSq = dx * dx + dz * dz;
-    const minDistance = ant.radius + other.radius + 0.2;
-    if (distanceSq === 0 || distanceSq > minDistance * minDistance) continue;
-    const distance = Math.sqrt(distanceSq);
-    const strength = (minDistance - distance) / minDistance;
-    push.x += (dx / distance) * strength;
-    push.z += (dz / distance) * strength;
-  }
-  if (push.lengthSq() > 0) {
-    push.normalize().multiplyScalar(ANT_CONFIG.speed * 0.7);
-    ant.desiredVelocity.add(push);
-  }
-};
-
-const updateBrain = (ant, camera) => {
-  const distanceToCamera = ant.position.distanceTo(camera.position);
+const updateBrain = (ant, distanceToCamera) => {
+  ant.lodBand = getLodBandForDistance(distanceToCamera);
   ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
+  ant.logicInterval = getLogicIntervalForDistance(distanceToCamera);
   chooseNextAction(ant);
 };
 
@@ -162,8 +194,30 @@ const updateActionVelocity = (ant) => {
   ant.desiredVelocity.lerp(toTarget.multiplyScalar(ANT_CONFIG.speed), 0.18);
 };
 
-const updateVisibility = (ant, mesh, camera, frustum) => {
-  const distance = ant.position.distanceTo(camera.position);
+const applySeparation = (ant, grid) => {
+  const neighbors = querySpatialHash(grid, ant.position.x, ant.position.z);
+  const push = new THREE.Vector3();
+
+  for (const other of neighbors) {
+    if (other === ant) continue;
+    const dx = ant.position.x - other.position.x;
+    const dz = ant.position.z - other.position.z;
+    const distanceSq = dx * dx + dz * dz;
+    const minDistance = ant.radius + other.radius + 0.2;
+    if (distanceSq === 0 || distanceSq > minDistance * minDistance) continue;
+    const distance = Math.sqrt(distanceSq);
+    const strength = (minDistance - distance) / minDistance;
+    push.x += (dx / distance) * strength;
+    push.z += (dz / distance) * strength;
+  }
+
+  if (push.lengthSq() > 0) {
+    push.normalize().multiplyScalar(ANT_CONFIG.speed * 0.7);
+    ant.desiredVelocity.add(push);
+  }
+};
+
+const updateVisibility = (ant, mesh, distance, frustum) => {
   const inFrustum = frustum.containsPoint(ant.position);
   ant.visible = inFrustum || distance < ANT_CONFIG.cullDistance;
   mesh.visible = ant.visible;
@@ -178,6 +232,7 @@ export class AntSystem {
     this.frustum = new THREE.Frustum();
     this.projectionMatrix = new THREE.Matrix4();
     this.tmpVec = new THREE.Vector3();
+    this.spatialHash = new Map();
 
     for (const ant of this.ants) {
       const mesh = createAntVisual();
@@ -192,28 +247,40 @@ export class AntSystem {
     this.camera.updateMatrixWorld();
     this.projectionMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projectionMatrix);
+    this.spatialHash = buildSpatialHash(this.ants);
 
     for (let i = 0; i < this.ants.length; i += 1) {
       const ant = this.ants[i];
       const mesh = this.meshes[i];
+      const distanceToCamera = ant.position.distanceTo(this.camera.position);
+
+      ant.lodBand = getLodBandForDistance(distanceToCamera);
+      ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
+      ant.logicInterval = getLogicIntervalForDistance(distanceToCamera);
 
       ant.brainCooldown -= dt;
       if (ant.brainCooldown <= 0) {
-        updateBrain(ant, this.camera);
+        updateBrain(ant, distanceToCamera);
         ant.brainCooldown = ant.brainInterval;
       }
 
-      updateActionVelocity(ant);
-      applySeparation(ant, this.ants);
+      ant.logicCooldown -= dt;
+      if (ant.logicCooldown <= 0) {
+        updateActionVelocity(ant);
+        if (ant.lodBand !== ANT_LOD.far) {
+          applySeparation(ant, this.spatialHash);
+        }
+        ant.logicCooldown = ant.logicInterval;
+      }
 
-      ant.velocity.lerp(ant.desiredVelocity, 0.14);
+      ant.velocity.lerp(ant.desiredVelocity, ant.lodBand === ANT_LOD.near ? 0.16 : ant.lodBand === ANT_LOD.mid ? 0.12 : 0.08);
       ant.position.x = clampToTerrainBounds(ant.position.x + ant.velocity.x * dt, TERRAIN_CONFIG.width);
       ant.position.z = clampToTerrainBounds(ant.position.z + ant.velocity.z * dt, TERRAIN_CONFIG.depth);
       ant.position.y = sampleHeight(ant.position.x, ant.position.z) + ant.radius;
 
       if (ant.velocity.lengthSq() > 0.001) {
         this.tmpVec.copy(ant.velocity).normalize();
-        ant.heading.lerp(this.tmpVec, 0.22).normalize();
+        ant.heading.lerp(this.tmpVec, ant.lodBand === ANT_LOD.far ? 0.12 : 0.22).normalize();
       }
 
       ant.gaitPhase += dt * (2.5 + ant.velocity.length() * 1.8);
@@ -222,16 +289,23 @@ export class AntSystem {
       mesh.rotation.y = Math.atan2(ant.heading.x, ant.heading.z);
       mesh.rotation.z = Math.sin(ant.gaitPhase) * 0.05;
 
-      updateVisibility(ant, mesh, this.camera, this.frustum);
+      updateVisibility(ant, mesh, distanceToCamera, this.frustum);
     }
   }
 
   getSummary() {
     let visible = 0;
     let idle = 0;
+    let near = 0;
+    let mid = 0;
+    let far = 0;
+
     for (const ant of this.ants) {
       if (ant.visible) visible += 1;
       if (ant.action === 'idle') idle += 1;
+      if (ant.lodBand === ANT_LOD.near) near += 1;
+      else if (ant.lodBand === ANT_LOD.mid) mid += 1;
+      else far += 1;
     }
 
     return {
@@ -239,6 +313,9 @@ export class AntSystem {
       visible,
       active: this.ants.length - idle,
       idle,
+      near,
+      mid,
+      far,
     };
   }
 }

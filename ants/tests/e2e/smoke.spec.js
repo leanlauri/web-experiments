@@ -31,12 +31,13 @@ test('renders the ants terrain prototype without runtime errors', async ({ page 
 
   await expect(page.locator('#hudTitle')).toHaveText('Ants Terrain Prototype');
   await expect(page.locator('#axisInfo')).toContainText('Ground lies on the X/Z plane');
-  await expect(page.locator('#cameraInfo')).toContainText('looking');
+  await expect(page.locator('#cameraInfo')).toContainText('drag or touch to orbit');
   await expect(page.locator('#meshInfo')).toContainText('Triangles: 20000');
   await expect(page.locator('#meshInfo')).toContainText('x/z ∈ [-50, 50]');
   await expect(page.locator('#meshInfo')).toContainText('y ∈ [-5, 5]');
   await expect(page.locator('#antInfo')).toContainText('Ants: 50 total');
-  await expect(page.locator('#antInfo')).toContainText('Brains run less often for distant ants');
+  await expect(page.locator('#antInfo')).toContainText('LOD tiers near/mid/far');
+  await expect(page.locator('#antInfo')).toContainText('Brains and steering run less often for distant ants');
   await expect(page.locator('body > canvas').first()).toBeVisible();
   await expect(page.locator('#fatalOverlay')).toBeHidden();
 

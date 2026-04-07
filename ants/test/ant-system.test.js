@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ANT_CONFIG, createRandomAntStates, getBrainIntervalForDistance } from '../src/ant-system.js';
+import { ANT_CONFIG, ANT_LOD, buildSpatialHash, createRandomAntStates, getBrainIntervalForDistance, getLodBandForDistance, querySpatialHash } from '../src/ant-system.js';
 import { TERRAIN_CONFIG } from '../src/terrain.js';
 
 describe('ant system helpers', () => {
@@ -22,5 +22,25 @@ describe('ant system helpers', () => {
     expect(getBrainIntervalForDistance(5)).toBe(ANT_CONFIG.closeBrainInterval);
     expect(getBrainIntervalForDistance(40)).toBe(ANT_CONFIG.midBrainInterval);
     expect(getBrainIntervalForDistance(80)).toBe(ANT_CONFIG.farBrainInterval);
+  });
+
+  test('assigns explicit simulation LOD bands by camera distance', () => {
+    expect(getLodBandForDistance(5)).toBe(ANT_LOD.near);
+    expect(getLodBandForDistance(40)).toBe(ANT_LOD.mid);
+    expect(getLodBandForDistance(80)).toBe(ANT_LOD.far);
+  });
+
+  test('uses a spatial hash to retrieve nearby ants', () => {
+    const ants = createRandomAntStates(3);
+    ants[0].position.set(0, ants[0].position.y, 0);
+    ants[1].position.set(1.2, ants[1].position.y, 0.6);
+    ants[2].position.set(20, ants[2].position.y, 20);
+
+    const hash = buildSpatialHash(ants, ANT_CONFIG.cellSize);
+    const neighbors = querySpatialHash(hash, 0, 0, ANT_CONFIG.cellSize);
+
+    expect(neighbors).toContain(ants[0]);
+    expect(neighbors).toContain(ants[1]);
+    expect(neighbors).not.toContain(ants[2]);
   });
 });
