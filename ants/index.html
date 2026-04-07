@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>Ants Experiment</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      background: linear-gradient(180deg, #e4edf7 0%, #cfdcec 100%);
+      color: #16314d;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    canvas { display: block; }
+    #hud {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 10;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(246, 250, 255, 0.84);
+      box-shadow: 0 10px 30px rgba(19, 49, 77, 0.12);
+      backdrop-filter: blur(8px);
+      max-width: min(420px, calc(100vw - 24px));
+    }
+    #hudTitle {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .hudRow { margin-top: 4px; }
+    #fatalOverlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      padding: 24px;
+      z-index: 20;
+      text-align: center;
+      color: #16314d;
+      background: rgba(240, 246, 255, 0.96);
+    }
+    #fatalTitle {
+      font-size: 32px;
+      font-weight: 800;
+    }
+    #fatalMessage {
+      max-width: 720px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="hudTitle">Ants Terrain Prototype</div>
+    <div class="hudRow" id="axisInfo">Axes: +X right, +Y up, +Z forward. Ground lies on the X/Z plane.</div>
+    <div class="hudRow" id="cameraInfo">Camera: booting…</div>
+    <div class="hudRow" id="meshInfo">Triangles: --</div>
+  </div>
+  <div id="fatalOverlay">
+    <div id="fatalTitle">Renderer startup failed</div>
+    <div id="fatalMessage">The 3D scene could not start.</div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
