@@ -19,19 +19,37 @@
       left: 12px;
       top: 12px;
       z-index: 10;
-      padding: 12px 14px;
       border-radius: 12px;
       background: rgba(246, 250, 255, 0.84);
       box-shadow: 0 10px 30px rgba(19, 49, 77, 0.12);
       backdrop-filter: blur(8px);
-      max-width: min(420px, calc(100vw - 24px));
+      max-width: min(340px, calc(100vw - 24px));
+      overflow: hidden;
     }
+    #hud summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      user-select: none;
+    }
+    #hud summary::-webkit-details-marker { display: none; }
     #hudTitle {
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 800;
-      margin-bottom: 8px;
     }
-    .hudRow { margin-top: 4px; }
+    #hudHint {
+      font-size: 12px;
+      opacity: 0.75;
+    }
+    #hudBody {
+      padding: 0 12px 12px;
+      border-top: 1px solid rgba(22, 49, 77, 0.08);
+    }
+    .hudRow { margin-top: 6px; }
     #fatalOverlay {
       position: fixed;
       inset: 0;
@@ -57,13 +75,18 @@
   </style>
 </head>
 <body>
-  <div id="hud">
-    <div id="hudTitle">Ants Terrain Prototype</div>
-    <div class="hudRow" id="axisInfo">Axes: +X right, +Y up, +Z forward. Ground lies on the X/Z plane.</div>
-    <div class="hudRow" id="cameraInfo">Camera: booting…</div>
-    <div class="hudRow" id="meshInfo">Triangles: --</div>
-    <div class="hudRow" id="antInfo">Ants: --</div>
-  </div>
+  <details id="hud" open>
+    <summary>
+      <span id="hudTitle">Ants Prototype</span>
+      <span id="hudHint">tap to collapse</span>
+    </summary>
+    <div id="hudBody">
+      <div class="hudRow" id="axisInfo">Axes: +X right, +Y up, +Z forward.</div>
+      <div class="hudRow" id="cameraInfo">Camera: booting…</div>
+      <div class="hudRow" id="meshInfo">Terrain: --</div>
+      <div class="hudRow" id="antInfo">Ants: --</div>
+    </div>
+  </details>
   <div id="fatalOverlay">
     <div id="fatalTitle">Renderer startup failed</div>
     <div id="fatalMessage">The 3D scene could not start.</div>

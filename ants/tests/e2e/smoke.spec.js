@@ -29,16 +29,15 @@ test('renders the ants terrain prototype without runtime errors', async ({ page 
   const webgl = await detectWebGLSupport(page);
   test.skip(!webgl.available, 'Skipping WebGL-dependent test because this browser context cannot create a usable WebGL context.');
 
-  await expect(page.locator('#hudTitle')).toHaveText('Ants Terrain Prototype');
-  await expect(page.locator('#axisInfo')).toContainText('Ground lies on the X/Z plane');
-  await expect(page.locator('#cameraInfo')).toContainText('drag or touch to orbit');
-  await expect(page.locator('#meshInfo')).toContainText('Triangles: 20000');
-  await expect(page.locator('#meshInfo')).toContainText('x/z ∈ [-50, 50]');
-  await expect(page.locator('#meshInfo')).toContainText('y ∈ [-5, 5]');
-  await expect(page.locator('#antInfo')).toContainText('Ants: 50 total');
-  await expect(page.locator('#antInfo')).toContainText('LOD tiers near/mid/far');
-  await expect(page.locator('#antInfo')).toContainText('Render full/impostor');
-  await expect(page.locator('#antInfo')).toContainText('Brains and steering run less often for distant ants');
+  await expect(page.locator('#hudTitle')).toHaveText('Ants Prototype');
+  await expect(page.locator('#axisInfo')).toContainText('Axes: +X right, +Y up, +Z forward');
+  await expect(page.locator('#cameraInfo')).toContainText('drag to orbit');
+  await expect(page.locator('#meshInfo')).toContainText('Terrain: 20000 tris');
+  await expect(page.locator('#meshInfo')).toContainText('x/z [-50, 50]');
+  await expect(page.locator('#meshInfo')).toContainText('y [-5, 5]');
+  await expect(page.locator('#antInfo')).toContainText('Ants: 200 total');
+  await expect(page.locator('#antInfo')).toContainText('LOD');
+  await expect(page.locator('#antInfo')).toContainText('render');
   await expect(page.locator('body > canvas').first()).toBeVisible();
   await expect(page.locator('#fatalOverlay')).toBeHidden();
 

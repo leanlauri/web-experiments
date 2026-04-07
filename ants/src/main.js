@@ -15,20 +15,26 @@ const updateHud = ({ camera, terrain, antSystem }) => {
   const cameraInfo = document.getElementById('cameraInfo');
   const meshInfo = document.getElementById('meshInfo');
   const antInfo = document.getElementById('antInfo');
+  const hudHint = document.getElementById('hudHint');
+  const hud = document.getElementById('hud');
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
 
+  if (hudHint && hud) {
+    hudHint.textContent = hud.open ? 'tap to collapse' : 'tap to expand';
+  }
+
   if (cameraInfo) {
-    cameraInfo.textContent = `Camera: drag or touch to orbit. Position (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}) looking ${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}, ${direction.z.toFixed(2)} toward the colony center.`;
+    cameraInfo.textContent = `Camera: drag to orbit, pinch or wheel to zoom.`;
   }
 
   if (meshInfo) {
-    meshInfo.textContent = `Triangles: ${getTriangleCount(terrain.geometry)} across x/z ∈ [-50, 50] with y ∈ [-${TERRAIN_CONFIG.maxHeight}, ${TERRAIN_CONFIG.maxHeight}] and a ${terrain.geometry.parameters.widthSegments}×${terrain.geometry.parameters.heightSegments} split plane.`;
+    meshInfo.textContent = `Terrain: ${getTriangleCount(terrain.geometry)} tris, x/z [-50, 50], y [-${TERRAIN_CONFIG.maxHeight}, ${TERRAIN_CONFIG.maxHeight}].`;
   }
 
   if (antInfo && antSystem) {
     const summary = antSystem.getSummary();
-    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, ${summary.active} active, ${summary.idle} idle. LOD tiers near/mid/far: ${summary.near}/${summary.mid}/${summary.far}. Render full/impostor: ${summary.fullMesh}/${summary.impostor}. Brains and steering run less often for distant ants while motion continues between decisions.`;
+    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, LOD ${summary.near}/${summary.mid}/${summary.far}, render ${summary.fullMesh}/${summary.impostor}.`;
   }
 };
 
@@ -78,7 +84,7 @@ const bootstrap = () => {
   const terrain = createTerrainMesh();
   scene.add(terrain);
 
-  const antSystem = new AntSystem({ scene, camera, count: 50 });
+  const antSystem = new AntSystem({ scene, camera, count: 200 });
 
   updateHud({ camera, terrain, antSystem });
 

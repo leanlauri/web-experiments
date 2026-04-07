@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TERRAIN_CONFIG, sampleHeight } from './terrain.js';
 
 export const ANT_CONFIG = Object.freeze({
-  count: 50,
+  count: 200,
   bodyRadius: 0.45,
   speed: 2.4,
   wanderJitter: 0.9,

@@ -3,10 +3,10 @@ import { ANT_CONFIG, ANT_LOD, buildSpatialHash, createRandomAntStates, getBrainI
 import { TERRAIN_CONFIG } from '../src/terrain.js';
 
 describe('ant system helpers', () => {
-  test('creates 50 ants within the terrain bounds', () => {
+  test('creates 200 ants within the terrain bounds', () => {
     const ants = createRandomAntStates(ANT_CONFIG.count);
 
-    expect(ants).toHaveLength(50);
+    expect(ants).toHaveLength(200);
     for (const ant of ants) {
       expect(ant.position.x).toBeGreaterThanOrEqual(-TERRAIN_CONFIG.width / 2);
       expect(ant.position.x).toBeLessThanOrEqual(TERRAIN_CONFIG.width / 2);
