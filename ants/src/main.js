@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AntSystem } from './ant-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, getTriangleCount } from './terrain.js';
 
 const showFatalError = (error) => {
@@ -9,9 +10,10 @@ const showFatalError = (error) => {
   if (overlay) overlay.style.display = 'flex';
 };
 
-const updateHud = ({ camera, terrain }) => {
+const updateHud = ({ camera, terrain, antSystem }) => {
   const cameraInfo = document.getElementById('cameraInfo');
   const meshInfo = document.getElementById('meshInfo');
+  const antInfo = document.getElementById('antInfo');
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
 
@@ -21,6 +23,11 @@ const updateHud = ({ camera, terrain }) => {
 
   if (meshInfo) {
     meshInfo.textContent = `Triangles: ${getTriangleCount(terrain.geometry)} across x/z ∈ [-50, 50] with y ∈ [-${TERRAIN_CONFIG.maxHeight}, ${TERRAIN_CONFIG.maxHeight}] and a ${terrain.geometry.parameters.widthSegments}×${terrain.geometry.parameters.heightSegments} split plane.`;
+  }
+
+  if (antInfo && antSystem) {
+    const summary = antSystem.getSummary();
+    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, ${summary.active} active, ${summary.idle} idle. Brains run less often for distant ants while motion continues between decisions.`;
   }
 };
 
@@ -61,7 +68,9 @@ const bootstrap = () => {
   const terrain = createTerrainMesh();
   scene.add(terrain);
 
-  updateHud({ camera, terrain });
+  const antSystem = new AntSystem({ scene, camera, count: 50 });
+
+  updateHud({ camera, terrain, antSystem });
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -71,11 +80,13 @@ const bootstrap = () => {
 
   const clock = new THREE.Clock();
   const animate = () => {
-    const elapsed = clock.getElapsedTime();
+    const dt = clock.getDelta();
+    const elapsed = clock.elapsedTime;
     camera.position.x = Math.cos(elapsed * 0.18) * 36;
     camera.position.z = Math.sin(elapsed * 0.18) * 36;
     camera.lookAt(0, 0, 0);
-    updateHud({ camera, terrain });
+    antSystem.update(dt);
+    updateHud({ camera, terrain, antSystem });
     renderer.render(scene, camera);
     window.requestAnimationFrame(animate);
   };

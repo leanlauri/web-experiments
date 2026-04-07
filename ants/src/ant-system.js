@@ -1,0 +1,244 @@
+import * as THREE from 'three';
+import { TERRAIN_CONFIG, sampleHeight } from './terrain.js';
+
+export const ANT_CONFIG = Object.freeze({
+  count: 50,
+  bodyRadius: 0.45,
+  speed: 2.4,
+  wanderJitter: 0.9,
+  idleChance: 0.18,
+  closeBrainInterval: 0.2,
+  midBrainInterval: 0.55,
+  farBrainInterval: 1.3,
+  farDistance: 55,
+  midDistance: 28,
+  cullDistance: 95,
+});
+
+const clampToTerrainBounds = (value, extent, padding = 1) => THREE.MathUtils.clamp(value, -extent / 2 + padding, extent / 2 - padding);
+
+const randomRange = (min, max) => min + Math.random() * (max - min);
+
+export const createAntVisual = () => {
+  const group = new THREE.Group();
+
+  const material = new THREE.MeshToonMaterial({ color: 0x4c2612 });
+  const accentMaterial = new THREE.MeshToonMaterial({ color: 0x2f1308 });
+
+  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), material);
+  abdomen.scale.set(1.2, 0.95, 1.4);
+  abdomen.position.set(0, 0.28, -0.34);
+  group.add(abdomen);
+
+  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), material);
+  thorax.scale.set(1.05, 1, 1.1);
+  thorax.position.set(0, 0.26, 0.02);
+  group.add(thorax);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), accentMaterial);
+  head.position.set(0, 0.25, 0.38);
+  group.add(head);
+
+  const legGeometry = new THREE.CapsuleGeometry(0.03, 0.4, 2, 6);
+  for (let i = 0; i < 3; i += 1) {
+    const z = -0.2 + i * 0.22;
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeometry, accentMaterial);
+      leg.rotation.z = side * Math.PI * 0.32;
+      leg.rotation.x = Math.PI * 0.44;
+      leg.position.set(side * 0.22, 0.18, z);
+      group.add(leg);
+    }
+  }
+
+  for (const side of [-1, 1]) {
+    const antenna = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.24, 2, 4), accentMaterial);
+    antenna.position.set(side * 0.07, 0.43, 0.5);
+    antenna.rotation.z = side * Math.PI * 0.2;
+    antenna.rotation.x = Math.PI * 0.2;
+    group.add(antenna);
+  }
+
+  group.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  return group;
+};
+
+export const createAntState = (id, x, z) => ({
+  id,
+  radius: ANT_CONFIG.bodyRadius,
+  position: new THREE.Vector3(x, sampleHeight(x, z) + ANT_CONFIG.bodyRadius, z),
+  velocity: new THREE.Vector3(),
+  desiredVelocity: new THREE.Vector3(),
+  heading: new THREE.Vector3(1, 0, 0),
+  action: 'wander',
+  target: new THREE.Vector3(x, 0, z),
+  brainCooldown: Math.random() * 0.6,
+  brainInterval: ANT_CONFIG.closeBrainInterval,
+  gaitPhase: Math.random() * Math.PI * 2,
+  visible: true,
+});
+
+export const createRandomAntStates = (count = ANT_CONFIG.count) => {
+  const ants = [];
+  for (let i = 0; i < count; i += 1) {
+    const x = randomRange(-TERRAIN_CONFIG.width / 2, TERRAIN_CONFIG.width / 2);
+    const z = randomRange(-TERRAIN_CONFIG.depth / 2, TERRAIN_CONFIG.depth / 2);
+    ants.push(createAntState(i, x, z));
+  }
+  return ants;
+};
+
+export const getBrainIntervalForDistance = (distanceToCamera) => {
+  if (distanceToCamera > ANT_CONFIG.farDistance) return ANT_CONFIG.farBrainInterval;
+  if (distanceToCamera > ANT_CONFIG.midDistance) return ANT_CONFIG.midBrainInterval;
+  return ANT_CONFIG.closeBrainInterval;
+};
+
+const chooseNextAction = (ant) => {
+  if (Math.random() < ANT_CONFIG.idleChance) {
+    ant.action = 'idle';
+    ant.desiredVelocity.setScalar(0);
+    return;
+  }
+
+  ant.action = 'wander';
+  const angle = Math.atan2(ant.heading.z, ant.heading.x) + randomRange(-ANT_CONFIG.wanderJitter, ANT_CONFIG.wanderJitter);
+  ant.heading.set(Math.cos(angle), 0, Math.sin(angle)).normalize();
+  const distance = randomRange(2.5, 8.5);
+  ant.target.set(
+    clampToTerrainBounds(ant.position.x + ant.heading.x * distance, TERRAIN_CONFIG.width),
+    0,
+    clampToTerrainBounds(ant.position.z + ant.heading.z * distance, TERRAIN_CONFIG.depth),
+  );
+  ant.desiredVelocity.copy(ant.heading).multiplyScalar(ANT_CONFIG.speed * randomRange(0.55, 1.1));
+};
+
+const applySeparation = (ant, ants) => {
+  const push = new THREE.Vector3();
+  for (const other of ants) {
+    if (other === ant) continue;
+    const dx = ant.position.x - other.position.x;
+    const dz = ant.position.z - other.position.z;
+    const distanceSq = dx * dx + dz * dz;
+    const minDistance = ant.radius + other.radius + 0.2;
+    if (distanceSq === 0 || distanceSq > minDistance * minDistance) continue;
+    const distance = Math.sqrt(distanceSq);
+    const strength = (minDistance - distance) / minDistance;
+    push.x += (dx / distance) * strength;
+    push.z += (dz / distance) * strength;
+  }
+  if (push.lengthSq() > 0) {
+    push.normalize().multiplyScalar(ANT_CONFIG.speed * 0.7);
+    ant.desiredVelocity.add(push);
+  }
+};
+
+const updateBrain = (ant, camera) => {
+  const distanceToCamera = ant.position.distanceTo(camera.position);
+  ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
+  chooseNextAction(ant);
+};
+
+const updateActionVelocity = (ant) => {
+  if (ant.action === 'idle') {
+    ant.desiredVelocity.lerp(new THREE.Vector3(0, 0, 0), 0.3);
+    return;
+  }
+
+  const toTarget = new THREE.Vector3(ant.target.x - ant.position.x, 0, ant.target.z - ant.position.z);
+  if (toTarget.lengthSq() < 0.8 * 0.8) {
+    chooseNextAction(ant);
+    return;
+  }
+
+  toTarget.normalize();
+  ant.heading.lerp(toTarget, 0.18).normalize();
+  ant.desiredVelocity.lerp(toTarget.multiplyScalar(ANT_CONFIG.speed), 0.18);
+};
+
+const updateVisibility = (ant, mesh, camera, frustum) => {
+  const distance = ant.position.distanceTo(camera.position);
+  const inFrustum = frustum.containsPoint(ant.position);
+  ant.visible = inFrustum || distance < ANT_CONFIG.cullDistance;
+  mesh.visible = ant.visible;
+};
+
+export class AntSystem {
+  constructor({ scene, camera, count = ANT_CONFIG.count } = {}) {
+    this.scene = scene;
+    this.camera = camera;
+    this.ants = createRandomAntStates(count);
+    this.meshes = [];
+    this.frustum = new THREE.Frustum();
+    this.projectionMatrix = new THREE.Matrix4();
+    this.tmpVec = new THREE.Vector3();
+
+    for (const ant of this.ants) {
+      const mesh = createAntVisual();
+      mesh.position.copy(ant.position);
+      mesh.rotation.y = Math.atan2(ant.heading.x, ant.heading.z);
+      scene.add(mesh);
+      this.meshes.push(mesh);
+    }
+  }
+
+  update(dt) {
+    this.camera.updateMatrixWorld();
+    this.projectionMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.projectionMatrix);
+
+    for (let i = 0; i < this.ants.length; i += 1) {
+      const ant = this.ants[i];
+      const mesh = this.meshes[i];
+
+      ant.brainCooldown -= dt;
+      if (ant.brainCooldown <= 0) {
+        updateBrain(ant, this.camera);
+        ant.brainCooldown = ant.brainInterval;
+      }
+
+      updateActionVelocity(ant);
+      applySeparation(ant, this.ants);
+
+      ant.velocity.lerp(ant.desiredVelocity, 0.14);
+      ant.position.x = clampToTerrainBounds(ant.position.x + ant.velocity.x * dt, TERRAIN_CONFIG.width);
+      ant.position.z = clampToTerrainBounds(ant.position.z + ant.velocity.z * dt, TERRAIN_CONFIG.depth);
+      ant.position.y = sampleHeight(ant.position.x, ant.position.z) + ant.radius;
+
+      if (ant.velocity.lengthSq() > 0.001) {
+        this.tmpVec.copy(ant.velocity).normalize();
+        ant.heading.lerp(this.tmpVec, 0.22).normalize();
+      }
+
+      ant.gaitPhase += dt * (2.5 + ant.velocity.length() * 1.8);
+      mesh.position.copy(ant.position);
+      mesh.position.y += Math.sin(ant.gaitPhase) * 0.04;
+      mesh.rotation.y = Math.atan2(ant.heading.x, ant.heading.z);
+      mesh.rotation.z = Math.sin(ant.gaitPhase) * 0.05;
+
+      updateVisibility(ant, mesh, this.camera, this.frustum);
+    }
+  }
+
+  getSummary() {
+    let visible = 0;
+    let idle = 0;
+    for (const ant of this.ants) {
+      if (ant.visible) visible += 1;
+      if (ant.action === 'idle') idle += 1;
+    }
+
+    return {
+      total: this.ants.length,
+      visible,
+      active: this.ants.length - idle,
+      idle,
+    };
+  }
+}
