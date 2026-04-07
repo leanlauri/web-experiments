@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createTerrainMesh, getTriangleCount } from './terrain.js';
+import { TERRAIN_CONFIG, createTerrainMesh, getTriangleCount } from './terrain.js';
 
 const showFatalError = (error) => {
   const overlay = document.getElementById('fatalOverlay');
@@ -20,7 +20,7 @@ const updateHud = ({ camera, terrain }) => {
   }
 
   if (meshInfo) {
-    meshInfo.textContent = `Triangles: ${getTriangleCount(terrain.geometry)} across a ${terrain.geometry.parameters.widthSegments}×${terrain.geometry.parameters.heightSegments} split plane.`;
+    meshInfo.textContent = `Triangles: ${getTriangleCount(terrain.geometry)} across x/z ∈ [-50, 50] with y ∈ [-${TERRAIN_CONFIG.maxHeight}, ${TERRAIN_CONFIG.maxHeight}] and a ${terrain.geometry.parameters.widthSegments}×${terrain.geometry.parameters.heightSegments} split plane.`;
   }
 };
 
@@ -35,8 +35,8 @@ const bootstrap = () => {
   scene.background = new THREE.Color(0xdbe7f4);
   scene.fog = new THREE.Fog(0xdbe7f4, 30, 80);
 
-  const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 200);
-  camera.position.set(18, 14, 18);
+  const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 260);
+  camera.position.set(36, 26, 36);
   camera.up.set(0, 1, 0);
   camera.lookAt(0, 0, 0);
 
@@ -51,10 +51,10 @@ const bootstrap = () => {
   scene.add(sun.target);
   sun.target.position.set(0, 0, 0);
 
-  const axes = new THREE.AxesHelper(6);
+  const axes = new THREE.AxesHelper(12);
   scene.add(axes);
 
-  const grid = new THREE.GridHelper(40, 20, 0x3a658f, 0x89a7c3);
+  const grid = new THREE.GridHelper(100, 20, 0x3a658f, 0x89a7c3);
   grid.position.y = -0.02;
   scene.add(grid);
 
@@ -72,8 +72,8 @@ const bootstrap = () => {
   const clock = new THREE.Clock();
   const animate = () => {
     const elapsed = clock.getElapsedTime();
-    camera.position.x = Math.cos(elapsed * 0.18) * 18;
-    camera.position.z = Math.sin(elapsed * 0.18) * 18;
+    camera.position.x = Math.cos(elapsed * 0.18) * 36;
+    camera.position.z = Math.sin(elapsed * 0.18) * 36;
     camera.lookAt(0, 0, 0);
     updateHud({ camera, terrain });
     renderer.render(scene, camera);

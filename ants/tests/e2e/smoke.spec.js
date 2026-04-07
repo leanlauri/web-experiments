@@ -32,7 +32,9 @@ test('renders the ants terrain prototype without runtime errors', async ({ page 
   await expect(page.locator('#hudTitle')).toHaveText('Ants Terrain Prototype');
   await expect(page.locator('#axisInfo')).toContainText('Ground lies on the X/Z plane');
   await expect(page.locator('#cameraInfo')).toContainText('looking');
-  await expect(page.locator('#meshInfo')).toContainText('Triangles: 10368');
+  await expect(page.locator('#meshInfo')).toContainText('Triangles: 20000');
+  await expect(page.locator('#meshInfo')).toContainText('x/z ∈ [-50, 50]');
+  await expect(page.locator('#meshInfo')).toContainText('y ∈ [-5, 5]');
   await expect(page.locator('body > canvas').first()).toBeVisible();
   await expect(page.locator('#fatalOverlay')).toBeHidden();
 

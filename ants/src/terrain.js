@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 
 export const TERRAIN_CONFIG = Object.freeze({
-  width: 40,
-  depth: 40,
-  widthSegments: 72,
-  depthSegments: 72,
-  maxHeight: 2.4,
+  width: 100,
+  depth: 100,
+  widthSegments: 100,
+  depthSegments: 100,
+  maxHeight: 5,
+  noiseScale: 0.055,
+  octaves: 4,
 });
 
 export const createToonGradient = () => {
@@ -24,11 +26,55 @@ export const createToonGradient = () => {
   return texture;
 };
 
-const sampleHeight = (x, z, maxHeight) => {
-  const ridge = Math.sin(x * 0.28) * Math.cos(z * 0.24) * 0.8;
-  const terraces = Math.sin((x + z) * 0.14) * 0.45;
-  const dome = Math.max(0, 1 - Math.sqrt(x * x + z * z) / 24);
-  return (ridge + terraces + dome) * maxHeight;
+const smoothStep = (t) => t * t * (3 - 2 * t);
+
+const hash2D = (x, z) => {
+  const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
+  return (s - Math.floor(s)) * 2 - 1;
+};
+
+const valueNoise2D = (x, z) => {
+  const x0 = Math.floor(x);
+  const z0 = Math.floor(z);
+  const x1 = x0 + 1;
+  const z1 = z0 + 1;
+
+  const tx = smoothStep(x - x0);
+  const tz = smoothStep(z - z0);
+
+  const n00 = hash2D(x0, z0);
+  const n10 = hash2D(x1, z0);
+  const n01 = hash2D(x0, z1);
+  const n11 = hash2D(x1, z1);
+
+  const nx0 = THREE.MathUtils.lerp(n00, n10, tx);
+  const nx1 = THREE.MathUtils.lerp(n01, n11, tx);
+  return THREE.MathUtils.lerp(nx0, nx1, tz);
+};
+
+const fractalNoise2D = (x, z, { octaves }) => {
+  let amplitude = 1;
+  let frequency = 1;
+  let sum = 0;
+  let totalAmplitude = 0;
+
+  for (let i = 0; i < octaves; i += 1) {
+    sum += valueNoise2D(x * frequency, z * frequency) * amplitude;
+    totalAmplitude += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+
+  return totalAmplitude > 0 ? sum / totalAmplitude : 0;
+};
+
+export const sampleHeight = (x, z, {
+  maxHeight = TERRAIN_CONFIG.maxHeight,
+  noiseScale = TERRAIN_CONFIG.noiseScale,
+  octaves = TERRAIN_CONFIG.octaves,
+} = {}) => {
+  const base = fractalNoise2D(x * noiseScale, z * noiseScale, { octaves });
+  return THREE.MathUtils.clamp(base * maxHeight, -maxHeight, maxHeight);
 };
 
 export const createTerrainGeometry = ({
@@ -37,6 +83,8 @@ export const createTerrainGeometry = ({
   widthSegments = TERRAIN_CONFIG.widthSegments,
   depthSegments = TERRAIN_CONFIG.depthSegments,
   maxHeight = TERRAIN_CONFIG.maxHeight,
+  noiseScale = TERRAIN_CONFIG.noiseScale,
+  octaves = TERRAIN_CONFIG.octaves,
 } = {}) => {
   const geometry = new THREE.PlaneGeometry(width, depth, widthSegments, depthSegments);
   geometry.rotateX(-Math.PI / 2);
@@ -45,7 +93,7 @@ export const createTerrainGeometry = ({
   for (let i = 0; i < position.count; i += 1) {
     const x = position.getX(i);
     const z = position.getZ(i);
-    position.setY(i, sampleHeight(x, z, maxHeight));
+    position.setY(i, sampleHeight(x, z, { maxHeight, noiseScale, octaves }));
   }
 
   position.needsUpdate = true;

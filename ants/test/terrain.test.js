@@ -1,18 +1,26 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { createTerrainGeometry, createTerrainMaterial, getTriangleCount } from '../src/terrain.js';
+import { TERRAIN_CONFIG, createTerrainGeometry, createTerrainMaterial, getTriangleCount } from '../src/terrain.js';
 
 describe('terrain bootstrap helpers', () => {
   test('creates a densely triangulated X/Z ground plane', () => {
-    const geometry = createTerrainGeometry({ width: 20, depth: 10, widthSegments: 8, depthSegments: 4, maxHeight: 1.5 });
+    const geometry = createTerrainGeometry({
+      width: TERRAIN_CONFIG.width,
+      depth: TERRAIN_CONFIG.depth,
+      widthSegments: TERRAIN_CONFIG.widthSegments,
+      depthSegments: TERRAIN_CONFIG.depthSegments,
+      maxHeight: TERRAIN_CONFIG.maxHeight,
+    });
     geometry.computeBoundingBox();
 
-    expect(getTriangleCount(geometry)).toBe(8 * 4 * 2);
-    expect(geometry.boundingBox.min.x).toBeCloseTo(-10, 5);
-    expect(geometry.boundingBox.max.x).toBeCloseTo(10, 5);
-    expect(geometry.boundingBox.min.z).toBeCloseTo(-5, 5);
-    expect(geometry.boundingBox.max.z).toBeCloseTo(5, 5);
-    expect(geometry.boundingBox.max.y - geometry.boundingBox.min.y).toBeGreaterThan(0.5);
+    expect(getTriangleCount(geometry)).toBe(TERRAIN_CONFIG.widthSegments * TERRAIN_CONFIG.depthSegments * 2);
+    expect(geometry.boundingBox.min.x).toBeCloseTo(-50, 5);
+    expect(geometry.boundingBox.max.x).toBeCloseTo(50, 5);
+    expect(geometry.boundingBox.min.z).toBeCloseTo(-50, 5);
+    expect(geometry.boundingBox.max.z).toBeCloseTo(50, 5);
+    expect(geometry.boundingBox.min.y).toBeGreaterThanOrEqual(-TERRAIN_CONFIG.maxHeight - 0.001);
+    expect(geometry.boundingBox.max.y).toBeLessThanOrEqual(TERRAIN_CONFIG.maxHeight + 0.001);
+    expect(geometry.boundingBox.max.y - geometry.boundingBox.min.y).toBeGreaterThan(4);
   });
 
   test('uses nearest-filtered gradient steps for toon shading', () => {
