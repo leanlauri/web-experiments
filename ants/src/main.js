@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AntSystem } from './ant-system.js';
+import { FOOD_CONFIG, FoodSystem } from './food-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
 const showFatalError = (error) => {
@@ -15,6 +16,7 @@ const updateHud = ({ camera, terrain, antSystem }) => {
   const cameraInfo = document.getElementById('cameraInfo');
   const meshInfo = document.getElementById('meshInfo');
   const antInfo = document.getElementById('antInfo');
+  const foodInfo = document.getElementById('foodInfo');
   const hudHint = document.getElementById('hudHint');
   const hud = document.getElementById('hud');
   const direction = new THREE.Vector3();
@@ -35,6 +37,10 @@ const updateHud = ({ camera, terrain, antSystem }) => {
   if (antInfo && antSystem) {
     const summary = antSystem.getSummary();
     antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, LOD ${summary.near}/${summary.mid}/${summary.far}, render ${summary.fullMesh}/${summary.impostor}.`;
+  }
+
+  if (foodInfo && antSystem) {
+    foodInfo.textContent = `Food: ${antSystem.foods.length} items, sensed within ~${FOOD_CONFIG.senseDistance}m.`;
   }
 };
 
@@ -85,8 +91,9 @@ const bootstrap = () => {
   scene.add(terrain);
   const terrainOverlay = createTerrainOverlay(terrain.geometry);
   scene.add(terrainOverlay);
+  const foodSystem = new FoodSystem({ scene });
 
-  const antSystem = new AntSystem({ scene, camera, count: 200 });
+  const antSystem = new AntSystem({ scene, camera, foods: foodSystem.items, count: 200 });
 
   updateHud({ camera, terrain, antSystem });
 

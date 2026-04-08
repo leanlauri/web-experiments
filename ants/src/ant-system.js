@@ -1,9 +1,13 @@
 import * as THREE from 'three';
+import { FOOD_CONFIG, findNearestFood } from './food-system.js';
 import { TERRAIN_CONFIG, sampleHeight } from './terrain.js';
 
 export const ANT_CONFIG = Object.freeze({
   count: 200,
-  bodyRadius: 0.45,
+  bodyRadius: 0.24,
+  renderOffsetY: -0.19,
+  impostorRadius: 0.16,
+  foodInterestBoost: 1.12,
   speed: 2.4,
   wanderJitter: 0.9,
   idleChance: 0.18,
@@ -133,6 +137,7 @@ export const createAntState = (id, x, z) => ({
   heading: new THREE.Vector3(1, 0, 0),
   action: 'wander',
   target: new THREE.Vector3(x, 0, z),
+  targetFoodId: null,
   brainCooldown: Math.random() * 0.6,
   brainInterval: ANT_CONFIG.closeBrainInterval,
   logicCooldown: Math.random() * ANT_CONFIG.closeLogicInterval,
@@ -153,6 +158,7 @@ export const createRandomAntStates = (count = ANT_CONFIG.count) => {
 };
 
 const chooseNextAction = (ant) => {
+  ant.targetFoodId = null;
   if (Math.random() < ANT_CONFIG.idleChance) {
     ant.action = 'idle';
     ant.desiredVelocity.setScalar(0);
@@ -171,10 +177,28 @@ const chooseNextAction = (ant) => {
   ant.desiredVelocity.copy(ant.heading).multiplyScalar(ANT_CONFIG.speed * randomRange(0.55, 1.1));
 };
 
-const updateBrain = (ant, distanceToCamera) => {
+const chooseFoodAction = (ant, food) => {
+  ant.action = 'seek-food';
+  ant.targetFoodId = food.id;
+  ant.target.copy(food.position);
+  ant.target.y = 0;
+  const direction = new THREE.Vector3(food.position.x - ant.position.x, 0, food.position.z - ant.position.z);
+  if (direction.lengthSq() > 0.0001) {
+    direction.normalize();
+    ant.heading.copy(direction);
+    ant.desiredVelocity.copy(direction).multiplyScalar(ANT_CONFIG.speed * ANT_CONFIG.foodInterestBoost);
+  }
+};
+
+const updateBrain = (ant, distanceToCamera, foods) => {
   ant.lodBand = getLodBandForDistance(distanceToCamera);
   ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
   ant.logicInterval = getLogicIntervalForDistance(distanceToCamera);
+  const sensedFood = findNearestFood(foods, ant.position, FOOD_CONFIG.senseDistance);
+  if (sensedFood) {
+    chooseFoodAction(ant, sensedFood);
+    return;
+  }
   chooseNextAction(ant);
 };
 
@@ -186,6 +210,12 @@ const updateActionVelocity = (ant) => {
 
   const toTarget = new THREE.Vector3(ant.target.x - ant.position.x, 0, ant.target.z - ant.position.z);
   if (toTarget.lengthSq() < 0.8 * 0.8) {
+    if (ant.action === 'seek-food') {
+      ant.action = 'idle';
+      ant.targetFoodId = null;
+      ant.desiredVelocity.setScalar(0);
+      return;
+    }
     chooseNextAction(ant);
     return;
   }
@@ -225,9 +255,10 @@ const updateVisibility = (ant, mesh, distance, frustum) => {
 };
 
 export class AntSystem {
-  constructor({ scene, camera, count = ANT_CONFIG.count } = {}) {
+  constructor({ scene, camera, foods = [], count = ANT_CONFIG.count } = {}) {
     this.scene = scene;
     this.camera = camera;
+    this.foods = foods;
     this.ants = createRandomAntStates(count);
     this.meshes = [];
     this.frustum = new THREE.Frustum();
@@ -240,7 +271,7 @@ export class AntSystem {
     this.spatialHash = new Map();
     this.farInstanceCount = 0;
 
-    const farGeometry = new THREE.SphereGeometry(0.22, 8, 6);
+    const farGeometry = new THREE.SphereGeometry(ANT_CONFIG.impostorRadius, 8, 6);
     const farMaterial = new THREE.MeshToonMaterial({ color: 0x5c3017 });
     this.farInstances = new THREE.InstancedMesh(farGeometry, farMaterial, this.ants.length);
     this.farInstances.castShadow = true;
@@ -275,7 +306,7 @@ export class AntSystem {
 
       ant.brainCooldown -= dt;
       if (ant.brainCooldown <= 0) {
-        updateBrain(ant, distanceToCamera);
+        updateBrain(ant, distanceToCamera, this.foods);
         ant.brainCooldown = ant.brainInterval;
       }
 
@@ -309,7 +340,7 @@ export class AntSystem {
       if (useFullMesh) {
         mesh.visible = true;
         mesh.position.copy(ant.position);
-        mesh.position.y += bobY;
+        mesh.position.y += ANT_CONFIG.renderOffsetY + bobY;
         mesh.rotation.y = rotationY;
         mesh.rotation.z = rollZ;
       } else {
@@ -321,7 +352,7 @@ export class AntSystem {
         this.tmpEuler.set(0, rotationY, rollZ);
         this.tmpQuaternion.setFromEuler(this.tmpEuler);
         this.tmpMatrix.compose(
-          new THREE.Vector3(ant.position.x, ant.position.y + bobY, ant.position.z),
+          new THREE.Vector3(ant.position.x, ant.position.y + (ANT_CONFIG.impostorRadius - ANT_CONFIG.bodyRadius) + bobY, ant.position.z),
           this.tmpQuaternion,
           this.tmpScale,
         );
