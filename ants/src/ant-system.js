@@ -217,7 +217,7 @@ const updateBrain = (ant, distanceToCamera, foods) => {
 
   if (ant.targetFoodId != null) {
     const claimedFood = getFoodById(foods, ant.targetFoodId);
-    if (claimedFood && !claimedFood.delivered && !claimedFood.carried && claimedFood.claimedBy === ant.id) {
+    if (claimedFood && !claimedFood.delivered && !claimedFood.carried) {
       chooseFoodAction(ant, claimedFood);
       return;
     }
@@ -335,10 +335,6 @@ export class AntSystem {
       ant.brainCooldown -= dt;
       if (ant.brainCooldown <= 0) {
         updateBrain(ant, distanceToCamera, this.foods);
-        if (ant.action === 'seek-food' && ant.targetFoodId != null) {
-          const claimed = this.foodSystem?.claimFood(ant.targetFoodId, ant.id);
-          if (!claimed) chooseNextAction(ant);
-        }
         ant.brainCooldown = ant.brainInterval;
       }
 
@@ -346,8 +342,7 @@ export class AntSystem {
       if (ant.logicCooldown <= 0) {
         if (ant.action === 'seek-food' && ant.targetFoodId != null) {
           const claimedFood = getFoodById(this.foods, ant.targetFoodId);
-          const claimedByOther = claimedFood && claimedFood.claimedBy != null && claimedFood.claimedBy !== ant.id;
-          if (!claimedFood || claimedFood.delivered || claimedFood.carried || claimedByOther) {
+          if (!claimedFood || claimedFood.delivered || claimedFood.carried) {
             chooseNextAction(ant);
           }
         }
@@ -359,6 +354,7 @@ export class AntSystem {
           if (!food || food.delivered) {
             chooseNextAction(ant);
           } else if (ant.position.distanceTo(food.position) <= FOOD_CONFIG.pickupDistance) {
+            this.foodSystem?.claimFood(food.id, ant.id);
             const pickedUp = this.foodSystem?.pickUpFood(food.id, ant.id);
             if (pickedUp) {
               ant.carryingFoodId = food.id;

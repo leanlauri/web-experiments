@@ -39,7 +39,7 @@ export const findNearestFood = (foods, position, maxDistance = FOOD_CONFIG.sense
   let nearestDistanceSq = maxDistance * maxDistance;
 
   for (const food of foods) {
-    if (food.delivered || food.carried || food.claimedBy != null) continue;
+    if (food.delivered || food.carried) continue;
     const distanceSq = position.distanceToSquared(food.position);
     if (distanceSq <= nearestDistanceSq) {
       nearest = food;
@@ -111,8 +111,6 @@ export class FoodSystem {
   claimFood(foodId, antId) {
     const food = this.items.find((item) => item.id === foodId);
     if (!food || food.delivered || food.carried) return false;
-    if (food.claimedBy === antId) return true;
-    if (food.claimedBy != null) return false;
     food.claimedBy = antId;
     return true;
   }
