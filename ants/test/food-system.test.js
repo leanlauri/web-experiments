@@ -6,7 +6,6 @@ import { TERRAIN_CONFIG } from '../src/terrain.js';
 describe('food system helpers', () => {
   test('creates food items within terrain bounds', () => {
     const foods = createFoodItems(FOOD_CONFIG.count);
-
     expect(foods).toHaveLength(FOOD_CONFIG.count);
     for (const food of foods) {
       expect(food.position.x).toBeGreaterThanOrEqual(-TERRAIN_CONFIG.width / 2);
@@ -21,23 +20,18 @@ describe('food system helpers', () => {
       { id: 1, position: new THREE.Vector3(2, 0, 2), claimedBy: null, delivered: false, carried: false },
       { id: 2, position: new THREE.Vector3(8, 0, 8), claimedBy: null, delivered: false, carried: false },
     ];
-
     expect(findNearestFood(foods, new THREE.Vector3(0, 0, 0), 5)?.id).toBe(1);
     expect(findNearestFood(foods, new THREE.Vector3(0, 0, 0), 1)).toBeNull();
   });
 
-  test('can look up a specific claimed food by id', () => {
-    const foods = [
-      { id: 3, position: new THREE.Vector3(1, 0, 1), claimedBy: 7, delivered: false, carried: false },
-    ];
-
+  test('can look up a specific food by id', () => {
+    const foods = [{ id: 3, position: new THREE.Vector3(1, 0, 1), claimedBy: 7, delivered: false, carried: false }];
     expect(getFoodById(foods, 3)?.claimedBy).toBe(7);
     expect(getFoodById(foods, 999)).toBeNull();
   });
 
   test('provides a nest location anchored to terrain height', () => {
     const nest = getNestPosition();
-
     expect(nest.x).toBe(NEST_CONFIG.position.x);
     expect(nest.z).toBe(NEST_CONFIG.position.z);
     expect(nest.y).toBeTypeOf('number');

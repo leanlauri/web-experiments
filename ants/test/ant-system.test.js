@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { ANT_CONFIG, ANT_LOD, buildSpatialHash, createRandomAntStates, getBrainIntervalForDistance, getLodBandForDistance, querySpatialHash } from '../src/ant-system.js';
+import { ANT_CONFIG, ANT_LOD, ANT_ROLE, buildSpatialHash, createRandomAntStates, getBrainIntervalForDistance, getLodBandForDistance, querySpatialHash } from '../src/ant-system.js';
 import { TERRAIN_CONFIG } from '../src/terrain.js';
 
 describe('ant system helpers', () => {
@@ -16,6 +16,7 @@ describe('ant system helpers', () => {
       expect(ant.position.y).toBeGreaterThanOrEqual(ant.radius - TERRAIN_CONFIG.maxHeight - 0.001);
       expect(ant.position.y).toBeLessThanOrEqual(ant.radius + TERRAIN_CONFIG.maxHeight + 0.001);
       expect(ANT_CONFIG.renderOffsetY).toBeLessThan(0);
+      expect([ANT_ROLE.scout, ANT_ROLE.forager, ANT_ROLE.worker]).toContain(ant.role);
       expect(ant.carryingFoodId).toBeNull();
       expect(ant.action).toBe('wander');
     }

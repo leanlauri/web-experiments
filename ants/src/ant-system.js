@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FOOD_CONFIG, NEST_CONFIG, findNearestFood, getFoodById } from './food-system.js';
+import { PHEROMONE_CONFIG } from './pheromone-system.js';
 import { TERRAIN_CONFIG, sampleHeight } from './terrain.js';
 
 export const ANT_CONFIG = Object.freeze({
@@ -7,11 +8,10 @@ export const ANT_CONFIG = Object.freeze({
   bodyRadius: 0.24,
   renderOffsetY: -0.19,
   impostorRadius: 0.16,
-  foodInterestBoost: 1.12,
-  carryingSpeedFactor: 0.72,
   speed: 2.4,
+  carryingSpeedFactor: 0.72,
   wanderJitter: 0.9,
-  idleChance: 0.18,
+  idleChance: 0.12,
   closeBrainInterval: 0.2,
   midBrainInterval: 0.55,
   farBrainInterval: 1.3,
@@ -23,13 +23,13 @@ export const ANT_CONFIG = Object.freeze({
   cullDistance: 95,
   cellSize: 3,
   fullMeshDistance: 42,
+  foodInterestBoost: 1.12,
+  foodPheromoneInfluence: 1.35,
+  homePheromoneInfluence: 0.95,
 });
 
-export const ANT_LOD = Object.freeze({
-  near: 'near',
-  mid: 'mid',
-  far: 'far',
-});
+export const ANT_LOD = Object.freeze({ near: 'near', mid: 'mid', far: 'far' });
+export const ANT_ROLE = Object.freeze({ scout: 'scout', forager: 'forager', worker: 'worker' });
 
 const clampToTerrainBounds = (value, extent, padding = 1) => THREE.MathUtils.clamp(value, -extent / 2 + padding, extent / 2 - padding);
 const randomRange = (min, max) => min + Math.random() * (max - min);
@@ -79,9 +79,15 @@ export const querySpatialHash = (grid, x, z, cellSize = ANT_CONFIG.cellSize) => 
   return neighbors;
 };
 
+const chooseRole = () => {
+  const roll = Math.random();
+  if (roll < 0.28) return ANT_ROLE.scout;
+  if (roll < 0.8) return ANT_ROLE.forager;
+  return ANT_ROLE.worker;
+};
+
 export const createAntVisual = () => {
   const group = new THREE.Group();
-
   const material = new THREE.MeshToonMaterial({ color: 0x4c2612 });
   const accentMaterial = new THREE.MeshToonMaterial({ color: 0x2f1308 });
 
@@ -111,14 +117,6 @@ export const createAntVisual = () => {
     }
   }
 
-  for (const side of [-1, 1]) {
-    const antenna = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.24, 2, 4), accentMaterial);
-    antenna.position.set(side * 0.07, 0.43, 0.5);
-    antenna.rotation.z = side * Math.PI * 0.2;
-    antenna.rotation.x = Math.PI * 0.2;
-    group.add(antenna);
-  }
-
   group.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -131,6 +129,7 @@ export const createAntVisual = () => {
 
 export const createAntState = (id, x, z) => ({
   id,
+  role: chooseRole(),
   radius: ANT_CONFIG.bodyRadius,
   position: new THREE.Vector3(x, sampleHeight(x, z) + ANT_CONFIG.bodyRadius, z),
   velocity: new THREE.Vector3(),
@@ -140,6 +139,7 @@ export const createAntState = (id, x, z) => ({
   target: new THREE.Vector3(x, 0, z),
   targetFoodId: null,
   carryingFoodId: null,
+  queuedNestSlot: null,
   brainCooldown: Math.random() * 0.6,
   brainInterval: ANT_CONFIG.closeBrainInterval,
   logicCooldown: Math.random() * ANT_CONFIG.closeLogicInterval,
@@ -162,16 +162,18 @@ export const createRandomAntStates = (count = ANT_CONFIG.count) => {
 const chooseNextAction = (ant) => {
   ant.targetFoodId = null;
   ant.carryingFoodId = null;
-  if (Math.random() < ANT_CONFIG.idleChance) {
+  ant.queuedNestSlot = null;
+  if (Math.random() < ANT_CONFIG.idleChance && ant.role !== ANT_ROLE.scout) {
     ant.action = 'idle';
     ant.desiredVelocity.setScalar(0);
     return;
   }
 
   ant.action = 'wander';
-  const angle = Math.atan2(ant.heading.z, ant.heading.x) + randomRange(-ANT_CONFIG.wanderJitter, ANT_CONFIG.wanderJitter);
+  const jitter = ant.role === ANT_ROLE.scout ? ANT_CONFIG.wanderJitter * 1.7 : ANT_CONFIG.wanderJitter;
+  const angle = Math.atan2(ant.heading.z, ant.heading.x) + randomRange(-jitter, jitter);
   ant.heading.set(Math.cos(angle), 0, Math.sin(angle)).normalize();
-  const distance = randomRange(2.5, 8.5);
+  const distance = ant.role === ANT_ROLE.worker ? randomRange(2.5, 6) : randomRange(4, 10);
   ant.target.set(
     clampToTerrainBounds(ant.position.x + ant.heading.x * distance, TERRAIN_CONFIG.width),
     0,
@@ -184,8 +186,7 @@ const chooseFoodAction = (ant, food) => {
   ant.action = 'seek-food';
   ant.targetFoodId = food.id;
   ant.carryingFoodId = null;
-  ant.target.copy(food.position);
-  ant.target.y = 0;
+  ant.target.set(food.position.x, 0, food.position.z);
   const direction = new THREE.Vector3(food.position.x - ant.position.x, 0, food.position.z - ant.position.z);
   if (direction.lengthSq() > 0.0001) {
     direction.normalize();
@@ -194,11 +195,10 @@ const chooseFoodAction = (ant, food) => {
   }
 };
 
-const chooseCarryToNestAction = (ant, nestPosition) => {
+const chooseCarryToNestAction = (ant, dropTarget) => {
   ant.action = 'carry-food';
-  ant.target.copy(nestPosition);
-  ant.target.y = 0;
-  const direction = new THREE.Vector3(nestPosition.x - ant.position.x, 0, nestPosition.z - ant.position.z);
+  ant.target.set(dropTarget.x, 0, dropTarget.z);
+  const direction = new THREE.Vector3(dropTarget.x - ant.position.x, 0, dropTarget.z - ant.position.z);
   if (direction.lengthSq() > 0.0001) {
     direction.normalize();
     ant.heading.copy(direction);
@@ -206,19 +206,17 @@ const chooseCarryToNestAction = (ant, nestPosition) => {
   }
 };
 
-const updateBrain = (ant, distanceToCamera, foods) => {
+const updateBrain = (ant, distanceToCamera, foods, pheromoneSystem) => {
   ant.lodBand = getLodBandForDistance(distanceToCamera);
   ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
   ant.logicInterval = getLogicIntervalForDistance(distanceToCamera);
 
-  if (ant.carryingFoodId != null) {
-    return;
-  }
+  if (ant.carryingFoodId != null) return;
 
   if (ant.targetFoodId != null) {
-    const claimedFood = getFoodById(foods, ant.targetFoodId);
-    if (claimedFood && !claimedFood.delivered && !claimedFood.carried) {
-      chooseFoodAction(ant, claimedFood);
+    const trackedFood = getFoodById(foods, ant.targetFoodId);
+    if (trackedFood && !trackedFood.delivered && !trackedFood.carried) {
+      chooseFoodAction(ant, trackedFood);
       return;
     }
   }
@@ -228,6 +226,23 @@ const updateBrain = (ant, distanceToCamera, foods) => {
     chooseFoodAction(ant, sensedFood);
     return;
   }
+
+  if (ant.role !== ANT_ROLE.worker) {
+    const pheromoneVector = pheromoneSystem.sample('food', ant.position);
+    if (pheromoneVector.lengthSq() > 0.0001) {
+      pheromoneVector.normalize();
+      ant.action = 'follow-pheromone';
+      ant.heading.lerp(pheromoneVector, 0.5).normalize();
+      ant.target.set(
+        clampToTerrainBounds(ant.position.x + ant.heading.x * 6, TERRAIN_CONFIG.width),
+        0,
+        clampToTerrainBounds(ant.position.z + ant.heading.z * 6, TERRAIN_CONFIG.depth),
+      );
+      ant.desiredVelocity.copy(ant.heading).multiplyScalar(ANT_CONFIG.speed * ANT_CONFIG.foodPheromoneInfluence);
+      return;
+    }
+  }
+
   chooseNextAction(ant);
 };
 
@@ -246,16 +261,13 @@ const updateActionVelocity = (ant) => {
 
   toTarget.normalize();
   ant.heading.lerp(toTarget, 0.18).normalize();
-  const speed = ant.action === 'carry-food'
-    ? ANT_CONFIG.speed * ANT_CONFIG.carryingSpeedFactor
-    : ANT_CONFIG.speed;
+  const speed = ant.action === 'carry-food' ? ANT_CONFIG.speed * ANT_CONFIG.carryingSpeedFactor : ANT_CONFIG.speed;
   ant.desiredVelocity.lerp(toTarget.multiplyScalar(speed), 0.18);
 };
 
 const applySeparation = (ant, grid) => {
   const neighbors = querySpatialHash(grid, ant.position.x, ant.position.z);
   const push = new THREE.Vector3();
-
   for (const other of neighbors) {
     if (other === ant) continue;
     const dx = ant.position.x - other.position.x;
@@ -268,7 +280,6 @@ const applySeparation = (ant, grid) => {
     push.x += (dx / distance) * strength;
     push.z += (dz / distance) * strength;
   }
-
   if (push.lengthSq() > 0) {
     push.normalize().multiplyScalar(ANT_CONFIG.speed * 0.7);
     ant.desiredVelocity.add(push);
@@ -282,10 +293,11 @@ const updateVisibility = (ant, mesh, distance, frustum) => {
 };
 
 export class AntSystem {
-  constructor({ scene, camera, foodSystem = null, foods = [], count = ANT_CONFIG.count } = {}) {
+  constructor({ scene, camera, foodSystem, pheromoneSystem, foods = [], count = ANT_CONFIG.count } = {}) {
     this.scene = scene;
     this.camera = camera;
     this.foodSystem = foodSystem;
+    this.pheromoneSystem = pheromoneSystem;
     this.foods = foods;
     this.ants = createRandomAntStates(count);
     this.meshes = [];
@@ -334,15 +346,15 @@ export class AntSystem {
 
       ant.brainCooldown -= dt;
       if (ant.brainCooldown <= 0) {
-        updateBrain(ant, distanceToCamera, this.foods);
+        updateBrain(ant, distanceToCamera, this.foods, this.pheromoneSystem);
         ant.brainCooldown = ant.brainInterval;
       }
 
       ant.logicCooldown -= dt;
       if (ant.logicCooldown <= 0) {
         if (ant.action === 'seek-food' && ant.targetFoodId != null) {
-          const claimedFood = getFoodById(this.foods, ant.targetFoodId);
-          if (!claimedFood || claimedFood.delivered || claimedFood.carried) {
+          const food = getFoodById(this.foods, ant.targetFoodId);
+          if (!food || food.delivered || food.carried) {
             chooseNextAction(ant);
           }
         }
@@ -351,33 +363,35 @@ export class AntSystem {
 
         if (ant.action === 'seek-food' && ant.targetFoodId != null) {
           const food = getFoodById(this.foods, ant.targetFoodId);
-          if (!food || food.delivered) {
-            chooseNextAction(ant);
-          } else if (ant.position.distanceTo(food.position) <= FOOD_CONFIG.pickupDistance) {
-            this.foodSystem?.claimFood(food.id, ant.id);
-            const pickedUp = this.foodSystem?.pickUpFood(food.id, ant.id);
+          if (food && ant.position.distanceTo(food.position) <= FOOD_CONFIG.pickupDistance) {
+            this.foodSystem.claimFood(food.id, ant.id);
+            const pickedUp = this.foodSystem.pickUpFood(food.id, ant.id);
             if (pickedUp) {
               ant.carryingFoodId = food.id;
-              chooseCarryToNestAction(ant, this.foodSystem.nestPosition);
+              const slot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
+              ant.queuedNestSlot = slot;
+              chooseCarryToNestAction(ant, slot.position);
             }
           }
         }
 
         if (ant.action === 'carry-food' && ant.carryingFoodId != null) {
-          if (ant.position.distanceTo(this.foodSystem.nestPosition) <= NEST_CONFIG.dropoffDistance) {
-            const dropped = this.foodSystem?.dropFoodInNest(ant.carryingFoodId, ant.id);
+          const slot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
+          ant.queuedNestSlot = slot;
+          ant.target.set(slot.position.x, 0, slot.position.z);
+          if (ant.position.distanceTo(slot.position) <= NEST_CONFIG.dropoffDistance) {
+            const dropped = this.foodSystem.dropFoodInNest(ant.carryingFoodId, ant.id);
             if (dropped) {
               ant.carryingFoodId = null;
               ant.targetFoodId = null;
+              ant.queuedNestSlot = null;
               ant.action = 'idle';
               ant.desiredVelocity.setScalar(0);
             }
           }
         }
 
-        if (ant.lodBand !== ANT_LOD.far) {
-          applySeparation(ant, this.spatialHash);
-        }
+        if (ant.lodBand !== ANT_LOD.far) applySeparation(ant, this.spatialHash);
         ant.logicCooldown = ant.logicInterval;
       }
 
@@ -391,13 +405,15 @@ export class AntSystem {
         ant.heading.lerp(this.tmpVec, ant.lodBand === ANT_LOD.far ? 0.12 : 0.22).normalize();
       }
 
+      if (ant.carryingFoodId != null) this.pheromoneSystem.deposit('food', ant.position, PHEROMONE_CONFIG.depositFood * dt * 6);
+      else if (ant.role === ANT_ROLE.worker) this.pheromoneSystem.deposit('home', ant.position, PHEROMONE_CONFIG.depositHome * dt * 4);
+
       ant.gaitPhase += dt * (2.5 + ant.velocity.length() * 1.8);
       const bobY = Math.sin(ant.gaitPhase) * 0.04;
       const rotationY = Math.atan2(ant.heading.x, ant.heading.z);
       const rollZ = Math.sin(ant.gaitPhase) * 0.05;
 
       updateVisibility(ant, mesh, distanceToCamera, this.frustum);
-
       const useFullMesh = ant.visible && distanceToCamera <= ANT_CONFIG.fullMeshDistance;
       if (useFullMesh) {
         mesh.visible = true;
@@ -411,11 +427,10 @@ export class AntSystem {
 
       if (ant.carryingFoodId != null) {
         const carrierPosition = useFullMesh ? mesh.position : ant.position;
-        this.foodSystem?.syncCarriedFood(ant.carryingFoodId, carrierPosition);
+        this.foodSystem.syncCarriedFood(ant.carryingFoodId, carrierPosition);
       }
 
-      const useFarInstance = ant.visible && !useFullMesh;
-      if (useFarInstance) {
+      if (ant.visible && !useFullMesh) {
         this.tmpEuler.set(0, rotationY, rollZ);
         this.tmpQuaternion.setFromEuler(this.tmpEuler);
         this.tmpMatrix.compose(
@@ -439,7 +454,9 @@ export class AntSystem {
     let mid = 0;
     let far = 0;
     let fullMesh = 0;
-    let impostor = 0;
+    let scouts = 0;
+    let foragers = 0;
+    let workers = 0;
 
     for (let i = 0; i < this.ants.length; i += 1) {
       const ant = this.ants[i];
@@ -449,9 +466,10 @@ export class AntSystem {
       else if (ant.lodBand === ANT_LOD.mid) mid += 1;
       else far += 1;
       if (this.meshes[i]?.visible) fullMesh += 1;
+      if (ant.role === ANT_ROLE.scout) scouts += 1;
+      else if (ant.role === ANT_ROLE.forager) foragers += 1;
+      else workers += 1;
     }
-
-    impostor = this.farInstanceCount;
 
     return {
       total: this.ants.length,
@@ -463,7 +481,10 @@ export class AntSystem {
       mid,
       far,
       fullMesh,
-      impostor,
+      impostor: this.farInstanceCount,
+      scouts,
+      foragers,
+      workers,
     };
   }
 }

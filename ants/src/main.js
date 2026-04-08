@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AntSystem } from './ant-system.js';
 import { FOOD_CONFIG, FoodSystem } from './food-system.js';
+import { PheromoneSystem } from './pheromone-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
 const showFatalError = (error) => {
@@ -12,35 +13,26 @@ const showFatalError = (error) => {
   if (overlay) overlay.style.display = 'flex';
 };
 
-const updateHud = ({ camera, terrain, antSystem }) => {
+const updateHud = ({ terrain, antSystem }) => {
   const cameraInfo = document.getElementById('cameraInfo');
   const meshInfo = document.getElementById('meshInfo');
   const antInfo = document.getElementById('antInfo');
   const foodInfo = document.getElementById('foodInfo');
   const hudHint = document.getElementById('hudHint');
   const hud = document.getElementById('hud');
-  const direction = new THREE.Vector3();
-  camera.getWorldDirection(direction);
 
-  if (hudHint && hud) {
-    hudHint.textContent = hud.open ? 'tap to collapse' : 'tap to expand';
-  }
-
-  if (cameraInfo) {
-    cameraInfo.textContent = `Camera: drag to orbit, pinch or wheel to zoom.`;
-  }
-
-  if (meshInfo) {
-    meshInfo.textContent = `Terrain: ${getTriangleCount(terrain.geometry)} tris, x/z [-50, 50], y [-${TERRAIN_CONFIG.maxHeight}, ${TERRAIN_CONFIG.maxHeight}].`;
-  }
+  if (hudHint && hud) hudHint.textContent = hud.open ? 'tap to collapse' : 'tap to expand';
+  if (cameraInfo) cameraInfo.textContent = 'Camera: drag to orbit, pinch or wheel to zoom.';
+  if (meshInfo) meshInfo.textContent = `Terrain: ${getTriangleCount(terrain.geometry)} tris, x/z [-50, 50], y [-${TERRAIN_CONFIG.maxHeight}, ${TERRAIN_CONFIG.maxHeight}].`;
 
   if (antInfo && antSystem) {
     const summary = antSystem.getSummary();
-    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, carrying ${summary.carrying}, LOD ${summary.near}/${summary.mid}/${summary.far}, render ${summary.fullMesh}/${summary.impostor}.`;
+    antInfo.textContent = `Ants: ${summary.total} total, carrying ${summary.carrying}, roles S/F/W ${summary.scouts}/${summary.foragers}/${summary.workers}, render ${summary.fullMesh}/${summary.impostor}.`;
   }
 
   if (foodInfo && antSystem) {
-    foodInfo.textContent = `Food: ${antSystem.foods.filter((item) => !item.delivered).length} left, nest stored ${antSystem.foodSystem?.nestStored ?? 0}, sensed within ~${FOOD_CONFIG.senseDistance}m.`;
+    const remaining = antSystem.foods.filter((item) => !item.delivered).length;
+    foodInfo.textContent = `Food: ${remaining} left, nest stored ${antSystem.foodSystem?.nestStored ?? 0}, sense ~${FOOD_CONFIG.senseDistance}m.`;
   }
 };
 
@@ -69,9 +61,7 @@ const bootstrap = () => {
   controls.maxPolarAngle = Math.PI * 0.48;
   controls.enablePan = true;
 
-  const ambient = new THREE.HemisphereLight(0xf2f7ff, 0x7e93a8, 1.4);
-  scene.add(ambient);
-
+  scene.add(new THREE.HemisphereLight(0xf2f7ff, 0x7e93a8, 1.4));
   const sun = new THREE.DirectionalLight(0xffffff, 1.8);
   sun.position.set(12, 20, 10);
   sun.castShadow = true;
@@ -80,22 +70,20 @@ const bootstrap = () => {
   scene.add(sun.target);
   sun.target.position.set(0, 0, 0);
 
-  const axes = new THREE.AxesHelper(12);
-  scene.add(axes);
-
+  scene.add(new THREE.AxesHelper(12));
   const grid = new THREE.GridHelper(100, 20, 0x3a658f, 0x89a7c3);
   grid.position.y = -0.02;
   scene.add(grid);
 
   const terrain = createTerrainMesh();
   scene.add(terrain);
-  const terrainOverlay = createTerrainOverlay(terrain.geometry);
-  scene.add(terrainOverlay);
+  scene.add(createTerrainOverlay(terrain.geometry));
+
   const foodSystem = new FoodSystem({ scene });
+  const pheromoneSystem = new PheromoneSystem();
+  const antSystem = new AntSystem({ scene, camera, foodSystem, pheromoneSystem, foods: foodSystem.items, count: 200 });
 
-  const antSystem = new AntSystem({ scene, camera, foodSystem, foods: foodSystem.items, count: 200 });
-
-  updateHud({ camera, terrain, antSystem });
+  updateHud({ terrain, antSystem });
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -108,19 +96,22 @@ const bootstrap = () => {
   const maxFrameDt = 0.1;
   const maxSubsteps = 4;
   let accumulator = 0;
+
   const animate = () => {
     const dt = Math.min(maxFrameDt, clock.getDelta());
     accumulator += dt;
-
     controls.update();
+
     let substeps = 0;
     while (accumulator >= fixedStep && substeps < maxSubsteps) {
+      pheromoneSystem.update(fixedStep);
+      foodSystem.update(fixedStep);
       antSystem.update(fixedStep);
       accumulator -= fixedStep;
       substeps += 1;
     }
 
-    updateHud({ camera, terrain, antSystem });
+    updateHud({ terrain, antSystem });
     renderer.render(scene, camera);
     window.requestAnimationFrame(animate);
   };
