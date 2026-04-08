@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AntSystem } from './ant-system.js';
-import { TERRAIN_CONFIG, createTerrainMesh, getTriangleCount } from './terrain.js';
+import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
 const showFatalError = (error) => {
   const overlay = document.getElementById('fatalOverlay');
@@ -83,6 +83,8 @@ const bootstrap = () => {
 
   const terrain = createTerrainMesh();
   scene.add(terrain);
+  const terrainOverlay = createTerrainOverlay(terrain.geometry);
+  scene.add(terrainOverlay);
 
   const antSystem = new AntSystem({ scene, camera, count: 200 });
 

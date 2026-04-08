@@ -12,12 +12,14 @@ export const TERRAIN_CONFIG = Object.freeze({
 
 export const createToonGradient = () => {
   const colors = new Uint8Array([
-    36, 63, 96, 255,
-    97, 138, 171, 255,
-    162, 195, 216, 255,
-    231, 243, 250, 255,
+    23, 44, 72, 255,
+    44, 78, 112, 255,
+    78, 119, 153, 255,
+    122, 164, 193, 255,
+    181, 214, 230, 255,
+    239, 247, 252, 255,
   ]);
-  const texture = new THREE.DataTexture(colors, 4, 1, THREE.RGBAFormat);
+  const texture = new THREE.DataTexture(colors, 6, 1, THREE.RGBAFormat);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
@@ -104,9 +106,22 @@ export const createTerrainGeometry = ({
 };
 
 export const createTerrainMaterial = () => new THREE.MeshToonMaterial({
-  color: 0xb7d7ee,
+  color: 0xa7d0e8,
   gradientMap: createToonGradient(),
 });
+
+export const createTerrainOverlay = (geometry) => {
+  const wireframe = new THREE.LineSegments(
+    new THREE.WireframeGeometry(geometry),
+    new THREE.LineBasicMaterial({
+      color: 0x173554,
+      transparent: true,
+      opacity: 0.22,
+    }),
+  );
+  wireframe.position.y += 0.03;
+  return wireframe;
+};
 
 export const createTerrainMesh = (options = {}) => {
   const geometry = createTerrainGeometry(options);

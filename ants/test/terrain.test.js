@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { TERRAIN_CONFIG, createTerrainGeometry, createTerrainMaterial, getTriangleCount } from '../src/terrain.js';
+import { TERRAIN_CONFIG, createTerrainGeometry, createTerrainMaterial, createTerrainOverlay, getTriangleCount } from '../src/terrain.js';
 
 describe('terrain bootstrap helpers', () => {
   test('creates a densely triangulated X/Z ground plane', () => {
@@ -30,5 +30,13 @@ describe('terrain bootstrap helpers', () => {
     expect(material.gradientMap).toBeTruthy();
     expect(material.gradientMap.magFilter).toBe(THREE.NearestFilter);
     expect(material.gradientMap.minFilter).toBe(THREE.NearestFilter);
+  });
+
+  test('adds a lightweight wireframe overlay to clarify terrain shape', () => {
+    const geometry = createTerrainGeometry();
+    const overlay = createTerrainOverlay(geometry);
+
+    expect(overlay.type).toBe('LineSegments');
+    expect(overlay.material.opacity).toBeGreaterThan(0);
   });
 });
