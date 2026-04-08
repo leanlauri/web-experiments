@@ -100,6 +100,8 @@ const createNestVisual = () => {
     const angle = (i / NEST_CONFIG.queueSlots) * Math.PI * 2;
     const marker = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 10), queueMaterial);
     marker.position.set(Math.cos(angle) * NEST_CONFIG.queueRadius, 0.03, Math.sin(angle) * NEST_CONFIG.queueRadius);
+    marker.castShadow = false;
+    marker.receiveShadow = false;
     group.add(marker);
   }
 
