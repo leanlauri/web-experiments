@@ -32,7 +32,8 @@ const updateHud = ({ terrain, antSystem }) => {
 
   if (foodInfo && antSystem) {
     const remaining = antSystem.foods.filter((item) => !item.delivered).length;
-    foodInfo.textContent = `Food: ${remaining} left, nest stored ${antSystem.foodSystem?.nestStored ?? 0}, sense ~${FOOD_CONFIG.senseDistance}m.`;
+    const heaviest = antSystem.foods.reduce((max, food) => Math.max(max, food.requiredCarriers), 1);
+    foodInfo.textContent = `Food: ${remaining} left, nest stored ${(antSystem.foodSystem?.nestStored ?? 0).toFixed(1)}, max carriers ${heaviest}, sense ~${FOOD_CONFIG.senseDistance}m.`;
   }
 };
 

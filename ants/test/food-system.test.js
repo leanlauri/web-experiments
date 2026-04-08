@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { FOOD_CONFIG, NEST_CONFIG, createFoodItems, findNearestFood, getFoodById, getNestPosition } from '../src/food-system.js';
+import { FOOD_CONFIG, NEST_CONFIG, createFoodItems, findNearestCarryAssistFood, findNearestFood, getFoodById, getFoodCarryFactor, getNestPosition } from '../src/food-system.js';
 import { TERRAIN_CONFIG } from '../src/terrain.js';
 
 describe('food system helpers', () => {
@@ -12,6 +12,10 @@ describe('food system helpers', () => {
       expect(food.position.x).toBeLessThanOrEqual(TERRAIN_CONFIG.width / 2);
       expect(food.position.z).toBeGreaterThanOrEqual(-TERRAIN_CONFIG.depth / 2);
       expect(food.position.z).toBeLessThanOrEqual(TERRAIN_CONFIG.depth / 2);
+      expect(food.requiredCarriers).toBeGreaterThanOrEqual(1);
+      expect(food.requiredCarriers).toBeLessThanOrEqual(4);
+      expect(food.sizeScale).toBeGreaterThanOrEqual(FOOD_CONFIG.sizeMinScale);
+      expect(food.sizeScale).toBeLessThanOrEqual(FOOD_CONFIG.sizeMaxScale);
     }
   });
 
@@ -22,6 +26,20 @@ describe('food system helpers', () => {
     ];
     expect(findNearestFood(foods, new THREE.Vector3(0, 0, 0), 5)?.id).toBe(1);
     expect(findNearestFood(foods, new THREE.Vector3(0, 0, 0), 1)).toBeNull();
+  });
+
+  test('finds carried food that still needs helper ants', () => {
+    const foods = [
+      { id: 1, position: new THREE.Vector3(3, 0, 0), carried: true, delivered: false, supportAntIds: [10], requiredCarriers: 3 },
+      { id: 2, position: new THREE.Vector3(5, 0, 0), carried: true, delivered: false, supportAntIds: [10, 11, 12], requiredCarriers: 3 },
+    ];
+    expect(findNearestCarryAssistFood(foods, new THREE.Vector3(0, 0, 0), 6)?.id).toBe(1);
+  });
+
+  test('carry factor improves with more ant support', () => {
+    const smallSupport = getFoodCarryFactor({ supportAntIds: [1], requiredCarriers: 4 });
+    const largeSupport = getFoodCarryFactor({ supportAntIds: [1, 2, 3, 4], requiredCarriers: 4 });
+    expect(smallSupport).toBeLessThan(largeSupport);
   });
 
   test('can look up a specific food by id', () => {

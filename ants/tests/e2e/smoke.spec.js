@@ -40,6 +40,7 @@ test('renders the ants terrain prototype without runtime errors', async ({ page 
   await expect(page.locator('#antInfo')).toContainText('render');
   await expect(page.locator('#foodInfo')).toContainText('Food:');
   await expect(page.locator('#foodInfo')).toContainText('nest stored');
+  await expect(page.locator('#foodInfo')).toContainText('max carriers');
   await expect(page.locator('#foodInfo')).toContainText('sense');
   await expect(page.locator('body > canvas').first()).toBeVisible();
   await expect(page.locator('#fatalOverlay')).toBeHidden();

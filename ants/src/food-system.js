@@ -5,6 +5,8 @@ export const FOOD_CONFIG = Object.freeze({
   count: 28,
   senseDistance: 24,
   size: 0.3,
+  sizeMinScale: 0.85,
+  sizeMaxScale: 2.4,
   pickupDistance: 0.7,
   regrowDelayMin: 8,
   regrowDelayMax: 16,
@@ -21,17 +23,42 @@ export const NEST_CONFIG = Object.freeze({
 
 const randomRange = (min, max) => min + Math.random() * (max - min);
 
-const randomFoodPosition = () => {
+const deriveFoodWeight = (sizeScale) => {
+  const normalized = (sizeScale - FOOD_CONFIG.sizeMinScale) / (FOOD_CONFIG.sizeMaxScale - FOOD_CONFIG.sizeMinScale);
+  const clamped = THREE.MathUtils.clamp(normalized, 0, 1);
+  const requiredCarriers = 1 + Math.round(clamped * 3);
+  return {
+    sizeScale,
+    weight: THREE.MathUtils.lerp(1, 4.2, clamped),
+    requiredCarriers,
+  };
+};
+
+const randomFoodPosition = (sizeScale = 1) => {
   const x = randomRange(-TERRAIN_CONFIG.width / 2 + 2, TERRAIN_CONFIG.width / 2 - 2);
   const z = randomRange(-TERRAIN_CONFIG.depth / 2 + 2, TERRAIN_CONFIG.depth / 2 - 2);
-  const y = sampleHeight(x, z) + FOOD_CONFIG.size * 0.55;
+  const y = sampleHeight(x, z) + FOOD_CONFIG.size * sizeScale * 0.55;
   return new THREE.Vector3(x, y, z);
 };
 
 export const createFoodItems = (count = FOOD_CONFIG.count) => {
   const foods = [];
   for (let i = 0; i < count; i += 1) {
-    foods.push({ id: i, position: randomFoodPosition(), claimedBy: null, delivered: false, carried: false, regrowAt: null });
+    const sizeScale = randomRange(FOOD_CONFIG.sizeMinScale, FOOD_CONFIG.sizeMaxScale);
+    const profile = deriveFoodWeight(sizeScale);
+    foods.push({
+      id: i,
+      position: randomFoodPosition(sizeScale),
+      sizeScale,
+      weight: profile.weight,
+      requiredCarriers: profile.requiredCarriers,
+      claimedBy: null,
+      carriedBy: null,
+      supportAntIds: [],
+      delivered: false,
+      carried: false,
+      regrowAt: null,
+    });
   }
   return foods;
 };
@@ -40,6 +67,12 @@ export const getNestPosition = () => {
   const x = NEST_CONFIG.position.x;
   const z = NEST_CONFIG.position.z;
   return new THREE.Vector3(x, sampleHeight(x, z), z);
+};
+
+export const getFoodCarryFactor = (food) => {
+  const supportCount = Math.max(0, food.supportAntIds?.length ?? 0);
+  const ratio = food.requiredCarriers > 0 ? supportCount / food.requiredCarriers : 1;
+  return THREE.MathUtils.clamp(0.16 + ratio * 0.84, 0.16, 1);
 };
 
 export const findNearestFood = (foods, position, maxDistance = FOOD_CONFIG.senseDistance) => {
@@ -58,20 +91,37 @@ export const findNearestFood = (foods, position, maxDistance = FOOD_CONFIG.sense
   return nearest;
 };
 
+export const findNearestCarryAssistFood = (foods, position, maxDistance = FOOD_CONFIG.senseDistance) => {
+  let nearest = null;
+  let nearestDistanceSq = maxDistance * maxDistance;
+
+  for (const food of foods) {
+    if (!food.carried || food.delivered) continue;
+    if ((food.supportAntIds?.length ?? 0) >= food.requiredCarriers) continue;
+    const distanceSq = position.distanceToSquared(food.position);
+    if (distanceSq <= nearestDistanceSq) {
+      nearest = food;
+      nearestDistanceSq = distanceSq;
+    }
+  }
+
+  return nearest;
+};
+
 export const getFoodById = (foods, foodId) => foods.find((food) => food.id === foodId) ?? null;
 
-const createFoodVisual = () => {
+const createFoodVisual = (food) => {
   const group = new THREE.Group();
   const foodMaterial = new THREE.MeshToonMaterial({ color: 0xc84b31 });
   const leafMaterial = new THREE.MeshToonMaterial({ color: 0x3e7f4a });
 
-  const berry = new THREE.Mesh(new THREE.IcosahedronGeometry(FOOD_CONFIG.size, 0), foodMaterial);
+  const berry = new THREE.Mesh(new THREE.IcosahedronGeometry(FOOD_CONFIG.size * food.sizeScale, 0), foodMaterial);
   berry.castShadow = true;
   berry.receiveShadow = true;
   group.add(berry);
 
-  const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 5), leafMaterial);
-  leaf.position.y = 0.22;
+  const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08 * food.sizeScale, 0.18 * food.sizeScale, 5), leafMaterial);
+  leaf.position.y = 0.22 * food.sizeScale;
   leaf.rotation.z = 0.3;
   leaf.castShadow = true;
   group.add(leaf);
@@ -120,7 +170,7 @@ export class FoodSystem {
     this.queueAssignments = new Map();
 
     for (const food of this.items) {
-      const mesh = createFoodVisual();
+      const mesh = createFoodVisual(food);
       mesh.position.copy(food.position);
       scene.add(mesh);
       this.meshes.push(mesh);
@@ -134,19 +184,31 @@ export class FoodSystem {
     return true;
   }
 
+  joinCarry(foodId, antId) {
+    const food = this.items.find((item) => item.id === foodId);
+    if (!food || !food.carried || food.delivered) return false;
+    if (!food.supportAntIds.includes(antId)) food.supportAntIds.push(antId);
+    return true;
+  }
+
+  leaveCarry(foodId, antId) {
+    const food = this.items.find((item) => item.id === foodId);
+    if (!food) return;
+    food.supportAntIds = food.supportAntIds.filter((id) => id !== antId);
+  }
+
   pickUpFood(foodId, antId) {
     const food = this.items.find((item) => item.id === foodId);
     if (!food || food.delivered || food.carried) return false;
     food.carried = true;
+    food.carriedBy = antId;
     food.claimedBy = antId;
+    food.supportAntIds = [antId];
     return true;
   }
 
   reserveNestSlot(antId, antPosition) {
-    if (this.queueAssignments.has(antId)) {
-      return this.queueAssignments.get(antId);
-    }
-
+    if (this.queueAssignments.has(antId)) return this.queueAssignments.get(antId);
     const candidates = [];
     for (let i = 0; i < NEST_CONFIG.queueSlots; i += 1) {
       const occupied = [...this.queueAssignments.values()].some((slot) => slot.index === i);
@@ -159,7 +221,6 @@ export class FoodSystem {
       );
       candidates.push({ index: i, position, distanceSq: antPosition.distanceToSquared(position) });
     }
-
     candidates.sort((a, b) => a.distanceSq - b.distanceSq);
     const chosen = candidates[0] ?? { index: 0, position: this.nestPosition.clone() };
     this.queueAssignments.set(antId, chosen);
@@ -172,12 +233,14 @@ export class FoodSystem {
 
   dropFoodInNest(foodId, antId) {
     const food = this.items.find((item) => item.id === foodId);
-    if (!food || !food.carried || food.claimedBy !== antId) return false;
+    if (!food || !food.carried || food.carriedBy !== antId) return false;
     food.delivered = true;
     food.carried = false;
+    food.carriedBy = null;
     food.claimedBy = null;
+    food.supportAntIds = [];
     food.regrowAt = randomRange(FOOD_CONFIG.regrowDelayMin, FOOD_CONFIG.regrowDelayMax);
-    this.nestStored += 1;
+    this.nestStored += food.weight;
     this.releaseNestSlot(antId);
     return true;
   }
@@ -190,7 +253,7 @@ export class FoodSystem {
     if (!food || !mesh || !food.carried) return;
     food.position.copy(carrierPosition);
     mesh.position.copy(carrierPosition);
-    mesh.position.y += 0.22;
+    mesh.position.y += 0.22 * food.sizeScale;
   }
 
   update(dt) {
@@ -198,11 +261,18 @@ export class FoodSystem {
       if (!food.delivered || food.regrowAt == null) continue;
       food.regrowAt -= dt;
       if (food.regrowAt > 0) continue;
+      const sizeScale = randomRange(FOOD_CONFIG.sizeMinScale, FOOD_CONFIG.sizeMaxScale);
+      const profile = deriveFoodWeight(sizeScale);
       food.delivered = false;
       food.carried = false;
+      food.carriedBy = null;
       food.claimedBy = null;
+      food.supportAntIds = [];
       food.regrowAt = null;
-      food.position.copy(randomFoodPosition());
+      food.sizeScale = sizeScale;
+      food.weight = profile.weight;
+      food.requiredCarriers = profile.requiredCarriers;
+      food.position.copy(randomFoodPosition(sizeScale));
     }
     this.updateVisuals();
   }
@@ -213,9 +283,7 @@ export class FoodSystem {
       const mesh = this.meshes[i];
       if (!mesh) continue;
       mesh.visible = !food.delivered;
-      if (!food.carried && !food.delivered) {
-        mesh.position.copy(food.position);
-      }
+      if (!food.carried && !food.delivered) mesh.position.copy(food.position);
     }
   }
 }
