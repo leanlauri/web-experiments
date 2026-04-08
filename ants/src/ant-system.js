@@ -375,6 +375,7 @@ export class AntSystem {
     for (const instanced of [this.farRearInstances, this.farFrontInstances]) {
       instanced.castShadow = true;
       instanced.receiveShadow = true;
+      instanced.frustumCulled = false;
       instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       scene.add(instanced);
     }
