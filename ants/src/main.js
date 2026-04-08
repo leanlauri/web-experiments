@@ -36,11 +36,11 @@ const updateHud = ({ camera, terrain, antSystem }) => {
 
   if (antInfo && antSystem) {
     const summary = antSystem.getSummary();
-    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, LOD ${summary.near}/${summary.mid}/${summary.far}, render ${summary.fullMesh}/${summary.impostor}.`;
+    antInfo.textContent = `Ants: ${summary.total} total, ${summary.visible} visible, carrying ${summary.carrying}, LOD ${summary.near}/${summary.mid}/${summary.far}, render ${summary.fullMesh}/${summary.impostor}.`;
   }
 
   if (foodInfo && antSystem) {
-    foodInfo.textContent = `Food: ${antSystem.foods.length} items, sensed within ~${FOOD_CONFIG.senseDistance}m.`;
+    foodInfo.textContent = `Food: ${antSystem.foods.filter((item) => !item.delivered).length} left, nest stored ${antSystem.foodSystem?.nestStored ?? 0}, sensed within ~${FOOD_CONFIG.senseDistance}m.`;
   }
 };
 
@@ -93,7 +93,7 @@ const bootstrap = () => {
   scene.add(terrainOverlay);
   const foodSystem = new FoodSystem({ scene });
 
-  const antSystem = new AntSystem({ scene, camera, foods: foodSystem.items, count: 200 });
+  const antSystem = new AntSystem({ scene, camera, foodSystem, foods: foodSystem.items, count: 200 });
 
   updateHud({ camera, terrain, antSystem });
 
