@@ -3,7 +3,7 @@ import { TERRAIN_CONFIG, sampleHeight } from './terrain.js';
 
 export const FOOD_CONFIG = Object.freeze({
   count: 28,
-  senseDistance: 12,
+  senseDistance: 24,
   size: 0.3,
   pickupDistance: 0.7,
 });
@@ -49,6 +49,8 @@ export const findNearestFood = (foods, position, maxDistance = FOOD_CONFIG.sense
 
   return nearest;
 };
+
+export const getFoodById = (foods, foodId) => foods.find((food) => food.id === foodId) ?? null;
 
 const createFoodVisual = () => {
   const group = new THREE.Group();
@@ -108,7 +110,9 @@ export class FoodSystem {
 
   claimFood(foodId, antId) {
     const food = this.items.find((item) => item.id === foodId);
-    if (!food || food.delivered || food.carried || food.claimedBy != null) return false;
+    if (!food || food.delivered || food.carried) return false;
+    if (food.claimedBy === antId) return true;
+    if (food.claimedBy != null) return false;
     food.claimedBy = antId;
     return true;
   }

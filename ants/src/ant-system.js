@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FOOD_CONFIG, NEST_CONFIG, findNearestFood } from './food-system.js';
+import { FOOD_CONFIG, NEST_CONFIG, findNearestFood, getFoodById } from './food-system.js';
 import { TERRAIN_CONFIG, sampleHeight } from './terrain.js';
 
 export const ANT_CONFIG = Object.freeze({
@@ -210,6 +210,19 @@ const updateBrain = (ant, distanceToCamera, foods) => {
   ant.lodBand = getLodBandForDistance(distanceToCamera);
   ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
   ant.logicInterval = getLogicIntervalForDistance(distanceToCamera);
+
+  if (ant.carryingFoodId != null) {
+    return;
+  }
+
+  if (ant.targetFoodId != null) {
+    const claimedFood = getFoodById(foods, ant.targetFoodId);
+    if (claimedFood && !claimedFood.delivered && !claimedFood.carried && claimedFood.claimedBy === ant.id) {
+      chooseFoodAction(ant, claimedFood);
+      return;
+    }
+  }
+
   const sensedFood = findNearestFood(foods, ant.position, FOOD_CONFIG.senseDistance);
   if (sensedFood) {
     chooseFoodAction(ant, sensedFood);
