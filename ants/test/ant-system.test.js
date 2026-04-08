@@ -49,7 +49,9 @@ describe('ant system helpers', () => {
   });
 
   test('rendered impostor body is smaller than the full collision sphere', () => {
-    expect(ANT_CONFIG.impostorRadius).toBeLessThan(ANT_CONFIG.bodyRadius);
+    expect(ANT_CONFIG.impostorFrontRadius).toBeLessThan(ANT_CONFIG.bodyRadius);
+    expect(ANT_CONFIG.impostorRearRadius).toBeLessThan(ANT_CONFIG.bodyRadius);
+    expect(ANT_CONFIG.impostorRearRadius).toBeGreaterThan(ANT_CONFIG.impostorFrontRadius);
     expect(new THREE.Vector3(0, ANT_CONFIG.renderOffsetY, 0).y).toBeLessThan(0);
   });
 });

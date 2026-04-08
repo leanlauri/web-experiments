@@ -7,7 +7,10 @@ export const ANT_CONFIG = Object.freeze({
   count: 200,
   bodyRadius: 0.24,
   renderOffsetY: -0.19,
-  impostorRadius: 0.16,
+  impostorFrontRadius: 0.13,
+  impostorRearRadius: 0.16,
+  impostorSpacing: 0.2,
+  impostorSpeedStretch: 0.06,
   speed: 2.4,
   carryingSpeedFactor: 0.72,
   wanderJitter: 0.9,
@@ -308,16 +311,24 @@ export class AntSystem {
     this.tmpQuaternion = new THREE.Quaternion();
     this.tmpEuler = new THREE.Euler();
     this.tmpScale = new THREE.Vector3(1, 1, 1);
+    this.tmpForward = new THREE.Vector3();
+    this.tmpRearPosition = new THREE.Vector3();
+    this.tmpFrontPosition = new THREE.Vector3();
     this.spatialHash = new Map();
     this.farInstanceCount = 0;
 
-    const farGeometry = new THREE.SphereGeometry(ANT_CONFIG.impostorRadius, 8, 6);
-    const farMaterial = new THREE.MeshToonMaterial({ color: 0x5c3017 });
-    this.farInstances = new THREE.InstancedMesh(farGeometry, farMaterial, this.ants.length);
-    this.farInstances.castShadow = true;
-    this.farInstances.receiveShadow = true;
-    this.farInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(this.farInstances);
+    const rearGeometry = new THREE.SphereGeometry(ANT_CONFIG.impostorRearRadius, 8, 6);
+    const frontGeometry = new THREE.SphereGeometry(ANT_CONFIG.impostorFrontRadius, 8, 6);
+    const rearMaterial = new THREE.MeshToonMaterial({ color: 0x5c3017 });
+    const frontMaterial = new THREE.MeshToonMaterial({ color: 0x47210f });
+    this.farRearInstances = new THREE.InstancedMesh(rearGeometry, rearMaterial, this.ants.length);
+    this.farFrontInstances = new THREE.InstancedMesh(frontGeometry, frontMaterial, this.ants.length);
+    for (const instanced of [this.farRearInstances, this.farFrontInstances]) {
+      instanced.castShadow = true;
+      instanced.receiveShadow = true;
+      instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(instanced);
+    }
 
     for (const ant of this.ants) {
       const mesh = createAntVisual();
@@ -431,20 +442,31 @@ export class AntSystem {
       }
 
       if (ant.visible && !useFullMesh) {
-        this.tmpEuler.set(0, rotationY, rollZ);
-        this.tmpQuaternion.setFromEuler(this.tmpEuler);
-        this.tmpMatrix.compose(
-          new THREE.Vector3(ant.position.x, ant.position.y + (ANT_CONFIG.impostorRadius - ANT_CONFIG.bodyRadius) + bobY, ant.position.z),
-          this.tmpQuaternion,
-          this.tmpScale,
+        this.tmpForward.set(ant.heading.x, 0, ant.heading.z).normalize();
+        const speedStretch = Math.min(ANT_CONFIG.impostorSpeedStretch, ant.velocity.length() * 0.015);
+        this.tmpRearPosition.set(
+          ant.position.x - this.tmpForward.x * (ANT_CONFIG.impostorSpacing * 0.5 + speedStretch),
+          ant.position.y + (ANT_CONFIG.impostorRearRadius - ANT_CONFIG.bodyRadius) + bobY,
+          ant.position.z - this.tmpForward.z * (ANT_CONFIG.impostorSpacing * 0.5 + speedStretch),
         );
-        this.farInstances.setMatrixAt(this.farInstanceCount, this.tmpMatrix);
+        this.tmpFrontPosition.set(
+          ant.position.x + this.tmpForward.x * (ANT_CONFIG.impostorSpacing * 0.5 + speedStretch),
+          ant.position.y + (ANT_CONFIG.impostorFrontRadius - ANT_CONFIG.bodyRadius) + bobY,
+          ant.position.z + this.tmpForward.z * (ANT_CONFIG.impostorSpacing * 0.5 + speedStretch),
+        );
+
+        this.tmpMatrix.compose(this.tmpRearPosition, this.tmpQuaternion.identity(), this.tmpScale);
+        this.farRearInstances.setMatrixAt(this.farInstanceCount, this.tmpMatrix);
+        this.tmpMatrix.compose(this.tmpFrontPosition, this.tmpQuaternion.identity(), this.tmpScale);
+        this.farFrontInstances.setMatrixAt(this.farInstanceCount, this.tmpMatrix);
         this.farInstanceCount += 1;
       }
     }
 
-    this.farInstances.count = this.farInstanceCount;
-    this.farInstances.instanceMatrix.needsUpdate = true;
+    this.farRearInstances.count = this.farInstanceCount;
+    this.farFrontInstances.count = this.farInstanceCount;
+    this.farRearInstances.instanceMatrix.needsUpdate = true;
+    this.farFrontInstances.instanceMatrix.needsUpdate = true;
   }
 
   getSummary() {
