@@ -91,14 +91,14 @@ export const createAntVisual = () => {
   const material = new THREE.MeshToonMaterial({ color: 0x4c2612 });
   const accentMaterial = new THREE.MeshToonMaterial({ color: 0x2f1308 });
 
-  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), material);
-  abdomen.scale.set(1.2, 0.95, 1.4);
-  abdomen.position.set(0, 0.28, -0.34);
+  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), material);
+  abdomen.scale.set(1.05, 0.9, 1.22);
+  abdomen.position.set(0, 0.25, -0.3);
   group.add(abdomen);
 
-  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), material);
-  thorax.scale.set(1.05, 1, 1.1);
-  thorax.position.set(0, 0.26, 0.02);
+  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.21, 12, 10), material);
+  thorax.scale.set(0.95, 0.96, 1.02);
+  thorax.position.set(0, 0.24, 0.01);
   group.add(thorax);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), accentMaterial);
