@@ -307,6 +307,7 @@ export class AntSystem {
     this.frustum = new THREE.Frustum();
     this.projectionMatrix = new THREE.Matrix4();
     this.tmpVec = new THREE.Vector3();
+    this.cameraWorldPosition = new THREE.Vector3();
     this.tmpMatrix = new THREE.Matrix4();
     this.tmpQuaternion = new THREE.Quaternion();
     this.tmpEuler = new THREE.Euler();
@@ -340,7 +341,9 @@ export class AntSystem {
   }
 
   update(dt) {
-    this.camera.updateMatrixWorld();
+    this.camera.updateWorldMatrix(true, false);
+    this.camera.getWorldPosition(this.cameraWorldPosition);
+    this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
     this.projectionMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projectionMatrix);
     this.spatialHash = buildSpatialHash(this.ants);
@@ -349,7 +352,7 @@ export class AntSystem {
     for (let i = 0; i < this.ants.length; i += 1) {
       const ant = this.ants[i];
       const mesh = this.meshes[i];
-      const distanceToCamera = ant.position.distanceTo(this.camera.position);
+      const distanceToCamera = ant.position.distanceTo(this.cameraWorldPosition);
 
       ant.lodBand = getLodBandForDistance(distanceToCamera);
       ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
