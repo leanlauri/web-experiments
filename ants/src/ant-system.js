@@ -31,6 +31,8 @@ export const ANT_CONFIG = Object.freeze({
   homePheromoneInfluence: 0.95,
   assistCarryDistance: 1.1,
   assistCarryTetherDistance: 0.85,
+  nestYieldRadius: 7,
+  nestYieldSpeedFactor: 0.9,
 });
 
 export const ANT_LOD = Object.freeze({ near: 'near', mid: 'mid', far: 'far' });
@@ -338,6 +340,41 @@ const applySeparation = (ant, grid) => {
   }
 };
 
+const applyNestYield = (ant, grid, nestPosition) => {
+  const distanceToNest = ant.position.distanceTo(nestPosition);
+  if (distanceToNest > ANT_CONFIG.nestYieldRadius) return false;
+
+  const neighbors = querySpatialHash(grid, ant.position.x, ant.position.z);
+  const yieldVector = new THREE.Vector3();
+  let shouldYield = false;
+
+  for (const other of neighbors) {
+    if (other === ant) continue;
+    const otherHasPriority = other.action === 'carry-food' || other.action === 'assist-carry' || other.carryingFoodId != null;
+    if (!otherHasPriority) continue;
+
+    const offset = new THREE.Vector3(ant.position.x - other.position.x, 0, ant.position.z - other.position.z);
+    const distanceSq = offset.lengthSq();
+    if (distanceSq > 3.2 * 3.2) continue;
+    shouldYield = true;
+    if (distanceSq > 0.0001) yieldVector.add(offset.normalize().multiplyScalar(1 / Math.sqrt(distanceSq)));
+  }
+
+  if (!shouldYield) return false;
+
+  const awayFromNest = new THREE.Vector3(ant.position.x - nestPosition.x, 0, ant.position.z - nestPosition.z);
+  if (awayFromNest.lengthSq() > 0.0001) {
+    awayFromNest.normalize();
+    yieldVector.add(awayFromNest.multiplyScalar(0.9));
+  }
+
+  if (yieldVector.lengthSq() <= 0.0001) return false;
+  yieldVector.normalize();
+  ant.desiredVelocity.lerp(yieldVector.multiplyScalar(ANT_CONFIG.speed * ANT_CONFIG.nestYieldSpeedFactor), 0.45);
+  ant.action = 'yield-nest-lane';
+  return true;
+};
+
 const updateVisibility = (ant, mesh, distance, frustum) => {
   const inFrustum = frustum.containsPoint(ant.position);
   ant.visible = inFrustum || distance < ANT_CONFIG.cullDistance;
@@ -478,8 +515,12 @@ export class AntSystem {
           }
         }
 
-        const shouldSeparate = ant.lodBand !== ANT_LOD.far && ant.action !== 'carry-food' && ant.action !== 'assist-carry';
-        if (shouldSeparate) applySeparation(ant, this.spatialHash);
+        const isCarrierGroup = ant.action === 'carry-food' || ant.action === 'assist-carry';
+        const shouldSeparate = ant.lodBand !== ANT_LOD.far && !isCarrierGroup;
+        if (shouldSeparate) {
+          const yielded = applyNestYield(ant, this.spatialHash, this.foodSystem.nestPosition);
+          if (!yielded) applySeparation(ant, this.spatialHash);
+        }
         ant.logicCooldown = ant.logicInterval;
       }
 
