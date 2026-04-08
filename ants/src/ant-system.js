@@ -30,6 +30,7 @@ export const ANT_CONFIG = Object.freeze({
   foodPheromoneInfluence: 1.35,
   homePheromoneInfluence: 0.95,
   assistCarryDistance: 1.1,
+  assistCarryTetherDistance: 0.85,
 });
 
 export const ANT_LOD = Object.freeze({ near: 'near', mid: 'mid', far: 'far' });
@@ -343,6 +344,22 @@ const updateVisibility = (ant, mesh, distance, frustum) => {
   mesh.visible = ant.visible;
 };
 
+const attachHelperToFood = (ant, food, supportIndex) => {
+  const angle = supportIndex * 1.25 + ant.id * 0.17;
+  const targetX = food.position.x + Math.cos(angle) * ANT_CONFIG.assistCarryTetherDistance;
+  const targetZ = food.position.z + Math.sin(angle) * ANT_CONFIG.assistCarryTetherDistance;
+  ant.position.x = targetX;
+  ant.position.z = targetZ;
+  ant.position.y = sampleHeight(targetX, targetZ) + ant.radius;
+  ant.velocity.setScalar(0);
+
+  const toFood = new THREE.Vector3(food.position.x - ant.position.x, 0, food.position.z - ant.position.z);
+  if (toFood.lengthSq() > 0.0001) {
+    toFood.normalize();
+    ant.heading.lerp(toFood, 0.35).normalize();
+  }
+};
+
 export class AntSystem {
   constructor({ scene, camera, foodSystem, pheromoneSystem, foods = [], count = ANT_CONFIG.count } = {}) {
     this.scene = scene;
@@ -471,6 +488,14 @@ export class AntSystem {
       ant.position.x = clampToTerrainBounds(ant.position.x + ant.velocity.x * dt, TERRAIN_CONFIG.width);
       ant.position.z = clampToTerrainBounds(ant.position.z + ant.velocity.z * dt, TERRAIN_CONFIG.depth);
       ant.position.y = sampleHeight(ant.position.x, ant.position.z) + ant.radius;
+
+      if (ant.action === 'assist-carry' && ant.assistingFoodId != null) {
+        const food = getFoodById(this.foods, ant.assistingFoodId);
+        if (food && food.carried && !food.delivered) {
+          const supportIndex = Math.max(1, food.supportAntIds.indexOf(ant.id));
+          attachHelperToFood(ant, food, supportIndex);
+        }
+      }
 
       if (ant.velocity.lengthSq() > 0.001) {
         this.tmpVec.copy(ant.velocity).normalize();
