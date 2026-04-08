@@ -344,10 +344,18 @@ export class AntSystem {
 
       ant.logicCooldown -= dt;
       if (ant.logicCooldown <= 0) {
+        if (ant.action === 'seek-food' && ant.targetFoodId != null) {
+          const claimedFood = getFoodById(this.foods, ant.targetFoodId);
+          const claimedByOther = claimedFood && claimedFood.claimedBy != null && claimedFood.claimedBy !== ant.id;
+          if (!claimedFood || claimedFood.delivered || claimedFood.carried || claimedByOther) {
+            chooseNextAction(ant);
+          }
+        }
+
         updateActionVelocity(ant);
 
         if (ant.action === 'seek-food' && ant.targetFoodId != null) {
-          const food = this.foods.find((item) => item.id === ant.targetFoodId);
+          const food = getFoodById(this.foods, ant.targetFoodId);
           if (!food || food.delivered) {
             chooseNextAction(ant);
           } else if (ant.position.distanceTo(food.position) <= FOOD_CONFIG.pickupDistance) {
