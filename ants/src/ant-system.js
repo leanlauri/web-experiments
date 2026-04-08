@@ -446,9 +446,8 @@ export class AntSystem {
             const pickedUp = this.foodSystem.pickUpFood(food.id, ant.id);
             if (pickedUp) {
               ant.carryingFoodId = food.id;
-              const slot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
-              ant.queuedNestSlot = slot;
-              chooseCarryToNestAction(ant, slot.position);
+              ant.queuedNestSlot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
+              chooseCarryToNestAction(ant, ant.queuedNestSlot.position);
             }
           }
         }
@@ -465,10 +464,9 @@ export class AntSystem {
         }
 
         if (ant.action === 'carry-food' && ant.carryingFoodId != null) {
-          const slot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
-          ant.queuedNestSlot = slot;
-          ant.target.set(slot.position.x, 0, slot.position.z);
-          if (ant.position.distanceTo(slot.position) <= NEST_CONFIG.dropoffDistance) {
+          ant.queuedNestSlot ??= this.foodSystem.reserveNestSlot(ant.id, ant.position);
+          ant.target.set(ant.queuedNestSlot.position.x, 0, ant.queuedNestSlot.position.z);
+          if (ant.position.distanceTo(ant.queuedNestSlot.position) <= NEST_CONFIG.dropoffDistance) {
             const dropped = this.foodSystem.dropFoodInNest(ant.carryingFoodId, ant.id);
             if (dropped) {
               ant.carryingFoodId = null;
@@ -480,7 +478,8 @@ export class AntSystem {
           }
         }
 
-        if (ant.lodBand !== ANT_LOD.far) applySeparation(ant, this.spatialHash);
+        const shouldSeparate = ant.lodBand !== ANT_LOD.far && ant.action !== 'carry-food' && ant.action !== 'assist-carry';
+        if (shouldSeparate) applySeparation(ant, this.spatialHash);
         ant.logicCooldown = ant.logicInterval;
       }
 
