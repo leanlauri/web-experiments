@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
+import { Scene } from 'three';
 import { FOOD_CONFIG, NEST_CONFIG, createFoodItems, findNearestCarryAssistFood, findNearestFood, getFoodById, getFoodCarryFactor, getNestPosition } from '../src/food-system.js';
+import { FoodSystem } from '../src/food-system.js';
 import { TERRAIN_CONFIG } from '../src/terrain.js';
 
 describe('food system helpers', () => {
@@ -53,5 +55,14 @@ describe('food system helpers', () => {
     expect(nest.x).toBe(NEST_CONFIG.position.x);
     expect(nest.z).toBe(NEST_CONFIG.position.z);
     expect(nest.y).toBeTypeOf('number');
+  });
+
+  test('nest grows as food is stored', () => {
+    const system = new FoodSystem({ scene: new Scene(), count: 0 });
+    const before = system.nestMesh.scale.x;
+    system.nestStored = 20;
+    system.updateNestVisual();
+    expect(system.nestMesh.scale.x).toBeGreaterThan(before);
+    expect(system.nestMesh.scale.y).toBeGreaterThan(before);
   });
 });

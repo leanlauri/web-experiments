@@ -158,6 +158,8 @@ const createNestVisual = () => {
   return group;
 };
 
+const computeNestScale = (nestStored) => 1 + Math.min(0.85, nestStored * 0.012);
+
 export class FoodSystem {
   constructor({ scene, count = FOOD_CONFIG.count } = {}) {
     this.items = createFoodItems(count);
@@ -168,6 +170,7 @@ export class FoodSystem {
     this.nestMesh.position.copy(this.nestPosition);
     scene.add(this.nestMesh);
     this.queueAssignments = new Map();
+    this.updateNestVisual();
 
     for (const food of this.items) {
       const mesh = createFoodVisual(food);
@@ -242,7 +245,14 @@ export class FoodSystem {
     food.regrowAt = randomRange(FOOD_CONFIG.regrowDelayMin, FOOD_CONFIG.regrowDelayMax);
     this.nestStored += food.weight;
     this.releaseNestSlot(antId);
+    this.updateNestVisual();
     return true;
+  }
+
+  updateNestVisual() {
+    const scale = computeNestScale(this.nestStored);
+    this.nestMesh.scale.set(scale, 1 + (scale - 1) * 1.4, scale);
+    this.nestMesh.position.set(this.nestPosition.x, this.nestPosition.y, this.nestPosition.z);
   }
 
   syncCarriedFood(foodId, carrierPosition) {
