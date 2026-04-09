@@ -132,11 +132,12 @@ const createFoodVisual = (food) => {
 
 const createNestVisual = () => {
   const group = new THREE.Group();
+  const nestBaseY = sampleHeight(NEST_CONFIG.position.x, NEST_CONFIG.position.z);
   const nestMaterial = new THREE.MeshToonMaterial({ color: 0x8b5a2b });
   const innerMaterial = new THREE.MeshToonMaterial({ color: 0x5a3414 });
-  const queueMaterial = new THREE.MeshBasicMaterial({ color: 0xffd54f, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false });
-  const entranceMaterial = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false });
-  const pathMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false });
+  const queueMaterial = new THREE.MeshToonMaterial({ color: 0xffd54f });
+  const entranceMaterial = new THREE.MeshToonMaterial({ color: 0x00e5ff });
+  const pathMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false });
 
   const rim = new THREE.Mesh(new THREE.CylinderGeometry(NEST_CONFIG.radius, NEST_CONFIG.radius * 0.9, NEST_CONFIG.rimHeight, 24, 1, true), nestMaterial);
   rim.position.y = NEST_CONFIG.rimHeight * 0.5;
@@ -154,7 +155,10 @@ const createNestVisual = () => {
     const queueMarker = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.12, 12), queueMaterial);
     const queueX = Math.cos(angle) * NEST_CONFIG.queueRadius;
     const queueZ = Math.sin(angle) * NEST_CONFIG.queueRadius;
-    queueMarker.position.set(queueX, 0.22, queueZ);
+    const queueWorldX = NEST_CONFIG.position.x + queueX;
+    const queueWorldZ = NEST_CONFIG.position.z + queueZ;
+    const queueLocalY = sampleHeight(queueWorldX, queueWorldZ) - nestBaseY;
+    queueMarker.position.set(queueX, queueLocalY + 0.22, queueZ);
     queueMarker.castShadow = false;
     queueMarker.receiveShadow = false;
     group.add(queueMarker);
@@ -162,14 +166,17 @@ const createNestVisual = () => {
     const entranceMarker = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.16, 12), entranceMaterial);
     const entranceX = Math.cos(angle) * NEST_CONFIG.entranceRadius;
     const entranceZ = Math.sin(angle) * NEST_CONFIG.entranceRadius;
-    entranceMarker.position.set(entranceX, 0.28, entranceZ);
+    const entranceWorldX = NEST_CONFIG.position.x + entranceX;
+    const entranceWorldZ = NEST_CONFIG.position.z + entranceZ;
+    const entranceLocalY = sampleHeight(entranceWorldX, entranceWorldZ) - nestBaseY;
+    entranceMarker.position.set(entranceX, entranceLocalY + 0.28, entranceZ);
     entranceMarker.castShadow = false;
     entranceMarker.receiveShadow = false;
     group.add(entranceMarker);
 
     const pathGeometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(queueX, 0.32, queueZ),
-      new THREE.Vector3(entranceX, 0.32, entranceZ),
+      new THREE.Vector3(queueX, queueLocalY + 0.32, queueZ),
+      new THREE.Vector3(entranceX, entranceLocalY + 0.32, entranceZ),
     ]);
     const pathLine = new THREE.Line(pathGeometry, pathMaterial);
     group.add(pathLine);
@@ -239,12 +246,18 @@ export class FoodSystem {
       const angle = (i / NEST_CONFIG.queueSlots) * Math.PI * 2;
       const queuePosition = new THREE.Vector3(
         this.nestPosition.x + Math.cos(angle) * NEST_CONFIG.queueRadius,
-        this.nestPosition.y,
+        sampleHeight(
+          this.nestPosition.x + Math.cos(angle) * NEST_CONFIG.queueRadius,
+          this.nestPosition.z + Math.sin(angle) * NEST_CONFIG.queueRadius,
+        ),
         this.nestPosition.z + Math.sin(angle) * NEST_CONFIG.queueRadius,
       );
       const entrancePosition = new THREE.Vector3(
         this.nestPosition.x + Math.cos(angle) * NEST_CONFIG.entranceRadius,
-        this.nestPosition.y,
+        sampleHeight(
+          this.nestPosition.x + Math.cos(angle) * NEST_CONFIG.entranceRadius,
+          this.nestPosition.z + Math.sin(angle) * NEST_CONFIG.entranceRadius,
+        ),
         this.nestPosition.z + Math.sin(angle) * NEST_CONFIG.entranceRadius,
       );
       candidates.push({ index: i, queuePosition, entrancePosition, distanceSq: antPosition.distanceToSquared(queuePosition) });
