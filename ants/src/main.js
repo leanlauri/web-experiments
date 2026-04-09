@@ -5,6 +5,8 @@ import { FOOD_CONFIG, FoodSystem } from './food-system.js';
 import { PheromoneSystem } from './pheromone-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
+const BUILD_ID = 'bbd1128';
+
 const showFatalError = (error) => {
   const overlay = document.getElementById('fatalOverlay');
   const message = document.getElementById('fatalMessage');
@@ -18,6 +20,7 @@ const updateHud = ({ terrain, antSystem }) => {
   const meshInfo = document.getElementById('meshInfo');
   const antInfo = document.getElementById('antInfo');
   const foodInfo = document.getElementById('foodInfo');
+  const buildInfo = document.getElementById('buildInfo');
   const hudHint = document.getElementById('hudHint');
   const hud = document.getElementById('hud');
 
@@ -35,6 +38,10 @@ const updateHud = ({ terrain, antSystem }) => {
     const heaviest = antSystem.foods.reduce((max, food) => Math.max(max, food.requiredCarriers), 1);
     foodInfo.textContent = `Food: ${remaining} left, nest stored ${(antSystem.foodSystem?.nestStored ?? 0).toFixed(1)}, max carriers ${heaviest}, sense ~${FOOD_CONFIG.senseDistance}m.`;
   }
+
+  if (buildInfo) {
+    buildInfo.textContent = `Build: ${BUILD_ID}`;
+  }
 };
 
 const bootstrap = () => {
@@ -46,7 +53,7 @@ const bootstrap = () => {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xdbe7f4);
-  scene.fog = new THREE.Fog(0xdbe7f4, 30, 80);
+  scene.fog = new THREE.Fog(0xdbe7f4, 39, 104);
 
   const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 260);
   camera.position.set(36, 26, 36);
