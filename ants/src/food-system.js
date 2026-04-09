@@ -139,16 +139,22 @@ const createNestVisual = () => {
   const entranceMaterial = new THREE.MeshToonMaterial({ color: 0x00e5ff });
   const pathMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false });
 
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(NEST_CONFIG.radius, NEST_CONFIG.radius * 0.9, NEST_CONFIG.rimHeight, 24, 1, true), nestMaterial);
-  rim.position.y = NEST_CONFIG.rimHeight * 0.5;
-  rim.castShadow = true;
-  rim.receiveShadow = true;
-  group.add(rim);
+  const mound = new THREE.Mesh(new THREE.ConeGeometry(NEST_CONFIG.radius * 1.25, NEST_CONFIG.radius * 1.3, 28, 1), nestMaterial);
+  mound.position.y = (NEST_CONFIG.radius * 1.3) * 0.5;
+  mound.castShadow = true;
+  mound.receiveShadow = true;
+  group.add(mound);
 
-  const floor = new THREE.Mesh(new THREE.CylinderGeometry(NEST_CONFIG.radius * 0.78, NEST_CONFIG.radius * 0.84, 0.16, 24), innerMaterial);
-  floor.position.y = 0.08;
-  floor.receiveShadow = true;
-  group.add(floor);
+  const moundBase = new THREE.Mesh(new THREE.CylinderGeometry(NEST_CONFIG.radius * 1.05, NEST_CONFIG.radius * 1.2, 0.18, 28), nestMaterial);
+  moundBase.position.y = 0.09;
+  moundBase.castShadow = true;
+  moundBase.receiveShadow = true;
+  group.add(moundBase);
+
+  const entrance = new THREE.Mesh(new THREE.CylinderGeometry(NEST_CONFIG.radius * 0.36, NEST_CONFIG.radius * 0.42, 0.14, 18), innerMaterial);
+  entrance.position.set(0, 0.08, NEST_CONFIG.radius * 0.18);
+  entrance.receiveShadow = true;
+  group.add(entrance);
 
   for (let i = 0; i < NEST_CONFIG.queueSlots; i += 1) {
     const angle = (i / NEST_CONFIG.queueSlots) * Math.PI * 2;

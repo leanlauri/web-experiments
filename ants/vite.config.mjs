@@ -9,7 +9,7 @@ const buildId = (() => {
   try {
     return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
   } catch {
-    return 'unknown';
+    return `stamp-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
   }
 })();
 
