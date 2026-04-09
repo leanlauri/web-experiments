@@ -148,6 +148,7 @@ export const createAntState = (id, x, z) => ({
   carryingFoodId: null,
   assistingFoodId: null,
   queuedNestSlot: null,
+  nestApproachStage: 'queue',
   brainCooldown: Math.random() * 0.6,
   brainInterval: ANT_CONFIG.closeBrainInterval,
   logicCooldown: Math.random() * ANT_CONFIG.closeLogicInterval,
@@ -172,6 +173,7 @@ const chooseNextAction = (ant) => {
   ant.carryingFoodId = null;
   ant.assistingFoodId = null;
   ant.queuedNestSlot = null;
+  ant.nestApproachStage = 'queue';
   if (Math.random() < ANT_CONFIG.idleChance && ant.role !== ANT_ROLE.scout) {
     ant.action = 'idle';
     ant.desiredVelocity.setScalar(0);
@@ -223,8 +225,13 @@ const chooseCarryToNestAction = (ant, dropTarget) => {
 
 const getCarryApproachTarget = (ant, nestPosition) => {
   if (!ant.queuedNestSlot) return nestPosition;
-  const queueDistance = ant.position.distanceTo(ant.queuedNestSlot.queuePosition);
-  if (queueDistance > 0.9) return ant.queuedNestSlot.queuePosition;
+  if (ant.nestApproachStage !== 'entrance') {
+    const queueDistance = ant.position.distanceTo(ant.queuedNestSlot.queuePosition);
+    if (queueDistance <= 0.9) {
+      ant.nestApproachStage = 'entrance';
+    }
+  }
+  if (ant.nestApproachStage !== 'entrance') return ant.queuedNestSlot.queuePosition;
   return ant.queuedNestSlot.entrancePosition;
 };
 
@@ -491,6 +498,7 @@ export class AntSystem {
             if (pickedUp) {
               ant.carryingFoodId = food.id;
               ant.queuedNestSlot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
+              ant.nestApproachStage = 'queue';
               chooseCarryToNestAction(ant, getCarryApproachTarget(ant, this.foodSystem.nestPosition));
             }
           }
@@ -517,6 +525,7 @@ export class AntSystem {
               ant.carryingFoodId = null;
               ant.targetFoodId = null;
               ant.queuedNestSlot = null;
+              ant.nestApproachStage = 'queue';
               ant.action = 'idle';
               ant.desiredVelocity.setScalar(0);
             }
