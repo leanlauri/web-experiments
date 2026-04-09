@@ -1,3 +1,4 @@
+/* global __BUILD_ID__ */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AntSystem } from './ant-system.js';
@@ -5,7 +6,7 @@ import { FOOD_CONFIG, FoodSystem } from './food-system.js';
 import { PheromoneSystem } from './pheromone-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
-const BUILD_ID = 'bbd1128';
+const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'unknown';
 
 const showFatalError = (error) => {
   const overlay = document.getElementById('fatalOverlay');
