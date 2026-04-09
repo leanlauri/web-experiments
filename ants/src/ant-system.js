@@ -221,6 +221,13 @@ const chooseCarryToNestAction = (ant, dropTarget) => {
   }
 };
 
+const getCarryApproachTarget = (ant, nestPosition) => {
+  if (!ant.queuedNestSlot) return nestPosition;
+  const queueDistance = ant.position.distanceTo(ant.queuedNestSlot.queuePosition);
+  if (queueDistance > 0.9) return ant.queuedNestSlot.queuePosition;
+  return ant.queuedNestSlot.entrancePosition;
+};
+
 const updateBrain = (ant, distanceToCamera, foods, pheromoneSystem) => {
   ant.lodBand = getLodBandForDistance(distanceToCamera);
   ant.brainInterval = getBrainIntervalForDistance(distanceToCamera);
@@ -484,7 +491,7 @@ export class AntSystem {
             if (pickedUp) {
               ant.carryingFoodId = food.id;
               ant.queuedNestSlot = this.foodSystem.reserveNestSlot(ant.id, ant.position);
-              chooseCarryToNestAction(ant, ant.queuedNestSlot.position);
+              chooseCarryToNestAction(ant, getCarryApproachTarget(ant, this.foodSystem.nestPosition));
             }
           }
         }
@@ -502,8 +509,9 @@ export class AntSystem {
 
         if (ant.action === 'carry-food' && ant.carryingFoodId != null) {
           ant.queuedNestSlot ??= this.foodSystem.reserveNestSlot(ant.id, ant.position);
-          ant.target.set(ant.queuedNestSlot.position.x, 0, ant.queuedNestSlot.position.z);
-          if (ant.position.distanceTo(ant.queuedNestSlot.position) <= NEST_CONFIG.dropoffDistance) {
+          const approachTarget = getCarryApproachTarget(ant, this.foodSystem.nestPosition);
+          ant.target.set(approachTarget.x, 0, approachTarget.z);
+          if (ant.position.distanceTo(this.foodSystem.nestPosition) <= NEST_CONFIG.dropoffDistance) {
             const dropped = this.foodSystem.dropFoodInNest(ant.carryingFoodId, ant.id);
             if (dropped) {
               ant.carryingFoodId = null;

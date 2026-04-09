@@ -17,6 +17,7 @@ export const NEST_CONFIG = Object.freeze({
   rimHeight: 0.5,
   dropoffDistance: 1.6,
   queueRadius: 3.8,
+  entranceRadius: 1.2,
   queueSlots: 6,
   position: new THREE.Vector3(0, 0, 0),
 });
@@ -217,15 +218,24 @@ export class FoodSystem {
       const occupied = [...this.queueAssignments.values()].some((slot) => slot.index === i);
       if (occupied) continue;
       const angle = (i / NEST_CONFIG.queueSlots) * Math.PI * 2;
-      const position = new THREE.Vector3(
+      const queuePosition = new THREE.Vector3(
         this.nestPosition.x + Math.cos(angle) * NEST_CONFIG.queueRadius,
         this.nestPosition.y,
         this.nestPosition.z + Math.sin(angle) * NEST_CONFIG.queueRadius,
       );
-      candidates.push({ index: i, position, distanceSq: antPosition.distanceToSquared(position) });
+      const entrancePosition = new THREE.Vector3(
+        this.nestPosition.x + Math.cos(angle) * NEST_CONFIG.entranceRadius,
+        this.nestPosition.y,
+        this.nestPosition.z + Math.sin(angle) * NEST_CONFIG.entranceRadius,
+      );
+      candidates.push({ index: i, queuePosition, entrancePosition, distanceSq: antPosition.distanceToSquared(queuePosition) });
     }
     candidates.sort((a, b) => a.distanceSq - b.distanceSq);
-    const chosen = candidates[0] ?? { index: 0, position: this.nestPosition.clone() };
+    const chosen = candidates[0] ?? {
+      index: 0,
+      queuePosition: this.nestPosition.clone(),
+      entrancePosition: this.nestPosition.clone(),
+    };
     this.queueAssignments.set(antId, chosen);
     return chosen;
   }
