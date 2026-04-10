@@ -6,7 +6,27 @@ import { FOOD_CONFIG, FoodSystem } from './food-system.js';
 import { PheromoneSystem } from './pheromone-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
-const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0378521';
+const BUILD_ID_FALLBACK = '9172f01';
+const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : BUILD_ID_FALLBACK;
+const BUILD_INFO = {
+  value: BUILD_ID,
+  source: typeof __BUILD_ID__ !== 'undefined' ? 'bundle' : 'fallback',
+};
+
+const refreshBuildIdFromGitHub = async () => {
+  try {
+    const response = await fetch('https://api.github.com/repos/leanlauri/web-experiments/commits?sha=main&path=ants&per_page=1');
+    if (!response.ok) return;
+    const commits = await response.json();
+    const sha = commits?.[0]?.sha;
+    if (typeof sha === 'string' && sha.length >= 7) {
+      BUILD_INFO.value = sha.slice(0, 7);
+      BUILD_INFO.source = 'github';
+    }
+  } catch {
+    // Keep the bundled or checked-in fallback id.
+  }
+};
 
 const showFatalError = (error) => {
   const overlay = document.getElementById('fatalOverlay');
@@ -41,11 +61,11 @@ const updateHud = ({ terrain, antSystem }) => {
   }
 
   if (buildInfo) {
-    buildInfo.textContent = `Build: ${BUILD_ID}`;
+    buildInfo.textContent = `Build: ${BUILD_INFO.value}`;
   }
 };
 
-const bootstrap = () => {
+const bootstrap = async () => {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -97,6 +117,8 @@ const bootstrap = () => {
   const pheromoneSystem = new PheromoneSystem();
   const antSystem = new AntSystem({ scene, camera, foodSystem, pheromoneSystem, foods: foodSystem.items, count: 200 });
 
+  await refreshBuildIdFromGitHub();
+
   const setDebugVisualsVisible = (visible) => {
     debugVisualsGroup.visible = !!visible;
     foodSystem.setDebugVisualsVisible(visible);
@@ -144,9 +166,7 @@ const bootstrap = () => {
   animate();
 };
 
-try {
-  bootstrap();
-} catch (error) {
+bootstrap().catch((error) => {
   console.error('Ants bootstrap failed:', error);
   showFatalError(error);
-}
+});
