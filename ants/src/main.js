@@ -103,7 +103,7 @@ const bootstrap = () => {
     if (debugVisualsToggle) debugVisualsToggle.checked = !!visible;
   };
 
-  setDebugVisualsVisible(true);
+  setDebugVisualsVisible(debugVisualsToggle?.checked ?? false);
   debugVisualsToggle?.addEventListener('change', () => {
     setDebugVisualsVisible(debugVisualsToggle.checked);
   });
