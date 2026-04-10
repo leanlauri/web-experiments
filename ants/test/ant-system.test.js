@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { ANT_CONFIG, ANT_LOD, ANT_ROLE, buildSpatialHash, createRandomAntStates, getBrainIntervalForDistance, getLodBandForDistance, querySpatialHash } from '../src/ant-system.js';
+import { ANT_CONFIG, ANT_LOD, ANT_ROLE, buildSpatialHash, createAntVisual, createRandomAntStates, getBrainIntervalForDistance, getLodBandForDistance, querySpatialHash } from '../src/ant-system.js';
 import { TERRAIN_CONFIG } from '../src/terrain.js';
 
 describe('ant system helpers', () => {
@@ -53,5 +53,14 @@ describe('ant system helpers', () => {
     expect(ANT_CONFIG.impostorRearRadius).toBeLessThan(ANT_CONFIG.bodyRadius);
     expect(ANT_CONFIG.impostorRearRadius).toBeGreaterThan(ANT_CONFIG.impostorFrontRadius);
     expect(new THREE.Vector3(0, ANT_CONFIG.renderOffsetY, 0).y).toBeLessThan(0);
+  });
+
+  test('full ant visual keeps six animatable leg meshes', () => {
+    const visual = createAntVisual();
+
+    expect(visual.userData.legs).toHaveLength(6);
+    for (const leg of visual.userData.legs) {
+      expect(leg.userData.baseRotation).toBeTruthy();
+    }
   });
 });

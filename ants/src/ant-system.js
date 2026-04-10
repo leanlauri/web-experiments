@@ -33,6 +33,10 @@ export const ANT_CONFIG = Object.freeze({
   assistCarryTetherDistance: 0.85,
   nestYieldRadius: 7,
   nestYieldSpeedFactor: 0.9,
+  legMaxSwing: 0.68,
+  legLiftSwing: 0.22,
+  legStrideSpeed: 2.4,
+  legMoveThreshold: 0.08,
 });
 
 export const ANT_LOD = Object.freeze({ near: 'near', mid: 'mid', far: 'far' });
@@ -97,6 +101,7 @@ export const createAntVisual = () => {
   const group = new THREE.Group();
   const material = new THREE.MeshToonMaterial({ color: 0x4c2612 });
   const accentMaterial = new THREE.MeshToonMaterial({ color: 0x2f1308 });
+  const legs = [];
 
   const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), material);
   abdomen.scale.set(0.92, 0.82, 1.02);
@@ -117,9 +122,17 @@ export const createAntVisual = () => {
     const z = -0.2 + i * 0.22;
     for (const side of [-1, 1]) {
       const leg = new THREE.Mesh(legGeometry, accentMaterial);
-      leg.rotation.z = side * Math.PI * 0.32;
-      leg.rotation.x = Math.PI * 0.44;
+      const baseRotation = {
+        x: Math.PI * 0.44,
+        y: 0,
+        z: side * Math.PI * 0.32,
+      };
+      leg.rotation.set(baseRotation.x, baseRotation.y, baseRotation.z);
       leg.position.set(side * 0.22, 0.18, z);
+      leg.userData.baseRotation = baseRotation;
+      leg.userData.gaitOffset = i * Math.PI * 0.82 + (side < 0 ? 0 : Math.PI);
+      leg.userData.side = side;
+      legs.push(leg);
       group.add(leg);
     }
   }
@@ -131,7 +144,30 @@ export const createAntVisual = () => {
     }
   });
 
+  group.userData.legs = legs;
+
   return group;
+};
+
+const animateAntLegs = (mesh, ant) => {
+  const legs = mesh.userData.legs;
+  if (!legs?.length) return;
+
+  const speedRatio = THREE.MathUtils.clamp(ant.velocity.length() / ANT_CONFIG.speed, 0, 1);
+  const strideStrength = speedRatio <= ANT_CONFIG.legMoveThreshold
+    ? 0
+    : (speedRatio - ANT_CONFIG.legMoveThreshold) / (1 - ANT_CONFIG.legMoveThreshold);
+
+  for (const leg of legs) {
+    const baseRotation = leg.userData.baseRotation;
+    if (!baseRotation) continue;
+    const phase = ant.gaitPhase * ANT_CONFIG.legStrideSpeed + (leg.userData.gaitOffset ?? 0);
+    const swing = Math.sin(phase) * ANT_CONFIG.legMaxSwing * strideStrength;
+    const lift = Math.max(0, Math.cos(phase)) * ANT_CONFIG.legLiftSwing * strideStrength;
+    leg.rotation.x = baseRotation.x + swing;
+    leg.rotation.y = baseRotation.y + (leg.userData.side ?? 1) * lift;
+    leg.rotation.z = baseRotation.z - (leg.userData.side ?? 1) * swing * 0.12;
+  }
 };
 
 export const createAntState = (id, x, z) => ({
@@ -575,6 +611,7 @@ export class AntSystem {
         mesh.position.y += ANT_CONFIG.renderOffsetY + bobY;
         mesh.rotation.y = rotationY;
         mesh.rotation.z = rollZ;
+        animateAntLegs(mesh, ant);
       } else {
         mesh.visible = false;
       }
