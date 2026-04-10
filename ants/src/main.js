@@ -96,7 +96,15 @@ const bootstrap = async () => {
   const sun = new THREE.DirectionalLight(0xffffff, 1.8);
   sun.position.set(12, 20, 10);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -60;
+  sun.shadow.camera.right = 60;
+  sun.shadow.camera.top = 60;
+  sun.shadow.camera.bottom = -60;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 90;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
   scene.add(sun);
   scene.add(sun.target);
   sun.target.position.set(0, 0, 0);
