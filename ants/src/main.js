@@ -6,7 +6,7 @@ import { FOOD_CONFIG, FoodSystem } from './food-system.js';
 import { PheromoneSystem } from './pheromone-system.js';
 import { TERRAIN_CONFIG, createTerrainMesh, createTerrainOverlay, getTriangleCount } from './terrain.js';
 
-const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'unknown';
+const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0378521';
 
 const showFatalError = (error) => {
   const overlay = document.getElementById('fatalOverlay');
@@ -87,7 +87,7 @@ const bootstrap = () => {
   scene.add(debugVisualsGroup);
   const grid = new THREE.GridHelper(100, 20, 0x3a658f, 0x89a7c3);
   grid.position.y = -0.02;
-  scene.add(grid);
+  debugVisualsGroup.add(grid);
 
   const terrain = createTerrainMesh();
   scene.add(terrain);
