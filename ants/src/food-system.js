@@ -132,6 +132,7 @@ const createFoodVisual = (food) => {
 
 const createNestVisual = () => {
   const group = new THREE.Group();
+  const debugGroup = new THREE.Group();
   const nestBaseY = sampleHeight(NEST_CONFIG.position.x, NEST_CONFIG.position.z);
   const nestMaterial = new THREE.MeshToonMaterial({ color: 0x8b5a2b });
   const innerMaterial = new THREE.MeshToonMaterial({ color: 0x5a3414 });
@@ -167,7 +168,7 @@ const createNestVisual = () => {
     queueMarker.position.set(queueX, queueLocalY + 0.22, queueZ);
     queueMarker.castShadow = false;
     queueMarker.receiveShadow = false;
-    group.add(queueMarker);
+    debugGroup.add(queueMarker);
 
     const entranceMarker = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.16, 12), entranceMaterial);
     const entranceX = Math.cos(angle) * NEST_CONFIG.entranceRadius;
@@ -178,15 +179,18 @@ const createNestVisual = () => {
     entranceMarker.position.set(entranceX, entranceLocalY + 0.28, entranceZ);
     entranceMarker.castShadow = false;
     entranceMarker.receiveShadow = false;
-    group.add(entranceMarker);
+    debugGroup.add(entranceMarker);
 
     const pathGeometry = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(queueX, queueLocalY + 0.32, queueZ),
       new THREE.Vector3(entranceX, entranceLocalY + 0.32, entranceZ),
     ]);
     const pathLine = new THREE.Line(pathGeometry, pathMaterial);
-    group.add(pathLine);
+    debugGroup.add(pathLine);
   }
+
+  group.add(debugGroup);
+  group.userData.debugGroup = debugGroup;
 
   return group;
 };
@@ -301,6 +305,11 @@ export class FoodSystem {
     const scale = computeNestScale(this.nestStored);
     this.nestMesh.scale.set(scale, 1 + (scale - 1) * 1.4, scale);
     this.nestMesh.position.set(this.nestPosition.x, this.nestPosition.y, this.nestPosition.z);
+  }
+
+  setDebugVisualsVisible(visible) {
+    const debugGroup = this.nestMesh?.userData?.debugGroup;
+    if (debugGroup) debugGroup.visible = !!visible;
   }
 
   syncCarriedFood(foodId, carrierPosition) {

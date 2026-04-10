@@ -61,6 +61,8 @@ const bootstrap = () => {
   camera.up.set(0, 1, 0);
   camera.lookAt(0, 0, 0);
 
+  const debugVisualsToggle = document.getElementById('debugVisualsToggle');
+
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
@@ -79,7 +81,10 @@ const bootstrap = () => {
   scene.add(sun.target);
   sun.target.position.set(0, 0, 0);
 
-  scene.add(new THREE.AxesHelper(12));
+  const debugVisualsGroup = new THREE.Group();
+  const axesHelper = new THREE.AxesHelper(12);
+  debugVisualsGroup.add(axesHelper);
+  scene.add(debugVisualsGroup);
   const grid = new THREE.GridHelper(100, 20, 0x3a658f, 0x89a7c3);
   grid.position.y = -0.02;
   scene.add(grid);
@@ -91,6 +96,17 @@ const bootstrap = () => {
   const foodSystem = new FoodSystem({ scene });
   const pheromoneSystem = new PheromoneSystem();
   const antSystem = new AntSystem({ scene, camera, foodSystem, pheromoneSystem, foods: foodSystem.items, count: 200 });
+
+  const setDebugVisualsVisible = (visible) => {
+    debugVisualsGroup.visible = !!visible;
+    foodSystem.setDebugVisualsVisible(visible);
+    if (debugVisualsToggle) debugVisualsToggle.checked = !!visible;
+  };
+
+  setDebugVisualsVisible(true);
+  debugVisualsToggle?.addEventListener('change', () => {
+    setDebugVisualsVisible(debugVisualsToggle.checked);
+  });
 
   updateHud({ terrain, antSystem });
 
