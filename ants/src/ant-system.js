@@ -37,6 +37,7 @@ export const ANT_CONFIG = Object.freeze({
   legLiftSwing: 0.22,
   legStrideSpeed: 2.4,
   legMoveThreshold: 0.08,
+  legCarryMinRatio: 0.22,
 });
 
 export const ANT_LOD = Object.freeze({ near: 'near', mid: 'mid', far: 'far' });
@@ -153,10 +154,14 @@ const animateAntLegs = (mesh, ant) => {
   const legs = mesh.userData.legs;
   if (!legs?.length) return;
 
-  const speedRatio = THREE.MathUtils.clamp(ant.velocity.length() / ANT_CONFIG.speed, 0, 1);
-  const strideStrength = speedRatio <= ANT_CONFIG.legMoveThreshold
+  const rawSpeedRatio = Math.max(ant.velocity.length(), ant.desiredVelocity.length()) / ANT_CONFIG.speed;
+  const speedRatio = ant.action === 'carry-food' || ant.action === 'assist-carry'
+    ? Math.max(ANT_CONFIG.legCarryMinRatio, rawSpeedRatio)
+    : rawSpeedRatio;
+  const clampedSpeedRatio = THREE.MathUtils.clamp(speedRatio, 0, 1);
+  const strideStrength = clampedSpeedRatio <= ANT_CONFIG.legMoveThreshold
     ? 0
-    : (speedRatio - ANT_CONFIG.legMoveThreshold) / (1 - ANT_CONFIG.legMoveThreshold);
+    : (clampedSpeedRatio - ANT_CONFIG.legMoveThreshold) / (1 - ANT_CONFIG.legMoveThreshold);
 
   for (const leg of legs) {
     const baseRotation = leg.userData.baseRotation;
