@@ -14,11 +14,65 @@ export class PhysicsDebug {
     this.scene.add(this.root);
     this.bodyGroups = new Map();
     this.material = new THREE.LineBasicMaterial({ color: this.color });
+    this.groundNormalArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, 0, 0),
+      2.0,
+      0x22aa55,
+    );
+    this.groundNormalArrow.visible = false;
+    this.root.add(this.groundNormalArrow);
+    this.forwardArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, 0),
+      2.0,
+      0x2266ff,
+    );
+    this.forwardArrow.visible = false;
+    this.root.add(this.forwardArrow);
+    this.sumForceArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, 0, 0),
+      2.0,
+      0xffaa33,
+    );
+    this.sumForceArrow.visible = false;
+    this.root.add(this.sumForceArrow);
+    this.sumTorqueArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, 0, 0),
+      2.0,
+      0xaa66ff,
+    );
+    this.sumTorqueArrow.visible = false;
+    this.root.add(this.sumTorqueArrow);
+    this.frenchFriesArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, 0),
+      2.0,
+      0xff3333,
+    );
+    this.frenchFriesArrow.visible = false;
+    this.root.add(this.frenchFriesArrow);
+
+    this.sumForceLabel = this.createTextSprite('F 0.00', '#ffcc66');
+    this.sumForceLabel.visible = false;
+    this.root.add(this.sumForceLabel);
+    this.sumTorqueLabel = this.createTextSprite('T 0.00', '#c9a6ff');
+    this.sumTorqueLabel.visible = false;
+    this.root.add(this.sumTorqueLabel);
   }
 
   setEnabled(enabled) {
     this.enabled = enabled;
     this.root.visible = enabled;
+    this.groundNormalArrow.visible = enabled;
+    this.forwardArrow.visible = enabled;
+    this.sumForceArrow.visible = enabled;
+    this.sumTorqueArrow.visible = enabled;
+    this.frenchFriesArrow.visible = enabled;
+    this.sumForceLabel.visible = enabled;
+    this.sumTorqueLabel.visible = enabled;
   }
 
   update() {
@@ -31,6 +85,112 @@ export class PhysicsDebug {
       group.position.copy(body.position);
       group.quaternion.copy(body.quaternion);
     }
+  }
+
+  setGroundNormal(position, direction) {
+    this.groundNormalArrow.position.copy(position);
+    this.groundNormalArrow.setDirection(direction.clone().normalize());
+    this.groundNormalArrow.visible = this.enabled;
+  }
+
+  setForwardVelocity(position, direction) {
+    const dir = direction.clone();
+    const len = dir.length();
+    if (len < 1e-6) {
+      this.forwardArrow.visible = false;
+      return;
+    }
+    this.forwardArrow.position.copy(position);
+    this.forwardArrow.setDirection(dir.normalize());
+    this.forwardArrow.setLength(len);
+    this.forwardArrow.visible = this.enabled;
+  }
+
+  setSumForce(position, direction, magnitude = 0) {
+    const dir = direction.clone();
+    const len = dir.length();
+    if (len < 1e-6) {
+      this.sumForceArrow.visible = false;
+      this.sumForceLabel.visible = false;
+      return;
+    }
+    this.sumForceArrow.position.copy(position);
+    this.sumForceArrow.setDirection(dir.normalize());
+    this.sumForceArrow.setLength(len);
+    this.sumForceArrow.visible = this.enabled;
+
+    const labelPos = position.clone()
+      .add(dir.normalize().multiplyScalar(len + 0.35))
+      .add(new THREE.Vector3(0, 0.15, 0));
+    this.sumForceLabel.position.copy(labelPos);
+    this.updateTextSprite(this.sumForceLabel, `F ${magnitude.toFixed(2)}`, '#ffcc66');
+    this.sumForceLabel.visible = this.enabled;
+  }
+
+  setSumTorque(position, direction, magnitude = 0) {
+    const dir = direction.clone();
+    const len = dir.length();
+    if (len < 1e-6) {
+      this.sumTorqueArrow.visible = false;
+      this.sumTorqueLabel.visible = false;
+      return;
+    }
+    this.sumTorqueArrow.position.copy(position);
+    this.sumTorqueArrow.setDirection(dir.normalize());
+    this.sumTorqueArrow.setLength(len);
+    this.sumTorqueArrow.visible = this.enabled;
+
+    const labelPos = position.clone()
+      .add(dir.normalize().multiplyScalar(len + 0.35))
+      .add(new THREE.Vector3(0, 0.15, 0));
+    this.sumTorqueLabel.position.copy(labelPos);
+    this.updateTextSprite(this.sumTorqueLabel, `T ${magnitude.toFixed(2)}`, '#c9a6ff');
+    this.sumTorqueLabel.visible = this.enabled;
+  }
+
+  setFrenchFriesForce(position, direction) {
+    const dir = direction.clone();
+    if (dir.lengthSq() < 1e-6) return;
+    this.frenchFriesArrow.position.copy(position);
+    this.frenchFriesArrow.setDirection(dir.normalize());
+    this.frenchFriesArrow.visible = this.enabled;
+  }
+
+  createTextSprite(text, color) {
+    if (typeof document === 'undefined') {
+      return new THREE.Sprite(new THREE.SpriteMaterial({ color }));
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '24px sans-serif';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 8, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(2.2, 0.55, 1);
+    sprite.userData.canvas = canvas;
+    sprite.userData.ctx = ctx;
+    return sprite;
+  }
+
+  updateTextSprite(sprite, text, color) {
+    const { canvas, ctx } = sprite.userData;
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '24px sans-serif';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 8, canvas.height / 2);
+    sprite.material.map.needsUpdate = true;
   }
 
   syncBodies() {
@@ -83,11 +243,64 @@ export class PhysicsDebug {
       case CANNON.Shape.types.CYLINDER:
         geom = new THREE.CylinderGeometry(shape.radiusTop, shape.radiusBottom, shape.height, 12);
         break;
+      case CANNON.Shape.types.HEIGHTFIELD:
+        geom = this.buildHeightfieldGeometry(shape);
+        break;
+      case CANNON.Shape.types.TRIMESH:
+        geom = this.buildTrimeshGeometry(shape);
+        break;
       default:
         return null;
     }
 
     const edges = new THREE.EdgesGeometry(geom);
     return new THREE.LineSegments(edges, this.material);
+  }
+
+  buildHeightfieldGeometry(shape) {
+    const data = shape.data;
+    if (!data || !data.length) return null;
+
+    const widthSegments = data.length - 1;
+    const depthSegments = data[0].length - 1;
+    const width = widthSegments * shape.elementSize;
+    const depth = depthSegments * shape.elementSize;
+
+    const geometry = new THREE.PlaneGeometry(width, depth, widthSegments, depthSegments);
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(width / 2, 0, depth / 2);
+
+    const positions = geometry.attributes.position;
+    let index = 0;
+    for (let zi = 0; zi <= depthSegments; zi++) {
+      for (let xi = 0; xi <= widthSegments; xi++) {
+        positions.setY(index, data[xi][zi]);
+        index++;
+      }
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+
+    return geometry;
+  }
+
+  buildTrimeshGeometry(shape) {
+    const vertices = shape.vertices;
+    const indices = shape.indices;
+    if (!vertices || !indices || !vertices.length || !indices.length) return null;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(indices.length * 3);
+
+    for (let i = 0; i < indices.length; i++) {
+      const vIndex = indices[i] * 3;
+      positions[i * 3] = vertices[vIndex];
+      positions[i * 3 + 1] = vertices[vIndex + 1];
+      positions[i * 3 + 2] = vertices[vIndex + 2];
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
+    return geometry;
   }
 }

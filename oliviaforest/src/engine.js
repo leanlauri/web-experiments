@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js?module';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EngineCore } from './engine-core.js';
 import { MeshComponent } from './entity.js';
 
@@ -9,8 +9,8 @@ export class Engine extends EngineCore {
     const hasWindow = typeof window !== 'undefined';
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xbfe3ff);
-    this.scene.fog = new THREE.Fog(0xbfe3ff, 40, 100);
+    this.scene.background = new THREE.Color(0xe8f4f8);
+    this.scene.fog = new THREE.Fog(0xe8f4f8, 40, 100);
 
     const width = hasWindow ? window.innerWidth : 800;
     const height = hasWindow ? window.innerHeight : 600;
@@ -22,7 +22,12 @@ export class Engine extends EngineCore {
     this.controls = null;
 
     if (!headless) {
-      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      try {
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`WebGL renderer initialization failed: ${detail}`);
+      }
       this.renderer.setSize(width, height);
       this.renderer.setPixelRatio(hasWindow ? Math.min(2, window.devicePixelRatio) : 1);
       this.renderer.shadowMap.enabled = true;
@@ -42,6 +47,8 @@ export class Engine extends EngineCore {
     }
 
     this.lastTime = null;
+    this.slowMo1fps = false;
+    this.slowAccumulator = 0;
   }
 
   addEntity(entity) {
@@ -65,7 +72,16 @@ export class Engine extends EngineCore {
       requestAnimationFrame(animate);
       if (this.lastTime != null) {
         const dt = Math.min(0.033, (time - this.lastTime) / 1000);
-        this.update(dt);
+        if (this.slowMo1fps) {
+          this.slowAccumulator += dt;
+          if (this.slowAccumulator >= 0.33) {
+            this.update(0.33);
+            this.slowAccumulator -= 0.33;
+          }
+        } else {
+          this.update(dt);
+          this.slowAccumulator = 0;
+        }
       }
       this.lastTime = time;
       if (this.controls) this.controls.update();

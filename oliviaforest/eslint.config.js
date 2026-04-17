@@ -7,6 +7,22 @@ export default [
   },
   js.configs.recommended,
   {
+    files: ['playwright.config.js', 'tests/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-undef': 'error',
+    },
+  },
+  {
+    files: ['src/**/*.js', '*.js'],
+    ignores: ['playwright.config.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

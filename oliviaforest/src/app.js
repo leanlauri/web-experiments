@@ -1,8 +1,21 @@
 import { Engine } from './engine.js';
 import { World } from './world.js';
-import { InputHandler } from './input-handler.js';
 import { PhysicsDebug } from './physics-debug.js';
+import * as THREE from 'three';
 
+const showFatalError = (error) => {
+  const overlay = document.getElementById('fatalOverlay');
+  const message = document.getElementById('fatalMessage');
+  const detail = error instanceof Error ? error.message : String(error);
+  if (message) {
+    message.textContent = `The 3D scene could not start.\n\n${detail}`;
+  }
+  if (overlay) {
+    overlay.style.display = 'flex';
+  }
+};
+
+try {
 const engine = new Engine();
 const world = new World(engine);
 engine.setWorld(world);
@@ -10,43 +23,371 @@ world.init();
 engine.start();
 engine.run();
 
-const debugToggle = document.getElementById('debugToggle');
+const debugLinesToggle = document.getElementById('debugLinesToggle');
+const hideTerrainToggle = document.getElementById('hideTerrainToggle');
+const disableFollowCamToggle = document.getElementById('disableFollowCamToggle');
+const hideObstaclesToggle = document.getElementById('hideObstaclesToggle');
+const slowToggle = document.getElementById('slowToggle');
+const hud = document.getElementById('hud');
+const fpsLabel = document.getElementById('fps');
+const distanceLabel = document.getElementById('distance');
+const crashOverlay = document.getElementById('crashOverlay');
+const crashText = document.getElementById('crashText');
+const tryAgain = document.getElementById('tryAgain');
+const startOverlay = document.getElementById('startOverlay');
+const startPrompt = document.getElementById('startPrompt');
 const physicsDebug = new PhysicsDebug(engine.scene, world.physicsWorld, { color: 0xff3333 });
+const urlParams = new URLSearchParams(window.location.search);
 
-engine.addPostUpdate(() => {
-  physicsDebug.update();
-});
-
-const setDebug = (enabled) => {
-  physicsDebug.setEnabled(enabled);
-  debugToggle?.classList.toggle('active', enabled);
+const readFlagFromUrl = (keys, fallback = false) => {
+  for (const key of keys) {
+    if (!urlParams.has(key)) continue;
+    const raw = `${urlParams.get(key) ?? ''}`.trim().toLowerCase();
+    if (raw === '' || raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
+    if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
+  }
+  return fallback;
 };
 
-setDebug(false);
+let fpsFrames = 0;
+let fpsLast = typeof performance !== 'undefined' ? performance.now() : 0;
+let frozenDistance = 0;
+let crashShown = false;
+let crashTimer = null;
+let startTimer = null;
+let startAnimating = false;
+let startAnimTime = 0;
+const startAnimDuration = 1.6;
 
-if (debugToggle) {
-  debugToggle.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setDebug(!physicsDebug.enabled);
+engine.addPostUpdate((dt) => {
+  physicsDebug.update();
+  if (hud && world.debug) {
+    const yaw = Number(world.debug.yawAngularVelocity) || 0;
+    hud.textContent = `❄️ Winter Physics — steer with thumbstick, jump on right | yaw ${yaw.toFixed(2)} rad/s`;
+  }
+  if (fpsLabel && typeof performance !== 'undefined') {
+    fpsFrames += 1;
+    const now = performance.now();
+    const elapsed = now - fpsLast;
+    if (elapsed >= 500) {
+      const fps = (fpsFrames * 1000) / Math.max(1, elapsed);
+      fpsLabel.textContent = `FPS: ${fps.toFixed(0)}`;
+      fpsFrames = 0;
+      fpsLast = now;
+    }
+  }
+
+  const body = world.player?.getComponent?.('physics')?.body;
+  if (distanceLabel && body && world.playerStart) {
+    if (!world.playerFallen) {
+      const dx = body.position.x - world.playerStart.x;
+      const dz = body.position.z - world.playerStart.z;
+      frozenDistance = Math.hypot(dx, dz);
+    }
+    distanceLabel.textContent = `${Math.round(frozenDistance)} m`;
+  }
+
+  if (world.playerFallen && !crashShown && crashOverlay && crashText && tryAgain) {
+    crashShown = true;
+    crashText.textContent = `Crashed. You skied ${Math.round(frozenDistance)} meters`;
+    crashOverlay.style.display = 'flex';
+    tryAgain.style.visibility = 'hidden';
+    if (crashTimer) clearTimeout(crashTimer);
+    crashTimer = setTimeout(() => {
+      tryAgain.style.visibility = 'visible';
+    }, 2000);
+  }
+
+  if (startAnimating && engine.camera && body) {
+    startAnimTime += dt;
+    const t = Math.min(1, startAnimTime / startAnimDuration);
+    const cam = engine.camera;
+    const heading = world.player?.getComponent?.('mesh')?.mesh?.quaternion;
+    const forward = heading ? new THREE.Vector3(0, 0, -1).applyQuaternion(heading).normalize() : new THREE.Vector3(0, 0, -1);
+    const desired = new THREE.Vector3(
+      body.position.x - forward.x * 8,
+      body.position.y + 4,
+      body.position.z - forward.z * 8,
+    );
+    cam.position.lerp(desired, t);
+    cam.lookAt(body.position.x, body.position.y + 1.2, body.position.z);
+    if (t >= 1) {
+      startAnimating = false;
+      world.gameStarted = true;
+      world.setCameraFollowEnabled(true);
+    }
+  }
+
+  if (physicsDebug.enabled && world.debug?.groundNormal) {
+    physicsDebug.setGroundNormal(world.debug.groundNormal.position, world.debug.groundNormal.direction);
+  }
+  if (physicsDebug.enabled && world.debug?.forwardVelocity) {
+    physicsDebug.setForwardVelocity(world.debug.forwardVelocity.position, world.debug.forwardVelocity.direction);
+  }
+  if (physicsDebug.enabled && world.debug?.sumForce) {
+    physicsDebug.setSumForce(world.debug.sumForce.position, world.debug.sumForce.direction, world.debug.sumForce.magnitude);
+  }
+  if (physicsDebug.enabled && world.debug?.sumTorque) {
+    physicsDebug.setSumTorque(world.debug.sumTorque.position, world.debug.sumTorque.direction, world.debug.sumTorque.magnitude);
+  }
+  if (physicsDebug.enabled && world.debug?.frenchFriesForce) {
+    physicsDebug.setFrenchFriesForce(world.debug.frenchFriesForce.position, world.debug.frenchFriesForce.direction);
+  }
+});
+
+const setDebugLines = (enabled) => {
+  physicsDebug.setEnabled(enabled);
+  if (debugLinesToggle) debugLinesToggle.checked = !!enabled;
+};
+
+const setTerrainHidden = (hidden) => {
+  world.setTerrainVisible(!hidden);
+  if (hideTerrainToggle) hideTerrainToggle.checked = !!hidden;
+};
+
+const setFollowCameraDisabled = (disabled) => {
+  world.setCameraFollowEnabled(!disabled);
+  if (disableFollowCamToggle) disableFollowCamToggle.checked = !!disabled;
+};
+
+const setHideObstacles = (hidden) => {
+  world.setObstaclesVisible?.(!hidden);
+  if (hideObstaclesToggle) hideObstaclesToggle.checked = !!hidden;
+};
+
+setDebugLines(readFlagFromUrl(['debugLines', 'debug', 'physicsDebug'], false));
+setTerrainHidden(readFlagFromUrl(['hideTerrain', 'terrainHidden'], false));
+setFollowCameraDisabled(readFlagFromUrl(['disableFollowCamera', 'freeCamera', 'followCameraOff'], false));
+setHideObstacles(readFlagFromUrl(['hideObstacles', 'obstaclesHidden'], false));
+
+if (engine.camera && world.playerStart) {
+  engine.camera.position.set(world.playerStart.x, world.playerStart.y + 10, world.playerStart.z);
+  engine.camera.lookAt(world.playerStart.x, world.playerStart.y + 2, world.playerStart.z);
+}
+world.setCameraFollowEnabled(false);
+
+if (startOverlay) {
+  if (startTimer) clearTimeout(startTimer);
+  startTimer = setTimeout(() => {
+    if (startPrompt) startPrompt.style.visibility = 'visible';
+  }, 2000);
+}
+
+const setSlow = (enabled) => {
+  engine.slowMo1fps = enabled;
+  slowToggle?.classList.toggle('active', enabled);
+};
+
+setSlow(false);
+
+if (debugLinesToggle) {
+  debugLinesToggle.addEventListener('change', () => {
+    setDebugLines(debugLinesToggle.checked);
   });
-  debugToggle.addEventListener('touchstart', (event) => {
+}
+
+if (hideTerrainToggle) {
+  hideTerrainToggle.addEventListener('change', () => {
+    setTerrainHidden(hideTerrainToggle.checked);
+  });
+}
+
+if (disableFollowCamToggle) {
+  disableFollowCamToggle.addEventListener('change', () => {
+    setFollowCameraDisabled(disableFollowCamToggle.checked);
+  });
+}
+
+if (hideObstaclesToggle) {
+  hideObstaclesToggle.addEventListener('change', () => {
+    setHideObstacles(hideObstaclesToggle.checked);
+  });
+}
+
+if (slowToggle) {
+  slowToggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setSlow(!engine.slowMo1fps);
+  });
+  slowToggle.addEventListener('touchstart', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    setDebug(!physicsDebug.enabled);
+    setSlow(!engine.slowMo1fps);
   }, { passive: false });
 }
 
 window.addEventListener('keydown', (event) => {
   if (event.key?.toLowerCase() === 'd') {
-    setDebug(!physicsDebug.enabled);
+    setDebugLines(!physicsDebug.enabled);
+  }
+  if (event.key?.toLowerCase() === 't') {
+    setSlow(!engine.slowMo1fps);
   }
 });
 
-new InputHandler({
-  element: window,
-  onTapped: () => world.spawnRandomEntity(),
-  onSwiped: (direction) => {
-    // Placeholder for future controls.
-    console.log('Swiped:', direction);
-  },
+// Touch controls
+const inputState = { steer: 0, jump: false, boost: false };
+world.input = inputState;
+
+const joystickZone = document.getElementById('joystickZone');
+const joystickBase = document.getElementById('joystickBase');
+const joystickThumb = document.getElementById('joystickThumb');
+const jumpButton = document.getElementById('jumpButton');
+const boostButton = document.getElementById('boostButton');
+let joystickActive = false;
+let joystickId = null;
+let origin = { x: 0, y: 0 };
+const radius = 50;
+const alwaysShowJoystick = typeof window !== 'undefined'
+  && window.matchMedia
+  && window.matchMedia('(pointer: coarse)').matches;
+
+const setStickVisible = (visible) => {
+  if (!joystickBase || !joystickThumb) return;
+  const show = alwaysShowJoystick ? true : visible;
+  joystickBase.style.display = show ? 'block' : 'none';
+  joystickThumb.style.display = show ? 'block' : 'none';
+};
+
+const setStickPosition = (x, y, dx = 0, dy = 0) => {
+  if (!joystickBase || !joystickThumb) return;
+  const rect = joystickZone?.getBoundingClientRect();
+  const localX = rect ? x - rect.left : x;
+  const localY = rect ? y - rect.top : y;
+  joystickBase.style.left = `${localX}px`;
+  joystickBase.style.top = `${localY}px`;
+  joystickThumb.style.left = `${localX + dx}px`;
+  joystickThumb.style.top = `${localY + dy}px`;
+};
+
+const setStickIdlePosition = () => {
+  if (typeof window === 'undefined') return;
+  const x = 80;
+  const y = window.innerHeight - 80;
+  origin = { x, y };
+  setStickPosition(origin.x, origin.y, 0, 0);
+};
+
+if (joystickZone) {
+  if (alwaysShowJoystick) {
+    setStickVisible(true);
+    setStickIdlePosition();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', setStickIdlePosition);
+    }
+  }
+
+  joystickZone.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    joystickActive = true;
+    joystickId = event.pointerId;
+    origin = { x: event.clientX, y: event.clientY };
+    setStickVisible(true);
+    setStickPosition(origin.x, origin.y, 0, 0);
+    joystickZone.setPointerCapture(event.pointerId);
+  });
+
+  joystickZone.addEventListener('pointermove', (event) => {
+    if (!joystickActive || event.pointerId !== joystickId) return;
+    const dx = event.clientX - origin.x;
+    const dy = event.clientY - origin.y;
+    const dist = Math.hypot(dx, dy);
+    const scale = dist > radius ? radius / dist : 1;
+    const clampedX = dx * scale;
+    const clampedY = dy * scale;
+
+    inputState.steer = Math.max(-1, Math.min(1, -clampedX / radius));
+    setStickPosition(origin.x, origin.y, clampedX, clampedY);
+  });
+
+  const endStick = (event) => {
+    if (event && event.pointerId !== joystickId) return;
+    joystickActive = false;
+    joystickId = null;
+    inputState.steer = 0;
+    setStickVisible(false);
+    if (alwaysShowJoystick) {
+      setStickIdlePosition();
+    }
+  };
+
+  joystickZone.addEventListener('pointerup', endStick);
+  joystickZone.addEventListener('pointercancel', endStick);
+  joystickZone.addEventListener('pointerleave', endStick);
+}
+
+if (jumpButton) {
+  const setJump = (state) => {
+    inputState.jump = state;
+    jumpButton.classList.toggle('active', state);
+  };
+
+  jumpButton.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setJump(true);
+    jumpButton.setPointerCapture?.(event.pointerId);
+  });
+  jumpButton.addEventListener('pointerup', () => setJump(false));
+  jumpButton.addEventListener('pointercancel', () => setJump(false));
+  jumpButton.addEventListener('pointerleave', () => setJump(false));
+}
+
+const reloadGame = () => {
+  window.location.reload();
+};
+
+const startGame = () => {
+  if (world.gameStarted || startAnimating) return;
+  startAnimating = true;
+  startAnimTime = 0;
+  if (startOverlay) startOverlay.style.display = 'none';
+};
+
+if (tryAgain) {
+  tryAgain.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    reloadGame();
+  });
+}
+
+if (startOverlay) {
+  startOverlay.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startGame();
+  });
+}
+
+window.addEventListener('keydown', (event) => {
+  if (world.playerFallen && (event.code === 'Space' || event.code === 'ArrowUp')) {
+    event.preventDefault();
+    reloadGame();
+  }
+  if (!world.gameStarted && (event.code === 'Space' || event.code === 'ArrowUp')) {
+    event.preventDefault();
+    startGame();
+  }
 });
+
+if (boostButton) {
+  const setBoost = (state) => {
+    inputState.boost = state;
+    boostButton.classList.toggle('active', state);
+  };
+
+  boostButton.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setBoost(true);
+    boostButton.setPointerCapture?.(event.pointerId);
+  });
+  boostButton.addEventListener('pointerup', () => setBoost(false));
+  boostButton.addEventListener('pointercancel', () => setBoost(false));
+  boostButton.addEventListener('pointerleave', () => setBoost(false));
+}
+} catch (error) {
+  console.error('App bootstrap failed:', error);
+  showFatalError(error);
+}
