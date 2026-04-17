@@ -109,6 +109,36 @@ export class AssetLoader {
     return group;
   }
 
+  createTomatoHatMesh() {
+    const tomato = new THREE.Mesh(
+      new THREE.SphereGeometry(0.36, 20, 16),
+      new THREE.MeshStandardMaterial({ color: 0xff3b30, roughness: 0.46, metalness: 0.02 }),
+    );
+    tomato.castShadow = true;
+    tomato.receiveShadow = false;
+    tomato.position.set(0, 1.2, 0);
+
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.04, 0.13, 8),
+      new THREE.MeshStandardMaterial({ color: 0x2f8f3b, roughness: 0.72 }),
+    );
+    stem.castShadow = true;
+    stem.position.set(0, 0.34, 0);
+
+    const leaf = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.16, 5),
+      new THREE.MeshStandardMaterial({ color: 0x3da64a, roughness: 0.72 }),
+    );
+    leaf.castShadow = true;
+    leaf.position.set(0.07, 0.34, 0);
+    leaf.rotation.z = Math.PI * 0.38;
+
+    const hat = new THREE.Group();
+    hat.name = 'tomatoHat';
+    hat.add(tomato, stem, leaf);
+    return hat;
+  }
+
   normalizeSkierModel(model, {
     targetHeight = 1.7,
     desiredMinY = -0.75,
@@ -195,7 +225,9 @@ export class AssetLoader {
     const group = new THREE.Group();
     const visualRoot = new THREE.Group();
     const placeholder = this.createSkierPlaceholderMesh();
+    const tomatoHat = this.createTomatoHatMesh();
     visualRoot.add(placeholder);
+    visualRoot.add(tomatoHat);
     group.add(visualRoot);
 
     this.loadSkierModel().then(async (model) => {
