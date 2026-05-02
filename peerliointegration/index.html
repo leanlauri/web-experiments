@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Peerl.io Demo 2</title>
+    <script type="module">
+    import { createSideChatAddon } from "https://app.peerl.io/lib/sidechat-addon.js";
+
+    createSideChatAddon({
+        mount: document.body,
+        apiBaseUrl: "https://api.peerl.io",
+        websiteBaseUrl: "https://leanlauri.github.io",
+        sitePublicKey: "site_pk_f9db85265bc74483b12acf9f",
+        launcherPlacement: {
+        corner: "bottom-right",
+        offsetX: 0,
+        offsetY: 0
+        }
+    });
+    </script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Caveat:wght@600;700&family=Nunito:wght@500;600;700&display=swap");
+
+      :root {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Nunito", sans-serif;
+        background: #fff;
+        color: #2b3e67;
+      }
+
+      .frame {
+        margin: 50px;
+        min-height: calc(100vh - 100px);
+        border: 2px dashed #86aedd;
+        border-radius: 22px;
+        padding: 24px;
+      }
+
+      .content {
+        margin-top: 33vh;
+        display: grid;
+        grid-template-columns: 1fr auto minmax(300px, 560px);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .you-site {
+        margin: 0;
+        font-family: "Caveat", cursive;
+        font-size: clamp(2rem, 5vw, 3.3rem);
+        transform: rotate(-4deg);
+        color: #304c7d;
+      }
+
+      .plus {
+        margin: 0;
+        font-family: "Baloo 2", "Nunito", sans-serif;
+        font-size: clamp(2rem, 4.2vw, 3rem);
+        color: #3c79b0;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #f6fbff;
+        border: 1px solid #c7ddf4;
+        border-radius: 16px;
+        padding: 16px;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+
+      @media (max-width: 860px) {
+        .frame {
+          margin: 20px;
+          min-height: calc(100vh - 40px);
+        }
+
+        .content {
+          margin-top: 18vh;
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="frame">
+      <section class="content">
+        <h1 class="you-site">Integration with Peerl.io</h1>
+      </section>
+    </main>
+  </body>
+</html>
