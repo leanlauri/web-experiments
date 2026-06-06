@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>Flyer — Bird Over Countryside</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      background: #b9d9e8;
+      color: #f8fbf5;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    canvas { display: block; }
+    #hud {
+      position: fixed;
+      left: 14px;
+      top: 12px;
+      z-index: 5;
+      display: grid;
+      gap: 6px;
+      width: min(360px, calc(100vw - 28px));
+      color: #f8fbf5;
+      text-shadow: 0 1px 7px rgba(31, 43, 36, 0.55);
+      user-select: none;
+      pointer-events: none;
+    }
+    #title {
+      font-size: 18px;
+      line-height: 1.1;
+      font-weight: 800;
+    }
+    #readout {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .pill {
+      border: 1px solid rgba(255,255,255,0.38);
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: rgba(35, 51, 41, 0.28);
+      backdrop-filter: blur(10px);
+    }
+    #help {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 5;
+      max-width: min(310px, calc(100vw - 24px));
+      color: rgba(248, 251, 245, 0.9);
+      font-size: 12px;
+      line-height: 1.45;
+      text-align: right;
+      text-shadow: 0 1px 7px rgba(31, 43, 36, 0.6);
+      user-select: none;
+      pointer-events: none;
+    }
+    #fatalOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      padding: 24px;
+      background: rgba(185, 217, 232, 0.96);
+      color: #26342b;
+      text-align: center;
+    }
+    #fatalTitle {
+      font-size: 30px;
+      line-height: 1.1;
+      font-weight: 800;
+    }
+    #fatalMessage {
+      max-width: 720px;
+      white-space: pre-wrap;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="title">Flyer</div>
+    <div id="readout">
+      <span class="pill" id="speed">Speed --</span>
+      <span class="pill" id="altitude">Altitude --</span>
+      <span class="pill" id="biome">Open country</span>
+      <span class="pill" id="chunks">Chunks --</span>
+    </div>
+  </div>
+  <div id="help">W/S pitch, A/D bank, Space flap, Shift glide faster. Fly toward towns, woods, fields, cliffs, and roads.</div>
+  <div id="fatalOverlay">
+    <div id="fatalTitle">Renderer startup failed</div>
+    <div id="fatalMessage">The 3D scene could not start.</div>
+  </div>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
