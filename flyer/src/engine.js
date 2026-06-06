@@ -13,7 +13,7 @@ export class Engine extends EngineCore {
     this.scene.background = new THREE.Color(0xb9d9e8);
     this.scene.fog = new THREE.FogExp2(0xb9d9e8, 0.0045);
 
-    this.camera = new THREE.PerspectiveCamera(62, width / height, 0.1, 1200);
+    this.camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1200);
     this.camera.position.set(0, 22, 48);
 
     this.renderer = null;

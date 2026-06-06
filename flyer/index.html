@@ -85,6 +85,22 @@
       font-size: 15px;
       line-height: 1.45;
     }
+    #restartOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: #f8fbf5;
+      font-size: 28px;
+      line-height: 1.1;
+      font-weight: 800;
+      text-align: center;
+      text-shadow: 0 2px 12px rgba(31, 43, 36, 0.8);
+      pointer-events: none;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -94,10 +110,12 @@
       <span class="pill" id="speed">Speed --</span>
       <span class="pill" id="altitude">Altitude --</span>
       <span class="pill" id="biome">Open country</span>
+      <span class="pill" id="mode">Wing controls</span>
       <span class="pill" id="chunks">Chunks --</span>
     </div>
   </div>
-  <div id="help">W/S pitch, A/D bank, Space flap, Shift glide faster. Fly toward towns, woods, fields, cliffs, and roads.</div>
+  <div id="help">Left flaps right wing, Right flaps left wing, Up lowers head, Down lifts head. Flap both wings for faster acceleration.</div>
+  <div id="restartOverlay">Crashed<br />tap to restart</div>
   <div id="fatalOverlay">
     <div id="fatalTitle">Renderer startup failed</div>
     <div id="fatalMessage">The 3D scene could not start.</div>

@@ -43,11 +43,12 @@ export class FlightComponent {
 
   constructor({
     velocity,
-    speed = 26,
-    minSpeed = 12,
-    maxSpeed = 58,
+    speed = 13,
+    minSpeed = 0,
+    maxSpeed = 29,
     lift = 16,
     turnRate = 1.55,
+    stallSpeed = 7,
   }) {
     this.type = FlightComponent.type;
     this.velocity = velocity;
@@ -56,5 +57,6 @@ export class FlightComponent {
     this.maxSpeed = maxSpeed;
     this.lift = lift;
     this.turnRate = turnRate;
+    this.stallSpeed = stallSpeed;
   }
 }

@@ -15,6 +15,7 @@ const materials = {
   feather: new THREE.MeshStandardMaterial({ color: 0x2a3941, roughness: 0.66 }),
   chest: new THREE.MeshStandardMaterial({ color: 0xd7c090, roughness: 0.6 }),
   beak: new THREE.MeshStandardMaterial({ color: 0xd7a23b, roughness: 0.5 }),
+  leg: new THREE.MeshStandardMaterial({ color: 0xb8893a, roughness: 0.65 }),
 };
 
 export class AssetFactory {
@@ -39,16 +40,22 @@ export class AssetFactory {
     beak.castShadow = true;
 
     const wingGeom = new THREE.BoxGeometry(2.4, 0.08, 0.55);
-    const leftWing = new THREE.Mesh(wingGeom, materials.feather);
-    const rightWing = new THREE.Mesh(wingGeom, materials.feather);
-    leftWing.position.set(-1.25, 0.02, -0.05);
-    rightWing.position.set(1.25, 0.02, -0.05);
+    const leftWing = new THREE.Group();
+    const rightWing = new THREE.Group();
+    const leftFeathers = new THREE.Mesh(wingGeom, materials.feather);
+    const rightFeathers = new THREE.Mesh(wingGeom, materials.feather);
+    leftWing.position.set(-0.55, 0.02, -0.05);
+    rightWing.position.set(0.55, 0.02, -0.05);
+    leftFeathers.position.set(-1.2, 0, 0);
+    rightFeathers.position.set(1.2, 0, 0);
     leftWing.rotation.z = 0.12;
     rightWing.rotation.z = -0.12;
-    leftWing.castShadow = true;
-    rightWing.castShadow = true;
+    leftFeathers.castShadow = true;
+    rightFeathers.castShadow = true;
     leftWing.name = 'leftWing';
     rightWing.name = 'rightWing';
+    leftWing.add(leftFeathers);
+    rightWing.add(rightFeathers);
 
     const tail = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.8, 4), materials.feather);
     tail.rotation.x = Math.PI / 2;
@@ -56,8 +63,25 @@ export class AssetFactory {
     tail.position.set(0, 0.02, 1.18);
     tail.castShadow = true;
 
-    group.add(body, chest, head, beak, leftWing, rightWing, tail);
-    group.scale.setScalar(1.25);
+    const legGeom = new THREE.CylinderGeometry(0.035, 0.035, 0.55, 6);
+    const footGeom = new THREE.BoxGeometry(0.12, 0.035, 0.34);
+    const leftLeg = new THREE.Mesh(legGeom, materials.leg);
+    const rightLeg = new THREE.Mesh(legGeom, materials.leg);
+    const leftFoot = new THREE.Mesh(footGeom, materials.leg);
+    const rightFoot = new THREE.Mesh(footGeom, materials.leg);
+    leftLeg.position.set(-0.18, -0.62, 0.06);
+    rightLeg.position.set(0.18, -0.62, 0.06);
+    leftFoot.position.set(-0.18, -0.91, -0.05);
+    rightFoot.position.set(0.18, -0.91, -0.05);
+    leftFoot.rotation.x = 0.18;
+    rightFoot.rotation.x = 0.18;
+    leftLeg.castShadow = true;
+    rightLeg.castShadow = true;
+    leftFoot.castShadow = true;
+    rightFoot.castShadow = true;
+
+    group.add(body, chest, head, beak, leftWing, rightWing, tail, leftLeg, rightLeg, leftFoot, rightFoot);
+    group.scale.setScalar(0.42);
     return group;
   }
 

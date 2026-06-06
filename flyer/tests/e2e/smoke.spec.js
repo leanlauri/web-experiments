@@ -5,6 +5,7 @@ test('starts the flyer scene and paints a canvas', async ({ page }) => {
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
   await expect(page.locator('#speed')).toContainText('Speed', { timeout: 10_000 });
+  await expect(page.locator('#mode')).toHaveText('Wing controls');
 
   const pixels = await page.evaluate(() => {
     const canvasEl = document.querySelector('canvas');

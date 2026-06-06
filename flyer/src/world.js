@@ -12,7 +12,9 @@ export class World {
     this.assets = new AssetFactory();
     this.noise = new ValueNoise(seed);
     this.seed = seed;
+    this.fieldRegionCache = new Map();
     this.player = null;
+    this.flightState = 'flying';
     this.lastBiome = 'Open country';
     this.stats = {
       chunks: 0,
@@ -101,12 +103,18 @@ export class World {
     const entity = new Entity('bird');
     entity.addComponent(new MeshComponent(bird));
     entity.addComponent(new FlightComponent({
-      velocity: new THREE.Vector3(0, 0, -26),
-      speed: 28,
+      velocity: new THREE.Vector3(0, 0, -13),
+      speed: 14,
     }));
     entity.addScript(new BirdController({ input: this.input, world: this }));
     this.engine.addEntity(entity);
     this.player = entity;
+    this.flightState = 'flying';
+  }
+
+  restartPlayer() {
+    const controller = this.player?.scripts?.find((script) => typeof script.reset === 'function');
+    controller?.reset();
   }
 
   updateCameraFollow(dt) {
@@ -119,15 +127,15 @@ export class World {
     const side = new THREE.Vector3(1, 0, 0).applyQuaternion(mesh.quaternion).normalize();
     const desired = new THREE.Vector3()
       .copy(mesh.position)
-      .addScaledVector(forward, -24)
+      .addScaledVector(forward, -12)
       .addScaledVector(side, -flight.velocity.x * 0.04)
-      .add(new THREE.Vector3(0, 10, 0));
+      .add(new THREE.Vector3(0, 5.2, 0));
 
     cam.position.lerp(desired, clamp(dt * 3.4, 0, 1));
     const lookAt = new THREE.Vector3()
       .copy(mesh.position)
-      .addScaledVector(forward, 25)
-      .add(new THREE.Vector3(0, 2.5, 0));
+      .addScaledVector(forward, 13)
+      .add(new THREE.Vector3(0, -5.6, 0));
     cam.lookAt(lookAt);
   }
 
@@ -240,7 +248,7 @@ export class World {
     const mountainChance = biome.mountain;
 
     if (farmChance > 0.48) {
-      count += this.addFarm(group, centerX, centerZ, rng);
+      count += this.addFarm(group, xIndex, zIndex, centerX, centerZ, rng);
     }
 
     if (townChance > 0.68 && mountainChance < 0.45) {
@@ -297,25 +305,14 @@ export class World {
     return 1;
   }
 
-  addFarm(group, centerX, centerZ, rng) {
+  addFarm(group, xIndex, zIndex, centerX, centerZ, rng) {
     let count = 0;
-    const baseX = (rng() - 0.5) * 42;
-    const baseZ = (rng() - 0.5) * 42;
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 3; col++) {
-        const w = 13 + rng() * 13;
-        const d = 10 + rng() * 12;
-        const x = baseX + (col - 1) * 20 + (rng() - 0.5) * 4;
-        const z = baseZ + (row - 0.5) * 18 + (rng() - 0.5) * 4;
-        const worldX = centerX + x;
-        const worldZ = centerZ + z;
-        if (this.getRoadBlend(worldX, worldZ) > 0.16) continue;
-        const field = this.assets.createField(w, d, rng);
-        field.position.set(x, this.getHeight(worldX, worldZ) + 0.08, z);
-        field.rotation.y = (rng() - 0.5) * 0.28;
-        group.add(field);
-        count += 1;
-      }
+    for (const region of this.getFieldRegionsForChunk(xIndex, zIndex)) {
+      const field = this.assets.createField(region.width, region.depth, rng);
+      field.position.set(region.x - centerX, this.getHeight(region.x, region.z) + 0.08, region.z - centerZ);
+      field.rotation.y = region.rotation;
+      group.add(field);
+      count += 1;
     }
     return count;
   }
@@ -375,7 +372,70 @@ export class World {
     };
   }
 
+  getFieldRegionsForChunk(xIndex, zIndex) {
+    const key = `${xIndex},${zIndex}`;
+    if (this.fieldRegionCache.has(key)) return this.fieldRegionCache.get(key);
+
+    const { chunkSize } = this.terrain;
+    const centerX = (xIndex + 0.5) * chunkSize;
+    const centerZ = (zIndex + 0.5) * chunkSize;
+    const biome = this.getChunkBiome(centerX, centerZ);
+    const regions = [];
+
+    if (biome.farm > 0.48 && biome.mountain < 0.52) {
+      const rng = makeChunkRng(this.seed, xIndex, zIndex, 31);
+      const baseX = (rng() - 0.5) * 42;
+      const baseZ = (rng() - 0.5) * 42;
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 3; col++) {
+          const width = 13 + rng() * 13;
+          const depth = 10 + rng() * 12;
+          const localX = baseX + (col - 1) * 20 + (rng() - 0.5) * 4;
+          const localZ = baseZ + (row - 0.5) * 18 + (rng() - 0.5) * 4;
+          const x = centerX + localX;
+          const z = centerZ + localZ;
+          if (this.getRoadBlend(x, z) > 0.16) continue;
+          const rotation = (rng() - 0.5) * 0.28;
+          regions.push({
+            x,
+            z,
+            width,
+            depth,
+            rotation,
+            height: this.getFieldBaseHeight(x, z, width, depth, rotation),
+          });
+        }
+      }
+    }
+
+    this.fieldRegionCache.set(key, regions);
+    return regions;
+  }
+
+  getFieldBaseHeight(x, z, width, depth, rotation) {
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const samples = [
+      [0, 0],
+      [-width * 0.35, -depth * 0.35],
+      [width * 0.35, -depth * 0.35],
+      [-width * 0.35, depth * 0.35],
+      [width * 0.35, depth * 0.35],
+    ];
+    let total = 0;
+    for (const [localX, localZ] of samples) {
+      const sampleX = x + localX * cos + localZ * sin;
+      const sampleZ = z - localX * sin + localZ * cos;
+      total += this.getBaseHeight(sampleX, sampleZ);
+    }
+    return total / samples.length;
+  }
+
   getHeight(x, z) {
+    return this.applyFieldFlattening(x, z, this.getBaseHeight(x, z));
+  }
+
+  getBaseHeight(x, z) {
     const ridgeNoise = this.noise.fbm(x * 0.007 - 100, z * 0.007 + 25, 5);
     const ridge = Math.pow(1 - Math.abs(ridgeNoise * 2 - 1), 2.3);
     const mountain = this.getMountainFactor(x, z);
@@ -386,6 +446,34 @@ export class World {
     const raw = rolling + detail + valley + mountain * (ridge * 80 + 24);
     const softenedRoad = raw * (1 - roadBlend * 0.45) + (rolling * 0.45 + valley * 0.2) * roadBlend;
     return softenedRoad;
+  }
+
+  applyFieldFlattening(x, z, height) {
+    const { xi, zi } = this.getChunkIndices(x, z);
+    let flattened = height;
+    for (let cz = zi - 1; cz <= zi + 1; cz++) {
+      for (let cx = xi - 1; cx <= xi + 1; cx++) {
+        for (const region of this.getFieldRegionsForChunk(cx, cz)) {
+          const blend = this.getFieldBlend(x, z, region);
+          if (blend <= 0) continue;
+          flattened = THREE.MathUtils.lerp(flattened, region.height, blend * 0.94);
+        }
+      }
+    }
+    return flattened;
+  }
+
+  getFieldBlend(x, z, region) {
+    const dx = x - region.x;
+    const dz = z - region.z;
+    const cos = Math.cos(region.rotation);
+    const sin = Math.sin(region.rotation);
+    const localX = dx * cos - dz * sin;
+    const localZ = dx * sin + dz * cos;
+    const edge = Math.min(region.width / 2 - Math.abs(localX), region.depth / 2 - Math.abs(localZ));
+    const fade = 5;
+    if (edge <= -fade) return 0;
+    return smoothstep(clamp((edge + fade) / fade, 0, 1));
   }
 
   getMountainFactor(x, z) {

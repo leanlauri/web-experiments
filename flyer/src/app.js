@@ -27,7 +27,15 @@ try {
   const speedLabel = document.getElementById('speed');
   const altitudeLabel = document.getElementById('altitude');
   const biomeLabel = document.getElementById('biome');
+  const modeLabel = document.getElementById('mode');
   const chunksLabel = document.getElementById('chunks');
+  const restartOverlay = document.getElementById('restartOverlay');
+
+  window.addEventListener('pointerdown', () => {
+    if (world.flightState === 'crashed') {
+      world.restartPlayer();
+    }
+  });
 
   engine.addPostUpdate(() => {
     const birdMesh = world.player?.getComponent(MeshComponent.type)?.mesh;
@@ -37,7 +45,9 @@ try {
     if (speedLabel) speedLabel.textContent = `Speed ${Math.round(flight.speed)}`;
     if (altitudeLabel) altitudeLabel.textContent = `Altitude ${Math.round(altitude)} m`;
     if (biomeLabel) biomeLabel.textContent = world.lastBiome;
+    if (modeLabel) modeLabel.textContent = 'Wing controls';
     if (chunksLabel) chunksLabel.textContent = `Chunks ${world.stats.chunks} / fixtures ${world.stats.fixtures}`;
+    if (restartOverlay) restartOverlay.style.display = world.flightState === 'crashed' ? 'flex' : 'none';
   });
 } catch (error) {
   showFatalError(error);

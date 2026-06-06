@@ -40,4 +40,20 @@ describe('World terrain generation', () => {
     expect(desired.get('3,0')).toBe('low');
     expect(desired.has('4,0')).toBe(false);
   });
+
+  it('flattens terrain inside planned field regions', () => {
+    const engine = makeEngine();
+    const world = new World(engine);
+    engine.world = world;
+
+    let field = null;
+    for (let zi = -4; zi <= 4 && !field; zi++) {
+      for (let xi = -4; xi <= 4 && !field; xi++) {
+        field = world.getFieldRegionsForChunk(xi, zi)[0] ?? null;
+      }
+    }
+
+    expect(field).not.toBeNull();
+    expect(world.getHeight(field.x, field.z)).toBeCloseTo(field.height, 0);
+  });
 });
