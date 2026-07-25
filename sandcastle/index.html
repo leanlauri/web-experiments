@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="theme-color" content="#b8d9de" />
+    <title>Sandcastle — Terrain Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="scene" aria-label="Interactive destructible terrain"></canvas>
+      <header class="brand">
+        <span class="brand-mark">S/C</span>
+        <div><strong>SANDCASTLE</strong><small>TERRAIN LAB / 01</small></div>
+      </header>
+      <section class="mission">
+        <span>FIELD TEST</span>
+        <h1>Shape the<br /><em>landscape.</em></h1>
+        <p>Launch kinetic charges. Displace matter.<br />Watch the world repair itself.</p>
+      </section>
+      <aside class="telemetry">
+        <div><span>ACTIVE CHUNKS</span><strong id="chunks">0</strong></div>
+        <div><span>DISPLACED MASS</span><strong id="debris">0</strong></div>
+        <div><span>CHARGES</span><strong id="charges">∞</strong></div>
+      </aside>
+      <div class="reticle"><i></i><i></i></div>
+      <footer class="controls">
+        <div class="action"><b>01</b><span><strong>CLICK / TAP / SPACE</strong>LAUNCH CHARGE</span></div>
+        <div class="action"><b>02</b><span><strong>DRAG</strong>ORBIT CAMERA</span></div>
+        <div class="action"><b>03</b><span><strong>WASD / ARROWS</strong>MOVE CAMERA</span></div>
+        <div class="action"><b>04</b><span><strong>SCROLL / PINCH</strong>ZOOM</span></div>
+        <div class="mode-actions">
+          <button id="silly" type="button" aria-pressed="false">SILLY MODE <span>○</span></button>
+          <button id="sound" type="button" aria-pressed="true">SOUND ON <span>●</span></button>
+          <button id="reset" type="button">REGENERATE TERRAIN <span>↻</span></button>
+        </div>
+      </footer>
+      <div id="flash"></div>
+      <div id="loading"><span></span><p>GENERATING FIELD</p></div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
