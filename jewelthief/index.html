@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jewel Thief</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+      <div class="hud" aria-live="polite">
+        <div class="hud__brand">
+          <span class="hud__name">Vex Vale</span>
+          <span class="hud__alias">The Facet Fox</span>
+        </div>
+        <div class="hud__meters">
+          <div class="meter">
+            <span class="meter__label">Jewels</span>
+            <span id="jewel-count" class="meter__value">0</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Combo</span>
+            <span id="combo-count" class="meter__value">1x</span>
+          </div>
+          <div class="meter">
+            <span class="meter__label">Flow</span>
+            <span id="flow-state" class="meter__value">Idle</span>
+          </div>
+        </div>
+      </div>
+      <div id="loading" class="loading">Loading heist route</div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

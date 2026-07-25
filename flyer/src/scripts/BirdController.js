@@ -77,13 +77,13 @@ export class BirdController {
     current.x = THREE.MathUtils.lerp(current.x, this.manualHeadPitch + stall * 0.32, clamp(dt * 4, 0, 1));
     current.z += imbalance * 1.35 * dt;
     current.z *= 1 - clamp(dt * (totalFlap ? 0.18 : 2.8), 0, 1);
-    current.z = clamp(current.z, -0.95, 0.95);
     mesh.quaternion.setFromEuler(current);
 
     const bankedTwoWingTurn = totalFlap === 2 ? current.z * 0.58 : 0;
     mesh.rotateY((imbalance * 0.42 + bankedTwoWingTurn) * dt);
 
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion).normalize();
+    const wingForceDirection = new THREE.Vector3(0, 1, 0).applyQuaternion(mesh.quaternion).normalize();
     const groundY = this.world.getHeight(mesh.position.x, mesh.position.z);
     const altitude = mesh.position.y - groundY;
     const thermal = this.world.noise.signedFbm(mesh.position.x * 0.006, mesh.position.z * 0.006, 3) * 0.75;
@@ -93,7 +93,8 @@ export class BirdController {
     const gravity = 3.6 + stall * 5.8 + headUp * 1.5;
 
     flight.velocity.copy(forward).multiplyScalar(flight.speed);
-    flight.velocity.y += wingLift + glideLift + thermal + lowLift - gravity;
+    flight.velocity.addScaledVector(wingForceDirection, wingLift);
+    flight.velocity.y += glideLift + thermal + lowLift - gravity;
     const impactVelocityY = flight.velocity.y;
     mesh.position.addScaledVector(flight.velocity, dt);
 
