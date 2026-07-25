@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Robot Side Scroll</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game" aria-label="2D robot side scrolling game"></canvas>
+      <div class="hud" aria-hidden="false">
+        <div class="meter" aria-label="World progress">
+          <span id="progress"></span>
+        </div>
+        <div class="screen-chip" id="screenChip">01/05</div>
+        <div class="controls">
+          <button class="icon-button" id="jumpButton" aria-label="Jump">
+            <i data-lucide="chevron-up"></i>
+          </button>
+          <button class="icon-button" id="pauseButton" aria-label="Pause">
+            <i data-lucide="pause"></i>
+          </button>
+          <button class="icon-button" id="restartButton" aria-label="Restart">
+            <i data-lucide="rotate-ccw"></i>
+          </button>
+        </div>
+      </div>
+      <div class="loader" id="loader">loading</div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

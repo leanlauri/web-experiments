@@ -1,0 +1,23 @@
+{
+  "asset": "Vex Vale / The Facet Fox low-poly greybox",
+  "scale": "Z-up, metres-ish, feet on ground plane, height approx 1.9 including hood ears",
+  "movement_axis": "+X forward/right, Z up, Y depth/camera side",
+  "mesh_parts": 39,
+  "vertices_total": 487,
+  "triangles_total": 818,
+  "materials": [
+    "MAT_Dark_Navy",
+    "MAT_Charcoal",
+    "MAT_Deep_Purple",
+    "MAT_Teal_Accent",
+    "MAT_Gold_Accent",
+    "MAT_Gem_Cyan",
+    "MAT_Warm_Brown",
+    "MAT_Sole_Light"
+  ],
+  "outputs": [
+    "vex_vale_lowpoly_blockout_static.glb",
+    "vex_vale_lowpoly_blockout_static.obj",
+    "vex_vale_combined_static_mesh.glb"
+  ]
+}

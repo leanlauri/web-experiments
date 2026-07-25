@@ -1,0 +1,22 @@
+{
+  "asset": "Vex Vale / The Facet Fox",
+  "version": "0.1 greybox",
+  "frame_rate": 30,
+  "axis_setup": {
+    "up": "+Z",
+    "forward": "+X",
+    "depth_camera_side": "Y"
+  },
+  "clips": [
+    {"name": "ACT_Vex_Idle_60f_loop", "frames": 60, "loop": true, "purpose": "Standing idle with subtle body and scarf movement"},
+    {"name": "ACT_Vex_Run_20f_loop_in_place", "frames": 20, "loop": true, "purpose": "Main in-place run cycle"},
+    {"name": "ACT_Vex_JumpStart_08f", "frames": 8, "loop": false, "purpose": "Jump anticipation and takeoff"},
+    {"name": "ACT_Vex_JumpRise_16f_hold", "frames": 16, "loop": false, "purpose": "Upward jump pose/hold"},
+    {"name": "ACT_Vex_FallLoop_16f_loop", "frames": 16, "loop": true, "purpose": "Falling loop"},
+    {"name": "ACT_Vex_LandLight_10f", "frames": 10, "loop": false, "purpose": "Small landing recovery"},
+    {"name": "ACT_Vex_VaultLow_24f", "frames": 24, "loop": false, "purpose": "Low obstacle vault"},
+    {"name": "ACT_Vex_Trip_30f", "frames": 30, "loop": false, "purpose": "Trip/stumble"},
+    {"name": "ACT_Vex_FrontFlip_30f", "frames": 30, "loop": false, "purpose": "Air trick front flip"},
+    {"name": "ACT_Vex_RollLanding_28f", "frames": 28, "loop": false, "purpose": "Landing roll recovery"}
+  ]
+}
