@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { CELL_SIZE, VoxelTerrain, terrainHeight } from '../src/terrain.js';
+import { CELL_SIZE, SDF_CELL_SIZE, VoxelTerrain, terrainHeight } from '../src/terrain.js';
 
 describe('procedural terrain', () => {
   it('is deterministic for a seed', () => expect(terrainHeight(12, -5, 42)).toBe(terrainHeight(12, -5, 42)));
@@ -79,4 +79,59 @@ describe('procedural terrain', () => {
     expect(terrain.voxels.size - before).toBe(8);
     terrain.dispose();
   });
+
+  it('keeps untouched chunks on the lightweight heightfield mesh', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 6);
+    const mesh = terrain.chunks.get('0,0');
+
+    expect(mesh.geometry.index.count / 3).toBe(CHUNK_SIZE_TRIANGLES);
+    terrain.dispose();
+  });
+
+  it('uses sub-cell SDF geometry around carved edits', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 14);
+    const center = new THREE.Vector3(0, terrain.surfaceY(0, 0) - CELL_SIZE * 0.55, 0);
+    terrain.carveSphere(center, CELL_SIZE * 2.2);
+    const mesh = terrain.chunks.get('0,0');
+    const positions = mesh.geometry.attributes.position;
+    let hasSubCellVertex = false;
+
+    expect(SDF_CELL_SIZE).toBeLessThan(CELL_SIZE);
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      const y = positions.getY(i);
+      const z = positions.getZ(i);
+      const onMaterialGrid = [x, y, z].every((value) => Math.abs(value / CELL_SIZE - Math.round(value / CELL_SIZE)) < 0.001);
+      if (!onMaterialGrid) hasSubCellVertex = true;
+    }
+
+    expect(terrain.sdfChunks.has('0,0')).toBe(true);
+    expect(mesh.geometry.index.count / 3).toBeGreaterThan(CHUNK_SIZE_TRIANGLES);
+    expect(mesh.geometry.index.count / 3).toBeLessThan(2500);
+    expect(hasSubCellVertex).toBe(true);
+    terrain.dispose();
+  });
+
+  it('queries smooth SDF collision against carved cavity walls', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 9);
+    const radius = CELL_SIZE * 2;
+    const center = new THREE.Vector3(0, terrain.surfaceY(0, 0) - CELL_SIZE, 0);
+    terrain.carveSphere(center, radius);
+    const materialSide = center.clone().add(new THREE.Vector3(radius + 0.1, 0, 0));
+    const voidCenterDistance = terrain.sampleSignedDistance(center);
+    const collision = terrain.sphereCollision(materialSide, 0.35);
+
+    expect(voidCenterDistance).toBeGreaterThan(0);
+    expect(collision).not.toBeNull();
+    expect(collision.normal.x).toBeLessThan(-0.7);
+    terrain.dispose();
+  });
 });
+
+const CHUNK_SIZE_TRIANGLES = 10 * 10 * 2;

@@ -17,18 +17,21 @@ bundle.
 
 ## Implementation
 
-The terrain is split into 10×10-cell chunks. Terrain edits mutate a voxel-density
-field, then only touched chunks are remeshed into a smoothed heightfield surface.
-This keeps the boolean edit model compact while avoiding exposed cube-face or
-over-tessellated artifacts in the rendered terrain. Three.js renders the scene;
-Cannon ES integrates bomb and debris motion. Dynamic pieces use the same smoothed
-terrain height as the visible mesh for landing, then their final mesh shape is
-sampled back into the terrain voxel volume. The standalone rock mesh is removed
-after the merge, so later explosions carve the deposited material through the same
-terrain path as the original landscape. Explosions assign roughly 88% of removed
-terrain voxels to visible sand debris and treat the rest as blast wastage; each
-piece carries that voxel budget until it merges, keeping crater volume, flying
-rock volume, and re-added terrain volume in the same rough balance.
+The terrain is split into 10×10-cell chunks. Terrain edits still mutate a compact
+coarse voxel-density field for material accounting, debris budgets, and
+reintegration. Separately, edited chunks record smooth constructive-solid-geometry
+operations and remesh through a local signed-distance-field surface extractor.
+Untouched chunks remain the original lightweight smoothed heightfield, while blast
+and merge zones get sub-cell visual/collision detail without shrinking every voxel
+in the world. Three.js renders the scene; Cannon ES integrates bomb and debris
+motion. Dynamic pieces resolve against the same signed-distance surface used by
+edited terrain chunks, then their final mesh shape is sampled back into the coarse
+terrain voxel volume. The standalone rock mesh is removed after the merge, so later
+explosions carve the deposited material through the same terrain path as the
+original landscape. Explosions assign roughly 88% of removed terrain voxels to
+visible sand debris and treat the rest as blast wastage; each piece carries that
+voxel budget until it merges, keeping crater volume, flying rock volume, and
+re-added terrain volume in the same rough balance.
 
 The scene also seeds destructible low-poly props across the dunes: rainbow arches,
 palm trees, cars, camels, and small mannequin-like people. They are static physics

@@ -27,6 +27,14 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.a
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const effects = [];
+const MAX_DEBRIS_BODIES = 110;
+const MAX_MERGEABLE_DEBRIS_PER_BLAST = 36;
+const MAX_VISUAL_CHIPS = 30;
+const MIN_FRAGMENT_CELLS = 2;
+const BOULDER_ROLLING_RESISTANCE = .88;
+const CHIP_ROLLING_RESISTANCE = .42;
+const BOULDER_STATIC_FRICTION_SPEED = .68;
+const BOULDER_STATIC_FRICTION_MIN_NORMAL_Y = .52;
 const keys = new Set();
 const screenShake = { age: 0, duration: 0, intensity: 0 };
 const particleTexture = createSoftParticleTexture();
@@ -219,14 +227,15 @@ function throwBomb(clientX, clientY) {
   const mesh = new THREE.Mesh(bombGeometry, bombMaterial); mesh.castShadow = true; mesh.position.copy(camera.position).add(raycaster.ray.direction.clone().multiplyScalar(1.6)); scene.add(mesh);
   const body = new CANNON.Body({ mass: 1.3, shape: new CANNON.Sphere(.42), linearDamping: .015 });
   body.position.copy(mesh.position); const velocity = raycaster.ray.direction.clone().multiplyScalar(34); velocity.y += 7;
-  body.velocity.set(velocity.x, velocity.y, velocity.z); body.addEventListener('collide', () => explode(projectile)); world.addBody(body);
-  const projectile = { mesh, body, born: performance.now(), exploded: false }; projectiles.push(projectile);
+  body.velocity.set(velocity.x, velocity.y, velocity.z); body.addEventListener('collide', () => { projectile.pendingExplosion = true; }); world.addBody(body);
+  const projectile = { mesh, body, born: performance.now(), exploded: false, pendingExplosion: false }; projectiles.push(projectile);
 }
 
 function explode(projectile) {
   if (projectile.exploded) return; projectile.exploded = true;
   const center = new THREE.Vector3().copy(projectile.body.position); removePhysics(projectile);
   playExplosionSound(center);
+  explodeDebris(center, 5.2);
   const removed = terrain.carveSphere(center, 4.2);
   for (const piece of allocateTerrainDebris(removed)) spawnDebris(piece.position, center, piece.cells, piece.color);
   spawnRockChips(center, removed);
@@ -235,20 +244,21 @@ function explode(projectile) {
   explodeProps(center, 5.2);
   const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .72, 32), new THREE.MeshBasicMaterial({ color: '#fff0ad', transparent: true, side: THREE.DoubleSide }));
   ring.position.copy(center); ring.lookAt(camera.position); scene.add(ring); effects.push({ type: 'ring', mesh: ring, age: 0, lifetime: .42 });
-  document.querySelector('#flash').animate([{ opacity: .75 }, { opacity: 0 }], { duration: 320 });
 }
 
 function allocateTerrainDebris(removed) {
   if (!removed.length) return [];
   const reusableCells = Math.max(1, Math.floor(removed.length * .88));
-  const count = Math.min(48, Math.max(24, Math.round(Math.sqrt(reusableCells) * 2.8)));
+  const availableSlots = Math.max(0, MAX_DEBRIS_BODIES - debris.length);
+  const count = Math.min(availableSlots, MAX_MERGEABLE_DEBRIS_PER_BLAST, Math.max(14, Math.round(Math.sqrt(reusableCells) * 1.95)));
   const pieces = [];
   let remaining = reusableCells;
-  for (let i = 0; i < count && remaining > 0; i++) {
+  for (let i = 0; i < count && remaining >= MIN_FRAGMENT_CELLS; i++) {
     const slots = count - i;
     const average = remaining / slots;
     const wobble = .55 + Math.random() * .95;
-    const cells = i === count - 1 ? remaining : Math.max(1, Math.min(remaining - slots + 1, Math.round(average * wobble)));
+    const minRemaining = (slots - 1) * MIN_FRAGMENT_CELLS;
+    const cells = i === count - 1 ? remaining : Math.max(MIN_FRAGMENT_CELLS, Math.min(remaining - minRemaining, Math.round(average * wobble)));
     const sample = removed[Math.floor(Math.random() * removed.length)];
     pieces.push({ position: sample.position, cells, color: terrainColor(sample.x, sample.z, sample.position.y, terrain.seed) });
     remaining -= cells;
@@ -403,6 +413,7 @@ function radiusForCells(cells) {
 }
 
 function spawnDebris(position, center, voxelCells = 1, color = null) {
+  if (debris.length >= MAX_DEBRIS_BODIES) return;
   const radius = radiusForCells(voxelCells) * (.68 + Math.random() * .18);
   const visual = sillyMode
     ? createSillyDebrisGeometry(radius)
@@ -411,19 +422,21 @@ function spawnDebris(position, center, voxelCells = 1, color = null) {
   const bottomOffset = Math.max(.12, -(geometry.boundingBox?.min.y ?? -radius));
   const collisionRadius = Math.max(radius * .62, geometry.boundingSphere?.radius ?? radius);
   const mesh = new THREE.Mesh(geometry, visual.material); mesh.position.copy(position); mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.radius = collisionRadius; mesh.userData.bottomOffset = bottomOffset; mesh.userData.disposableMaterial = visual.disposableMaterial; scene.add(mesh);
-  const body = new CANNON.Body({ mass: Math.max(.7, voxelCells * .18), shape: new CANNON.Sphere(collisionRadius), linearDamping: .08, angularDamping: .12, allowSleep: true, sleepSpeedLimit: .25, sleepTimeLimit: 1 });
+  const body = new CANNON.Body({ mass: Math.max(.7, voxelCells * .18), shape: new CANNON.Sphere(collisionRadius), linearDamping: .12, angularDamping: .52, allowSleep: true, sleepSpeedLimit: .45, sleepTimeLimit: .55 });
   body.position.copy(position); const out = position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random()-.5)*.5, .55 + Math.random()*.55, (Math.random()-.5)*.5)).normalize();
   const impulse = 7 + Math.random() * 8;
   body.velocity.set(out.x * impulse, out.y * impulse, out.z * impulse);
-  body.angularVelocity.set(Math.random()*7, Math.random()*7, Math.random()*7); world.addBody(body); debris.push({ mesh, body, stillSince: null, mergeToTerrain: true, voxelCells, lastImpactAt: 0 });
+  body.angularVelocity.set(Math.random()*7, Math.random()*7, Math.random()*7); world.addBody(body); debris.push({ mesh, body, stillSince: null, mergeToTerrain: true, voxelCells, lastImpactAt: 0, rollingResistance: BOULDER_ROLLING_RESISTANCE });
 }
 
 function spawnRockChips(center, removed) {
   if (sillyMode || !removed.length) return;
-  const count = Math.min(40, Math.max(24, Math.round(removed.length * .78)));
+  const visualChipCount = debris.reduce((total, item) => total + (item.mergeToTerrain ? 0 : 1), 0);
+  const availableSlots = Math.max(0, Math.min(MAX_VISUAL_CHIPS - visualChipCount, MAX_DEBRIS_BODIES - debris.length));
+  const count = Math.min(availableSlots, Math.max(8, Math.round(Math.sqrt(removed.length) * 1.35)));
   for (let i = 0; i < count; i++) {
     const sample = removed[Math.floor(Math.random() * removed.length)];
-    const radius = .14 + Math.random() * .26;
+    const radius = .13 + Math.random() * .23;
     const geometry = createDebrisGeometry(radius);
     const material = new THREE.MeshStandardMaterial({
       color: terrainColor(sample.x, sample.z, sample.position.y, terrain.seed),
@@ -444,7 +457,73 @@ function spawnRockChips(center, removed) {
     body.velocity.set(out.x * (8 + Math.random() * 12), out.y * (7 + Math.random() * 11), out.z * (8 + Math.random() * 12));
     body.angularVelocity.set(Math.random() * 12, Math.random() * 12, Math.random() * 12);
     world.addBody(body);
-    debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0 });
+    debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
+  }
+}
+
+function explodeDebris(center, radius) {
+  const targets = [];
+  for (let i = debris.length - 1; i >= 0; i--) {
+    const item = debris[i];
+    const itemRadius = item.mesh.userData.radius ?? item.mesh.geometry.boundingSphere?.radius ?? .4;
+    const distance = item.body.position.distanceTo(center);
+    if (distance <= radius + itemRadius) targets.push({ item, index: i, distance, itemRadius });
+  }
+
+  for (const { item, index, distance, itemRadius } of targets) {
+    if (debris[index] !== item) continue;
+    const position = new THREE.Vector3().copy(item.body.position);
+    const color = item.mesh.material?.color?.clone?.() ?? terrainColor(terrain.worldToGrid(position.x), terrain.worldToGrid(position.z), position.y, terrain.seed);
+    const voxelCells = Math.max(1, Math.round(item.voxelCells ?? 0));
+    removePhysics(item);
+    disposeDebrisMesh(item);
+    debris.splice(index, 1);
+
+    if (!item.mergeToTerrain || voxelCells < MIN_FRAGMENT_CELLS * 2) {
+      spawnBlastChips(position, center, color, Math.max(2, Math.min(5, Math.round(itemRadius * 3.5))));
+      continue;
+    }
+
+    const blastStrength = THREE.MathUtils.clamp(1 - distance / Math.max(radius, 0.001), .25, 1);
+    const availableSlots = Math.max(0, MAX_DEBRIS_BODIES - debris.length);
+    const pieceCount = Math.min(availableSlots, Math.floor(voxelCells / MIN_FRAGMENT_CELLS), Math.max(2, Math.min(8, Math.round(Math.sqrt(voxelCells) * (.95 + blastStrength * .55)))));
+    if (pieceCount <= 0) continue;
+    let remaining = voxelCells;
+    for (let i = 0; i < pieceCount && remaining >= MIN_FRAGMENT_CELLS; i++) {
+      const slots = pieceCount - i;
+      const average = remaining / slots;
+      const minRemaining = (slots - 1) * MIN_FRAGMENT_CELLS;
+      const cells = i === pieceCount - 1 ? remaining : Math.max(MIN_FRAGMENT_CELLS, Math.min(remaining - minRemaining, Math.round(average * (.7 + Math.random() * .55))));
+      const offset = particleDirection(1).multiplyScalar(itemRadius * (.25 + Math.random() * .55));
+      spawnDebris(position.clone().add(offset), center, cells, color);
+      remaining -= cells;
+    }
+  }
+}
+
+function spawnBlastChips(position, center, color, count = 4) {
+  if (sillyMode) return;
+  const visualChipCount = debris.reduce((total, item) => total + (item.mergeToTerrain ? 0 : 1), 0);
+  count = Math.min(count, Math.max(0, MAX_VISUAL_CHIPS - visualChipCount), Math.max(0, MAX_DEBRIS_BODIES - debris.length));
+  for (let i = 0; i < count; i++) {
+    const radius = .14 + Math.random() * .18;
+    const geometry = createDebrisGeometry(radius);
+    const material = new THREE.MeshStandardMaterial({ color, roughness: .96, flatShading: true });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position).add(new THREE.Vector3((Math.random() - .5) * .7, Math.random() * .5, (Math.random() - .5) * .7));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.radius = radius;
+    mesh.userData.bottomOffset = Math.max(.08, -(geometry.boundingBox?.min.y ?? -radius));
+    mesh.userData.disposableMaterial = true;
+    scene.add(mesh);
+    const body = new CANNON.Body({ mass: .12 + radius * .55, shape: new CANNON.Sphere(radius), linearDamping: .14, angularDamping: .22, allowSleep: true, sleepSpeedLimit: .24, sleepTimeLimit: .8 });
+    body.position.copy(mesh.position);
+    const out = mesh.position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random() - .5) * .7, .6 + Math.random() * .75, (Math.random() - .5) * .7)).normalize();
+    body.velocity.set(out.x * (7 + Math.random() * 9), out.y * (6 + Math.random() * 9), out.z * (7 + Math.random() * 9));
+    body.angularVelocity.set(Math.random() * 10, Math.random() * 10, Math.random() * 10);
+    world.addBody(body);
+    debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
   }
 }
 
@@ -461,6 +540,66 @@ function mergeDebrisIntoTerrain(item) {
   removePhysics(item);
   disposeDebrisMesh(item);
   return changed;
+}
+
+function applyTerrainContact(item, collision, now) {
+  const normal = collision.normal;
+  item.body.position.x += normal.x * collision.penetration;
+  item.body.position.y += normal.y * collision.penetration;
+  item.body.position.z += normal.z * collision.penetration;
+
+  const normalSpeed = item.body.velocity.x * normal.x + item.body.velocity.y * normal.y + item.body.velocity.z * normal.z;
+  if (normalSpeed < 0) {
+    const impactSpeed = -normalSpeed + Math.hypot(item.body.velocity.x, item.body.velocity.z) * .18;
+    if (impactSpeed > 1.7) playImpactSound(item, impactSpeed, item.body.position, now);
+    item.body.velocity.x -= normal.x * normalSpeed * 1.18;
+    item.body.velocity.y -= normal.y * normalSpeed * 1.18;
+    item.body.velocity.z -= normal.z * normalSpeed * 1.18;
+  }
+
+  const grounded = normal.y > .45;
+  const roughness = item.rollingResistance ?? (item.mergeToTerrain ? BOULDER_ROLLING_RESISTANCE : CHIP_ROLLING_RESISTANCE);
+  const normalVelocity = item.body.velocity.x * normal.x + item.body.velocity.y * normal.y + item.body.velocity.z * normal.z;
+  const tangentX = item.body.velocity.x - normal.x * normalVelocity;
+  const tangentY = item.body.velocity.y - normal.y * normalVelocity;
+  const tangentZ = item.body.velocity.z - normal.z * normalVelocity;
+  const tangentDamping = grounded ? THREE.MathUtils.lerp(.82, .38, roughness) : .86;
+  item.body.velocity.x = normal.x * normalVelocity + tangentX * tangentDamping;
+  item.body.velocity.y = normal.y * normalVelocity + tangentY * tangentDamping;
+  item.body.velocity.z = normal.z * normalVelocity + tangentZ * tangentDamping;
+
+  if (grounded && Math.abs(normalVelocity) < .35) {
+    item.body.velocity.x -= normal.x * normalVelocity;
+    item.body.velocity.y -= normal.y * normalVelocity;
+    item.body.velocity.z -= normal.z * normalVelocity;
+  }
+
+  const postNormalVelocity = item.body.velocity.x * normal.x + item.body.velocity.y * normal.y + item.body.velocity.z * normal.z;
+  const postTangentX = item.body.velocity.x - normal.x * postNormalVelocity;
+  const postTangentY = item.body.velocity.y - normal.y * postNormalVelocity;
+  const postTangentZ = item.body.velocity.z - normal.z * postNormalVelocity;
+  const postTangentSpeedSq = postTangentX * postTangentX + postTangentY * postTangentY + postTangentZ * postTangentZ;
+  if (
+    grounded
+    && item.mergeToTerrain
+    && normal.y > BOULDER_STATIC_FRICTION_MIN_NORMAL_Y
+    && postTangentSpeedSq < BOULDER_STATIC_FRICTION_SPEED * BOULDER_STATIC_FRICTION_SPEED
+  ) {
+    item.body.velocity.x -= postTangentX;
+    item.body.velocity.y -= postTangentY;
+    item.body.velocity.z -= postTangentZ;
+  }
+
+  const spinDamping = grounded ? THREE.MathUtils.lerp(.82, .34, roughness) : .78;
+  item.body.angularVelocity.scale(spinDamping, item.body.angularVelocity);
+  const spinSq = item.body.angularVelocity.lengthSquared();
+  if (grounded && item.mergeToTerrain && postTangentSpeedSq < .16 && spinSq > .025) {
+    item.body.angularVelocity.scale(.18, item.body.angularVelocity);
+  }
+  if (grounded && item.body.velocity.lengthSquared() < .025 && item.body.angularVelocity.lengthSquared() < .025) {
+    item.body.velocity.set(0, 0, 0);
+    item.body.angularVelocity.set(0, 0, 0);
+  }
 }
 
 function addPart(group, geometry, material, position, scale = [1, 1, 1], rotation = [0, 0, 0]) {
@@ -557,7 +696,7 @@ function spawnPropShard(position, center, material, scale = 1) {
   body.velocity.set(out.x * (5 + Math.random()*7), out.y * (5 + Math.random()*8), out.z * (5 + Math.random()*7));
   body.angularVelocity.set(Math.random()*8, Math.random()*8, Math.random()*8);
   world.addBody(body);
-  debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0 });
+  debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
 }
 
 function explodeProp(prop, center) {
@@ -594,22 +733,15 @@ function updatePhysics(delta, now) {
     item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
     // Voxel terrain collision is sampled locally; Cannon handles debris/floor dynamics.
     const gx = terrain.worldToGrid(item.body.position.x), gy = terrain.worldToGrid(item.body.position.y), gz = terrain.worldToGrid(item.body.position.z);
-    if (terrain.has(gx, gy, gz) || now - item.born > 6500) explode(item);
+    if (item.pendingExplosion || terrain.has(gx, gy, gz) || terrain.sphereCollision(item.body.position, .42) || now - item.born > 6500) explode(item);
   }
   for (let i = debris.length - 1; i >= 0; i--) {
     const item = debris[i]; item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
-    const terrainY = terrain.surfaceY(item.body.position.x, item.body.position.z);
     const radius = item.mesh.userData.radius ?? item.mesh.geometry.boundingSphere?.radius ?? .5;
-    const bottomOffset = item.mesh.userData.bottomOffset ?? radius;
-    const bottomY = item.body.position.y - bottomOffset;
-    if (bottomY < terrainY && item.body.velocity.y < 0) {
-      const impactSpeed = Math.abs(item.body.velocity.y) + Math.hypot(item.body.velocity.x, item.body.velocity.z) * .22;
-      if (impactSpeed > 1.7) playImpactSound(item, impactSpeed, item.body.position, now);
-      item.body.position.y = terrainY + bottomOffset;
-      item.body.velocity.y *= -.18; item.body.velocity.x *= .72; item.body.velocity.z *= .72;
-      item.body.angularVelocity.scale(.7, item.body.angularVelocity);
-    }
-    const grounded = item.body.position.y - bottomOffset <= terrainY + .08;
+    const collision = terrain.sphereCollision(item.body.position, radius);
+    if (collision) applyTerrainContact(item, collision, now);
+    item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
+    const grounded = !!collision && collision.normal.y > .45;
     if (!grounded && item.body.sleepState === CANNON.Body.SLEEPING) item.body.wakeUp();
     const slow = grounded && item.body.velocity.lengthSquared() < .15 && item.body.angularVelocity.lengthSquared() < .3;
     if (slow) item.stillSince ??= now; else item.stillSince = null;
