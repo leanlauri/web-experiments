@@ -1,10 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ACTIVE_CHUNK_RADIUS, CELL_SIZE, SDF_CELL_SIZE, VoxelTerrain, terrainHeight } from '../src/terrain.js';
+import { createRaceTrack } from '../src/track.js';
 
 describe('procedural terrain', () => {
   it('is deterministic for a seed', () => expect(terrainHeight(12, -5, 42)).toBe(terrainHeight(12, -5, 42)));
   it('changes across the field', () => expect(terrainHeight(0, 0, 5)).not.toBe(terrainHeight(30, 30, 5)));
+
+  it('generates a deterministic race track with two to four straights', () => {
+    const baseHeight = (x, z) => 4 + Math.sin(x * 0.08) + Math.cos(z * 0.06);
+    const first = createRaceTrack(42.25, { baseHeight });
+    const second = createRaceTrack(42.25, { baseHeight });
+
+    expect(first.straights.length).toBeGreaterThanOrEqual(2);
+    expect(first.straights.length).toBeLessThanOrEqual(4);
+    expect(first.samples.length).toBeGreaterThan(80);
+    expect(first.length).toBeGreaterThan(500);
+    expect(Math.max(first.bounds.maxX - first.bounds.minX, first.bounds.maxZ - first.bounds.minZ)).toBeGreaterThan(190);
+    expect(first.startPose()).toEqual(second.startPose());
+    expect(first.samples.slice(0, 8).map((sample) => [sample.x, sample.z, sample.height])).toEqual(
+      second.samples.slice(0, 8).map((sample) => [sample.x, sample.z, sample.height]),
+    );
+  });
+
+  it('smooths the track surface and banks generated corners', () => {
+    const roughBase = (x, z) => 5 + Math.sin(x * 0.55) * 1.4 + Math.cos(z * 0.45) * 1.2;
+    const track = createRaceTrack(12, { baseHeight: roughBase, straightCount: 4 });
+    const banked = track.samples.find((sample) => Math.abs(sample.bankSlope) > 0.025);
+    const straight = track.samples.find((sample) => sample.kind === 'straight');
+
+    expect(banked).toBeTruthy();
+    expect(straight).toBeTruthy();
+    expect(Math.abs(straight.bankSlope)).toBeLessThan(0.005);
+
+    const leftHeight = track.heightAt(banked.x + banked.normalX * 2.4, banked.z + banked.normalZ * 2.4);
+    const rightHeight = track.heightAt(banked.x - banked.normalX * 2.4, banked.z - banked.normalZ * 2.4);
+    expect(Math.abs(leftHeight - rightHeight)).toBeGreaterThan(0.1);
+
+    const localGrades = track.samples.map((sample, index, samples) => {
+      const next = samples[(index + 1) % samples.length];
+      return Math.abs(next.height - sample.height) / Math.max(0.001, Math.hypot(next.x - sample.x, next.z - sample.z));
+    });
+    expect(Math.max(...localGrades)).toBeLessThan(0.11);
+  });
+
+  it('can disable the generated track layer for debugging', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 12, { trackEnabled: false });
+
+    expect(terrain.track).toBeNull();
+    terrain.dispose();
+  });
 
   it('carves local terrain volume and rebuilds affected chunks', () => {
     const scene = { add() {}, remove() {} };
@@ -48,6 +95,28 @@ describe('procedural terrain', () => {
 
     expect(Number.isFinite(renderedSurface)).toBe(true);
     expect(Math.abs(renderedSurface - steppedSurface)).toBeLessThanOrEqual(CELL_SIZE * 2);
+    terrain.dispose();
+  });
+
+  it('samples the same triangle surface used by the rendered heightfield', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 20);
+    const nodeX = 3;
+    const nodeZ = -4;
+    const a = terrain.nodeSurfaceY(nodeX, nodeZ);
+    const b = terrain.nodeSurfaceY(nodeX + 1, nodeZ);
+    const c = terrain.nodeSurfaceY(nodeX, nodeZ + 1);
+    const d = terrain.nodeSurfaceY(nodeX + 1, nodeZ + 1);
+    const lowerTx = 0.32;
+    const lowerTz = 0.41;
+    const upperTx = 0.72;
+    const upperTz = 0.58;
+    const lowerExpected = a + (b - a) * lowerTx + (c - a) * lowerTz;
+    const upperExpected = d + (c - d) * (1 - upperTx) + (b - d) * (1 - upperTz);
+
+    expect(terrain.surfaceY((nodeX + lowerTx) * CELL_SIZE, (nodeZ + lowerTz) * CELL_SIZE)).toBeCloseTo(lowerExpected, 5);
+    expect(terrain.surfaceY((nodeX + upperTx) * CELL_SIZE, (nodeZ + upperTz) * CELL_SIZE)).toBeCloseTo(upperExpected, 5);
     terrain.dispose();
   });
 

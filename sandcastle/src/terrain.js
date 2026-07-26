@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createRaceTrack } from './track.js';
 
 export const CHUNK_SIZE = 10;
 export const CELL_SIZE = 1.5;
@@ -25,21 +26,38 @@ const noise = (x, z, seed) => {
   return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a, b, fx), THREE.MathUtils.lerp(c, d, fx), fz);
 };
 
-export function terrainHeight(x, z, seed = 8) {
+export function naturalTerrainHeight(x, z, seed = 8) {
   const broad = noise(x * 0.055, z * 0.055, seed) * 6;
   const detail = noise(x * 0.15, z * 0.15, seed + 4) * 2;
   const basin = Math.max(0, Math.hypot(x, z) - 34) * 0.045;
   return 2.5 + broad + detail + basin;
 }
 
-export function terrainColor(x, z, y, seed = 8) {
+export function terrainHeight(x, z, seed = 8, track = null) {
+  const base = naturalTerrainHeight(x, z, seed);
+  return track ? track.heightAt(x, z, base) : base;
+}
+
+export function terrainColor(x, z, y, seed = 8, track = null) {
   const tint = hash(x, z, seed) * 0.08;
   const heightShade = THREE.MathUtils.clamp(y / (GRID_HEIGHT * CELL_SIZE), 0.58, 1);
-  return new THREE.Color(
+  const color = new THREE.Color(
     (0.54 + tint) * heightShade,
     (0.45 + tint) * heightShade,
     (0.26 + tint * 0.5) * heightShade,
   );
+  const trackColor = track?.colorAt?.(x * CELL_SIZE, z * CELL_SIZE);
+  if (!trackColor) return color;
+  const roadColor = new THREE.Color(0.27, 0.25, 0.22);
+  const shoulderColor = new THREE.Color(0.62, 0.52, 0.32);
+  const curbColor = new THREE.Color(...trackColor.curbColor);
+  const target = trackColor.curb
+    ? curbColor
+    : trackColor.shoulderMask > 0
+      ? shoulderColor
+      : roadColor;
+  target.multiplyScalar(heightShade);
+  return color.lerp(target, trackColor.roadMask);
 }
 
 const key = (x, y, z) => `${x},${y},${z}`;
@@ -63,11 +81,17 @@ const averagePoints = (points, indices) => {
   return point.multiplyScalar(1 / indices.length);
 };
 
+const triangleSurfaceY = (a, b, c, d, tx, tz) => {
+  if (tx + tz <= 1) return a + (b - a) * tx + (c - a) * tz;
+  return d + (c - d) * (1 - tx) + (b - d) * (1 - tz);
+};
+
 export class VoxelTerrain {
-  constructor(scene, material, seed = 8) {
+  constructor(scene, material, seed = 8, options = {}) {
     this.scene = scene;
     this.material = material;
     this.seed = seed;
+    this.trackEnabled = options.trackEnabled ?? true;
     this.addedVoxels = new Set();
     this.removedVoxels = new Set();
     this.voxels = this.addedVoxels;
@@ -80,11 +104,13 @@ export class VoxelTerrain {
     this.lodChunkSpan = LOD_CHUNK_SPAN;
     this.lodCellStep = LOD_CELL_STEP;
     this.streamAnchor = { cx: null, cz: null };
+    this.track = null;
     this.generate();
   }
 
   generate() {
     this.dispose();
+    this.track = this.trackEnabled ? createRaceTrack(this.seed, { baseHeight: (x, z) => naturalTerrainHeight(x, z, this.seed) }) : null;
     this.visualEdits = [];
     this.sdfChunks.clear();
     this.addedVoxels.clear();
@@ -124,27 +150,16 @@ export class VoxelTerrain {
     const b = this.nodeSurfaceY(x + 1, z);
     const c = this.nodeSurfaceY(x, z + 1);
     const d = this.nodeSurfaceY(x + 1, z + 1);
-    return THREE.MathUtils.lerp(
-      THREE.MathUtils.lerp(a, b, tx),
-      THREE.MathUtils.lerp(c, d, tx),
-      tz,
-    );
+    return triangleSurfaceY(a, b, c, d, tx, tz);
   }
 
   baseColumnTopGrid(x, z) {
-    return Math.min(GRID_HEIGHT - 1, Math.floor(terrainHeight(x * CELL_SIZE, z * CELL_SIZE, this.seed) / CELL_SIZE) + 3) + 1;
+    return Math.min(GRID_HEIGHT - 1, Math.floor(terrainHeight(x * CELL_SIZE, z * CELL_SIZE, this.seed, this.track) / CELL_SIZE) + 3) + 1;
   }
 
   baseNodeSurfaceY(nodeX, nodeZ) {
-    let total = 0;
-    let samples = 0;
-    for (let x = nodeX - 1; x <= nodeX; x++) {
-      for (let z = nodeZ - 1; z <= nodeZ; z++) {
-        total += this.baseColumnTopGrid(x, z);
-        samples++;
-      }
-    }
-    return (total / samples) * CELL_SIZE;
+    const height = terrainHeight(nodeX * CELL_SIZE, nodeZ * CELL_SIZE, this.seed, this.track);
+    return THREE.MathUtils.clamp(height / CELL_SIZE + 4, 0, GRID_HEIGHT) * CELL_SIZE;
   }
 
   baseSurfaceY(worldX, worldZ) {
@@ -158,11 +173,7 @@ export class VoxelTerrain {
     const b = this.baseNodeSurfaceY(x + 1, z);
     const c = this.baseNodeSurfaceY(x, z + 1);
     const d = this.baseNodeSurfaceY(x + 1, z + 1);
-    return THREE.MathUtils.lerp(
-      THREE.MathUtils.lerp(a, b, tx),
-      THREE.MathUtils.lerp(c, d, tx),
-      tz,
-    );
+    return triangleSurfaceY(a, b, c, d, tx, tz);
   }
 
   sampleSignedDistance(point, edits = this.visualEdits) {
@@ -460,7 +471,7 @@ export class VoxelTerrain {
         const worldX = (startX + x) * CELL_SIZE;
         const worldZ = (startZ + z) * CELL_SIZE;
         const y = this.nodeSurfaceY(startX + x, startZ + z) + LOD_UNDERLAY_OFFSET;
-        const color = terrainColor(startX + x, startZ + z, y, this.seed);
+        const color = terrainColor(startX + x, startZ + z, y, this.seed, this.track);
         positions.push(worldX, y, worldZ);
         colors.push(color.r, color.g, color.b);
       }
@@ -494,7 +505,7 @@ export class VoxelTerrain {
         const worldX = (startX + x) * CELL_SIZE;
         const worldZ = (startZ + z) * CELL_SIZE;
         const y = this.nodeSurfaceY(startX + x, startZ + z);
-        const color = terrainColor(startX + x, startZ + z, y, this.seed);
+        const color = terrainColor(startX + x, startZ + z, y, this.seed, this.track);
         positions.push(worldX, y, worldZ);
         colors.push(color.r, color.g, color.b);
       }
@@ -662,7 +673,7 @@ export class VoxelTerrain {
     const ordered = normal.dot(gradient) < 0 ? [a, c, b] : [a, b, c];
     const start = positions.length / 3;
     for (const point of ordered) {
-      const color = terrainColor(point.x / CELL_SIZE, point.z / CELL_SIZE, point.y, this.seed);
+      const color = terrainColor(point.x / CELL_SIZE, point.z / CELL_SIZE, point.y, this.seed, this.track);
       positions.push(point.x, point.y, point.z);
       colors.push(color.r, color.g, color.b);
     }
