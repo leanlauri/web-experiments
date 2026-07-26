@@ -2,6 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createDuneBuggy } from './duneBuggy.js';
 import { CELL_SIZE, terrainColor, VoxelTerrain } from './terrain.js';
 
 const canvas = document.querySelector('#scene');
@@ -87,15 +88,6 @@ const buildingPalettes = {
   industrial: { wall: buildingMaterials.concrete, roof: buildingMaterials.darkRoof, interior: buildingMaterials.steel, trim: buildingMaterials.warning },
   plant: { wall: buildingMaterials.stone, roof: buildingMaterials.steel, interior: buildingMaterials.pipe, trim: buildingMaterials.redSteel },
 };
-const buggyMaterials = {
-  body: new THREE.MeshStandardMaterial({ color: '#e24f3d', roughness: .62, metalness: .08, flatShading: true }),
-  hood: new THREE.MeshStandardMaterial({ color: '#f5c84c', roughness: .68, metalness: .04, flatShading: true }),
-  frame: new THREE.MeshStandardMaterial({ color: '#243235', roughness: .55, metalness: .28, flatShading: true }),
-  shock: new THREE.MeshStandardMaterial({ color: '#dfe9df', roughness: .42, metalness: .55, flatShading: true }),
-  spring: new THREE.MeshStandardMaterial({ color: '#2d8f82', roughness: .5, metalness: .25, flatShading: true }),
-  tire: new THREE.MeshStandardMaterial({ color: '#151918', roughness: .9, flatShading: true }),
-  rim: new THREE.MeshStandardMaterial({ color: '#d7d3b7', roughness: .48, metalness: .35, flatShading: true }),
-};
 let sillyMode = false;
 const vehicleModeButton = document.querySelector('#vehicle-mode');
 const soundButton = document.querySelector('#sound');
@@ -103,29 +95,6 @@ const firstPersonButton = document.querySelector('#first-person');
 const reticleElement = document.querySelector('.reticle');
 const firstPersonRotation = new THREE.Euler(0, 0, 0, 'YXZ');
 let firstPersonMode = localStorage.getItem('sandcastle-camera') === 'first-person';
-const carConfig = {
-  wheelRadius: .38,
-  suspensionRest: .78,
-  suspensionMax: 1.12,
-  spring: 195,
-  damper: 26,
-  engineForce: 108,
-  cornerStiffness: 72,
-  maxSteer: .54,
-  jumpImpulse: 7.2,
-};
-const carState = {
-  body: null,
-  group: null,
-  wheels: [],
-  destroyed: true,
-  steering: 0,
-  throttle: 0,
-  groundedWheels: 0,
-  jumpQueued: false,
-  lastJumpAt: -Infinity,
-  chaseReady: false,
-};
 const soundState = {
   enabled: localStorage.getItem('sandcastle-sound') !== 'off',
   context: null,
@@ -134,6 +103,21 @@ const soundState = {
   noiseBuffer: null,
   lastImpactAt: 0,
 };
+const duneBuggy = createDuneBuggy({
+  scene,
+  world,
+  terrain,
+  camera,
+  controls,
+  keys,
+  createParticleBurst,
+  spawnShard: spawnPropShard,
+  triggerScreenShake,
+  getSpawnObstacles: () => ({ buildingBlueprints, props }),
+  onDestroyed: () => {
+    if (controlMode === 'car') setControlMode('bomber', false);
+  },
+});
 
 updateSoundButton();
 
@@ -195,9 +179,8 @@ function setFirstPersonMode(enabled, persist = true) {
 function setControlMode(mode, persist = true) {
   controlMode = mode;
   if (controlMode === 'car') {
-    if (!carState.body || carState.destroyed) spawnCar();
-    carState.chaseReady = false;
-    updateChaseCamera(1 / 60, true);
+    if (!duneBuggy.alive) duneBuggy.spawn();
+    duneBuggy.updateChaseCamera(1 / 60, true, true);
   } else if (!firstPersonMode) {
     updateCameraTarget();
   }
@@ -403,7 +386,7 @@ function explode(projectile) {
   spawnExplosionParticles(center, removed);
   triggerScreenShake(.72, .42);
   explodeProps(center, 5.2);
-  damageCarFromExplosion(center, 5.2);
+  duneBuggy.damageFromExplosion(center, 5.2);
   const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .72, 32), new THREE.MeshBasicMaterial({ color: '#fff0ad', transparent: true, side: THREE.DoubleSide }));
   ring.position.copy(center); ring.lookAt(camera.position); scene.add(ring); effects.push({ type: 'ring', mesh: ring, age: 0, lifetime: .42 });
 }
@@ -1509,394 +1492,6 @@ function addTopPivotLimb(group, geometry, material, topPosition, length, rotatio
   return addPart(group, geometry, material, topPosition, [1, 1, 1], rotation);
 }
 
-function setCylinderBetween(mesh, start, end) {
-  const midpoint = start.clone().add(end).multiplyScalar(.5);
-  const direction = end.clone().sub(start);
-  const length = Math.max(.001, direction.length());
-  mesh.position.copy(midpoint);
-  mesh.scale.set(1, length, 1);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
-}
-
-function addBar(group, start, end, radius, material) {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 1, 7), material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  setCylinderBetween(mesh, new THREE.Vector3(...start), new THREE.Vector3(...end));
-  group.add(mesh);
-  return mesh;
-}
-
-function createBuggyWheel(name, localAnchor, front, powered) {
-  return {
-    name,
-    localAnchor: new CANNON.Vec3(localAnchor[0], localAnchor[1], localAnchor[2]),
-    localVisualAnchor: new THREE.Vector3(localAnchor[0], localAnchor[1], localAnchor[2]),
-    front,
-    powered,
-    compression: 0,
-    currentLength: carConfig.suspensionRest,
-    contact: false,
-    contactPoint: new THREE.Vector3(),
-    spin: 0,
-    lastSprayAt: 0,
-    pivot: null,
-    tire: null,
-    shock: null,
-    spring: null,
-    upperArm: null,
-    lowerArm: null,
-    steeringLink: null,
-  };
-}
-
-function createBuggyPanelGeometry(frontWidth, rearWidth, bottomWidth, height, length) {
-  const frontZ = -length * .5;
-  const rearZ = length * .5;
-  const vertices = new Float32Array([
-    -frontWidth * .5, height * .5, frontZ, frontWidth * .5, height * .5, frontZ, frontWidth * .5, -height * .5, frontZ, -frontWidth * .5, -height * .5, frontZ,
-    -rearWidth * .5, height * .5, rearZ, rearWidth * .5, height * .5, rearZ, rearWidth * .5, -height * .5, rearZ, -rearWidth * .5, -height * .5, rearZ,
-  ]);
-  vertices[6] = bottomWidth * .5; vertices[9] = -bottomWidth * .5;
-  vertices[18] = bottomWidth * .5; vertices[21] = -bottomWidth * .5;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  geometry.setIndex([
-    0, 1, 2, 0, 2, 3,
-    4, 7, 6, 4, 6, 5,
-    0, 4, 5, 0, 5, 1,
-    3, 2, 6, 3, 6, 7,
-    1, 5, 6, 1, 6, 2,
-    0, 3, 7, 0, 7, 4,
-  ]);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  geometry.computeBoundingBox();
-  return geometry;
-}
-
-function createDuneBuggyGroup(wheels) {
-  const group = new THREE.Group();
-  addPart(group, createBuggyPanelGeometry(1.08, 1.48, 1.34, .32, 2.45), buggyMaterials.body, [0, .34, .02]);
-  addPart(group, createBuggyPanelGeometry(.78, 1.08, .94, .2, .92), buggyMaterials.hood, [0, .6, -.76], [1, 1, 1], [-.08, 0, 0]);
-  addPart(group, new THREE.BoxGeometry(1.08, .18, .68), buggyMaterials.frame, [0, .52, .55]);
-  addPart(group, new THREE.BoxGeometry(.72, .32, .52), buggyMaterials.body, [0, .72, .72]);
-  addPart(group, new THREE.BoxGeometry(.58, .16, .42), buggyMaterials.frame, [0, .94, .8]);
-  addPart(group, new THREE.BoxGeometry(.32, .1, .42), buggyMaterials.hood, [0, .5, -1.16]);
-
-  addBar(group, [-.92, .38, -1.28], [.92, .38, -1.28], .045, buggyMaterials.frame);
-  addBar(group, [-.98, .36, 1.22], [.98, .36, 1.22], .045, buggyMaterials.frame);
-  addBar(group, [-.82, .45, -1.05], [-.76, .54, 1.08], .035, buggyMaterials.frame);
-  addBar(group, [.82, .45, -1.05], [.76, .54, 1.08], .035, buggyMaterials.frame);
-  addBar(group, [-.58, .62, 1.02], [-.58, 1.62, 1.02], .045, buggyMaterials.frame);
-  addBar(group, [.58, .62, 1.02], [.58, 1.62, 1.02], .045, buggyMaterials.frame);
-  addBar(group, [-.58, 1.62, 1.02], [.58, 1.62, 1.02], .045, buggyMaterials.frame);
-  addBar(group, [-.52, .62, -.36], [-.52, 1.38, -.28], .043, buggyMaterials.frame);
-  addBar(group, [.52, .62, -.36], [.52, 1.38, -.28], .043, buggyMaterials.frame);
-  addBar(group, [-.52, 1.38, -.28], [.52, 1.38, -.28], .043, buggyMaterials.frame);
-  addBar(group, [-.58, 1.62, 1.02], [-.52, 1.38, -.28], .043, buggyMaterials.frame);
-  addBar(group, [.58, 1.62, 1.02], [.52, 1.38, -.28], .043, buggyMaterials.frame);
-  addBar(group, [-.58, .62, 1.02], [-.52, .62, -.36], .034, buggyMaterials.frame);
-  addBar(group, [.58, .62, 1.02], [.52, .62, -.36], .034, buggyMaterials.frame);
-  addBar(group, [-.52, 1.38, -.28], [-.58, .62, 1.02], .026, buggyMaterials.frame);
-  addBar(group, [.52, 1.38, -.28], [.58, .62, 1.02], .026, buggyMaterials.frame);
-  const steeringBase = new THREE.Vector3(-.18, .62, -.5);
-  const steeringHub = new THREE.Vector3(-.18, .9, .16);
-  addBar(group, steeringBase.toArray(), steeringHub.toArray(), .025, buggyMaterials.frame);
-  const steeringWheel = new THREE.Mesh(new THREE.TorusGeometry(.13, .014, 5, 16), buggyMaterials.frame);
-  steeringWheel.position.copy(steeringHub);
-  steeringWheel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), steeringHub.clone().sub(steeringBase).normalize());
-  steeringWheel.castShadow = true;
-  group.add(steeringWheel);
-
-  const tireGeometry = new THREE.CylinderGeometry(carConfig.wheelRadius, carConfig.wheelRadius, .34, 18);
-  tireGeometry.rotateZ(Math.PI / 2);
-  const rimGeometry = new THREE.CylinderGeometry(carConfig.wheelRadius * .48, carConfig.wheelRadius * .48, .38, 12);
-  rimGeometry.rotateZ(Math.PI / 2);
-  const fenderGeometry = new THREE.BoxGeometry(.12, .48, .58);
-  for (const wheel of wheels) {
-    const pivot = new THREE.Group();
-    const tire = new THREE.Mesh(tireGeometry, buggyMaterials.tire);
-    const rim = new THREE.Mesh(rimGeometry, buggyMaterials.rim);
-    tire.castShadow = tire.receiveShadow = rim.castShadow = rim.receiveShadow = true;
-    pivot.add(tire, rim);
-    group.add(pivot);
-    wheel.pivot = pivot;
-    wheel.tire = tire;
-    const side = Math.sign(wheel.localVisualAnchor.x);
-    const fender = new THREE.Mesh(fenderGeometry, buggyMaterials.body);
-    fender.position.set(wheel.localVisualAnchor.x + side * .08, .18, wheel.localVisualAnchor.z);
-    fender.rotation.z = side * -.08;
-    fender.castShadow = fender.receiveShadow = true;
-    group.add(fender);
-    wheel.shock = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, 1, 8), buggyMaterials.shock);
-    wheel.spring = new THREE.Mesh(new THREE.TorusGeometry(.09, .012, 5, 16), buggyMaterials.spring);
-    wheel.upperArm = new THREE.Mesh(new THREE.CylinderGeometry(.026, .026, 1, 6), buggyMaterials.frame);
-    wheel.lowerArm = new THREE.Mesh(new THREE.CylinderGeometry(.026, .026, 1, 6), buggyMaterials.frame);
-    wheel.steeringLink = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, 1, 6), buggyMaterials.frame);
-    wheel.shock.castShadow = wheel.spring.castShadow = wheel.upperArm.castShadow = wheel.lowerArm.castShadow = wheel.steeringLink.castShadow = true;
-    group.add(wheel.shock, wheel.spring, wheel.upperArm, wheel.lowerArm, wheel.steeringLink);
-  }
-  return group;
-}
-
-function spawnCar(position = null, heading = 0) {
-  disposeCar(false);
-  const spawn = position ?? new THREE.Vector3(-8, terrain.surfaceY(-8, -12) + 2.4, -12);
-  const wheels = [
-    createBuggyWheel('front-left', [-.92, .1, -1.08], true, .55),
-    createBuggyWheel('front-right', [.92, .1, -1.08], true, .55),
-    createBuggyWheel('rear-left', [-.94, .1, 1.04], false, 1),
-    createBuggyWheel('rear-right', [.94, .1, 1.04], false, 1),
-  ];
-  const group = createDuneBuggyGroup(wheels);
-  group.position.copy(spawn);
-  group.rotation.y = heading;
-  scene.add(group);
-
-  const body = new CANNON.Body({
-    mass: 7.4,
-    shape: new CANNON.Box(new CANNON.Vec3(.82, .48, 1.18)),
-    linearDamping: .08,
-    angularDamping: .36,
-    allowSleep: false,
-  });
-  body.position.set(spawn.x, spawn.y, spawn.z);
-  body.quaternion.setFromEuler(0, heading, 0);
-  body.angularFactor.set(.82, 1, .82);
-  body.userData = { kind: 'car' };
-  world.addBody(body);
-  carState.body = body;
-  carState.group = group;
-  carState.wheels = wheels;
-  carState.destroyed = false;
-  carState.steering = 0;
-  carState.throttle = 0;
-  carState.groundedWheels = 0;
-  carState.jumpQueued = false;
-  carState.chaseReady = false;
-  updateCarVisuals(0);
-}
-
-function disposeCar(markDestroyed = false) {
-  if (carState.group) {
-    scene.remove(carState.group);
-    carState.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
-  }
-  if (carState.body) world.removeBody(carState.body);
-  carState.body = null;
-  carState.group = null;
-  carState.wheels = [];
-  carState.destroyed = markDestroyed;
-}
-
-function velocityAtPoint(body, point) {
-  const rx = point.x - body.position.x;
-  const ry = point.y - body.position.y;
-  const rz = point.z - body.position.z;
-  const ax = body.angularVelocity.x;
-  const ay = body.angularVelocity.y;
-  const az = body.angularVelocity.z;
-  return new CANNON.Vec3(
-    body.velocity.x + ay * rz - az * ry,
-    body.velocity.y + az * rx - ax * rz,
-    body.velocity.z + ax * ry - ay * rx,
-  );
-}
-
-function carWorldVector(local) {
-  return carState.body.vectorToWorldFrame(local, new CANNON.Vec3());
-}
-
-function applyCarForce(force, point) {
-  carState.body.applyForce(
-    new CANNON.Vec3(force.x, force.y, force.z),
-    new CANNON.Vec3(point.x - carState.body.position.x, point.y - carState.body.position.y, point.z - carState.body.position.z),
-  );
-}
-
-function updateCarPhysics(delta, now) {
-  if (!carState.body || carState.destroyed) return;
-  const body = carState.body;
-  const driving = controlMode === 'car';
-  const throttleTarget = driving ? (keys.has('ArrowUp') ? 1 : keys.has('ArrowDown') ? -.55 : 0) : 0;
-  const steerTarget = driving ? (keys.has('ArrowLeft') ? carConfig.maxSteer : keys.has('ArrowRight') ? -carConfig.maxSteer : 0) : 0;
-  carState.throttle = THREE.MathUtils.lerp(carState.throttle, throttleTarget, 1 - Math.exp(-delta * 8));
-  carState.steering = THREE.MathUtils.lerp(carState.steering, steerTarget, 1 - Math.exp(-delta * 9));
-  carState.groundedWheels = 0;
-
-  const bodyForward = carWorldVector(new CANNON.Vec3(0, 0, -1));
-  const bodyRight = carWorldVector(new CANNON.Vec3(1, 0, 0));
-  for (const wheel of carState.wheels) {
-    const anchor = body.pointToWorldFrame(wheel.localAnchor, new CANNON.Vec3());
-    const surfaceY = terrain.surfaceY(anchor.x, anchor.z);
-    const rawLength = anchor.y - surfaceY - carConfig.wheelRadius;
-    wheel.currentLength = THREE.MathUtils.clamp(rawLength, .18, carConfig.suspensionMax);
-    wheel.compression = THREE.MathUtils.clamp(carConfig.suspensionRest - rawLength, 0, carConfig.suspensionRest);
-    wheel.contact = wheel.compression > 0 && surfaceY > -1;
-    if (!wheel.contact) continue;
-
-    carState.groundedWheels++;
-    const normal = terrain.estimateNormal(new THREE.Vector3(anchor.x, surfaceY, anchor.z));
-    const contactPoint = new THREE.Vector3(anchor.x, surfaceY + carConfig.wheelRadius * .12, anchor.z);
-    wheel.contactPoint.copy(contactPoint);
-    const contactCannon = new CANNON.Vec3(contactPoint.x, contactPoint.y, contactPoint.z);
-    const velocity = velocityAtPoint(body, contactCannon);
-    const normalSpeed = velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
-    const springForce = Math.max(0, wheel.compression * carConfig.spring - normalSpeed * carConfig.damper);
-    applyCarForce(normal.clone().multiplyScalar(springForce), contactPoint);
-
-    const steer = wheel.front ? -carState.steering : 0;
-    const steerSin = Math.sin(steer);
-    const steerCos = Math.cos(steer);
-    const wheelForward = new THREE.Vector3(
-      bodyForward.x * steerCos + bodyRight.x * steerSin,
-      bodyForward.y * steerCos + bodyRight.y * steerSin,
-      bodyForward.z * steerCos + bodyRight.z * steerSin,
-    ).normalize();
-    const wheelRight = new THREE.Vector3(
-      bodyRight.x * steerCos - bodyForward.x * steerSin,
-      bodyRight.y * steerCos - bodyForward.y * steerSin,
-      bodyRight.z * steerCos - bodyForward.z * steerSin,
-    ).normalize();
-    const longSpeed = velocity.x * wheelForward.x + velocity.y * wheelForward.y + velocity.z * wheelForward.z;
-    const sideSpeed = velocity.x * wheelRight.x + velocity.y * wheelRight.y + velocity.z * wheelRight.z;
-    const grip = THREE.MathUtils.clamp(.58 + normal.y * .54 - Math.abs(sideSpeed) * .018, .36, 1.08);
-    const tractionLimit = springForce * grip;
-    const speedFade = THREE.MathUtils.clamp(1 - Math.abs(longSpeed) / 30, .2, 1);
-    const driveForce = carState.throttle * carConfig.engineForce * wheel.powered * speedFade;
-    const sideForce = THREE.MathUtils.clamp(-sideSpeed * carConfig.cornerStiffness, -tractionLimit, tractionLimit);
-    const rollingDrag = -longSpeed * (driving ? 4.2 : 10.5);
-    const forwardForce = THREE.MathUtils.clamp(driveForce + rollingDrag, -tractionLimit, tractionLimit);
-    applyCarForce(wheelForward.multiplyScalar(forwardForce).add(wheelRight.multiplyScalar(sideForce)), contactPoint);
-
-    const enginePowering = Math.abs(carState.throttle) > .12 && wheel.powered > .8;
-    if (enginePowering && now - wheel.lastSprayAt > 48) {
-      const sprayDirection = wheelForward.clone().multiplyScalar(carState.throttle > 0 ? -1 : 1).add(normal.clone().multiplyScalar(.28)).normalize();
-      spawnWheelSand(contactPoint, sprayDirection, THREE.MathUtils.clamp(Math.abs(carState.throttle) + Math.abs(longSpeed) * .035, .35, 1.25));
-      wheel.lastSprayAt = now;
-    }
-  }
-
-  if (driving && carState.jumpQueued && now - carState.lastJumpAt > 560) {
-    const groundY = terrain.surfaceY(body.position.x, body.position.z);
-    if (carState.groundedWheels > 0 || body.position.y - groundY < 2.4) {
-      body.applyImpulse(new CANNON.Vec3(0, carConfig.jumpImpulse, 0), new CANNON.Vec3(0, 0, 0));
-      const up = carWorldVector(new CANNON.Vec3(0, 1, 0));
-      const righting = new THREE.Vector3(up.x, up.y, up.z).cross(new THREE.Vector3(0, 1, 0));
-      if (righting.lengthSq() > .0001) {
-        righting.normalize().multiplyScalar(2.7);
-        body.angularVelocity.x += righting.x;
-        body.angularVelocity.y += righting.y * .35;
-        body.angularVelocity.z += righting.z;
-      }
-      body.angularVelocity.scale(.74, body.angularVelocity);
-      carState.lastJumpAt = now;
-    }
-    carState.jumpQueued = false;
-  }
-}
-
-function applyCarChassisTerrainContact() {
-  if (!carState.body || carState.destroyed) return;
-  const collision = terrain.sphereCollision(carState.body.position, .72, -1);
-  if (!collision) return;
-  const normal = collision.normal;
-  carState.body.position.x += normal.x * collision.penetration * .75;
-  carState.body.position.y += normal.y * collision.penetration * .75;
-  carState.body.position.z += normal.z * collision.penetration * .75;
-  const normalSpeed = carState.body.velocity.x * normal.x + carState.body.velocity.y * normal.y + carState.body.velocity.z * normal.z;
-  if (normalSpeed < 0) {
-    carState.body.velocity.x -= normal.x * normalSpeed * 1.08;
-    carState.body.velocity.y -= normal.y * normalSpeed * 1.08;
-    carState.body.velocity.z -= normal.z * normalSpeed * 1.08;
-  }
-}
-
-function updateCarVisuals(delta) {
-  if (!carState.group || !carState.body) return;
-  carState.group.position.copy(carState.body.position);
-  carState.group.quaternion.copy(carState.body.quaternion);
-  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(carState.group.quaternion);
-  const speed = new THREE.Vector3(carState.body.velocity.x, carState.body.velocity.y, carState.body.velocity.z).dot(forward);
-  for (const wheel of carState.wheels) {
-    const wheelLocal = wheel.localVisualAnchor.clone();
-    wheelLocal.y -= wheel.currentLength;
-    wheel.pivot.position.copy(wheelLocal);
-    wheel.pivot.rotation.y = wheel.front ? carState.steering : 0;
-    wheel.spin += speed * delta / Math.max(.01, carConfig.wheelRadius);
-    wheel.tire.rotation.x = wheel.spin;
-    const chassisMountX = wheel.localVisualAnchor.x * .48;
-    const upperMount = new THREE.Vector3(chassisMountX, .54, wheel.localVisualAnchor.z + (wheel.front ? .06 : -.06));
-    const lowerMount = new THREE.Vector3(chassisMountX, .24, wheel.localVisualAnchor.z);
-    const hubTop = wheelLocal.clone().add(new THREE.Vector3(0, carConfig.wheelRadius * .42, 0));
-    const hubCenter = wheelLocal.clone();
-    setCylinderBetween(wheel.shock, upperMount, hubTop);
-    setCylinderBetween(wheel.upperArm, upperMount.clone().add(new THREE.Vector3(0, -.08, 0)), hubCenter.clone().add(new THREE.Vector3(0, carConfig.wheelRadius * .24, 0)));
-    setCylinderBetween(wheel.lowerArm, lowerMount, hubCenter.clone().add(new THREE.Vector3(0, -carConfig.wheelRadius * .18, 0)));
-    setCylinderBetween(wheel.steeringLink, lowerMount.clone().add(new THREE.Vector3(0, .14, wheel.front ? -.12 : .12)), hubCenter.clone().add(new THREE.Vector3(0, .08, 0)));
-    const springCenter = wheel.localVisualAnchor.clone().lerp(wheelLocal, .55);
-    wheel.spring.position.copy(springCenter);
-    wheel.spring.scale.set(1, Math.max(.55, wheel.currentLength / carConfig.suspensionRest), 1);
-    wheel.spring.rotation.set(Math.PI / 2, 0, wheel.spin * .25);
-  }
-}
-
-function spawnWheelSand(center, direction, strength) {
-  createParticleBurst(center, {
-    count: Math.round(8 + strength * 9),
-    color: '#d2b36f',
-    size: .28 + strength * .12,
-    lifetime: .58,
-    speed: [2.8 + strength * 2.2, 6.5 + strength * 4.8],
-    gravity: 10,
-    drag: .955,
-    opacity: .68,
-    spread: .24,
-    upLift: .18,
-    sizeGrowth: .55,
-    fadePower: 1.35,
-    renderOrder: 4,
-    directionBias: direction,
-    biasStrength: .78,
-  });
-}
-
-function updateChaseCamera(delta, snap = false) {
-  if (controlMode !== 'car' || !carState.body || carState.destroyed) return;
-  const position = new THREE.Vector3().copy(carState.body.position);
-  const quaternion = new THREE.Quaternion().copy(carState.body.quaternion);
-  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion).normalize();
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion).lerp(new THREE.Vector3(0, 1, 0), .65).normalize();
-  const target = position.clone().add(up.clone().multiplyScalar(1.05)).add(forward.clone().multiplyScalar(2.4));
-  const desired = position.clone().add(forward.clone().multiplyScalar(-8.7)).add(up.clone().multiplyScalar(3.65));
-  desired.y = Math.max(desired.y, terrain.surfaceY(desired.x, desired.z) + 1.5);
-  const blend = snap || !carState.chaseReady ? 1 : 1 - Math.exp(-delta * 6);
-  camera.position.lerp(desired, blend);
-  controls.target.lerp(target, blend);
-  camera.lookAt(controls.target);
-  carState.chaseReady = true;
-}
-
-function damageCarFromExplosion(center, radius) {
-  if (!carState.body || carState.destroyed) return;
-  const position = new THREE.Vector3().copy(carState.body.position);
-  const distance = position.distanceTo(center);
-  if (distance > radius + 2.1) return;
-  const shardSources = [];
-  carState.group.traverse((child) => { if (child.isMesh) shardSources.push(child); });
-  for (let i = 0; i < Math.min(18, shardSources.length); i++) {
-    const source = shardSources[i % shardSources.length];
-    const shardPosition = new THREE.Vector3();
-    source.getWorldPosition(shardPosition);
-    shardPosition.add(new THREE.Vector3((Math.random() - .5) * .7, Math.random() * .55, (Math.random() - .5) * .7));
-    spawnPropShard(shardPosition, center, Array.isArray(source.material) ? source.material[0] : source.material, .9);
-  }
-  disposeCar(true);
-  triggerScreenShake(.38, .32);
-  if (controlMode === 'car') setControlMode('bomber', false);
-}
-
 function createActorState(type, x, z, rotation, variant, parts, bodyOffsetY, radius) {
   const speed = type === 'camel' ? .85 : 1.15;
   return {
@@ -1984,17 +1579,17 @@ function actorForward(prop) {
 }
 
 function maybeKnockActorFromCar(prop, now) {
-  if (!carState.body || carState.destroyed || prop.actor.state === 'knocked') return;
-  const dx = prop.body.position.x - carState.body.position.x;
-  const dz = prop.body.position.z - carState.body.position.z;
-  const dy = Math.abs(prop.body.position.y - carState.body.position.y);
+  if (!duneBuggy.alive || prop.actor.state === 'knocked') return;
+  const dx = prop.body.position.x - duneBuggy.body.position.x;
+  const dz = prop.body.position.z - duneBuggy.body.position.z;
+  const dy = Math.abs(prop.body.position.y - duneBuggy.body.position.y);
   const reach = prop.actor.radius + 1.25;
   if (dx * dx + dz * dz > reach * reach || dy > 2.4) return;
-  const carSpeed = Math.hypot(carState.body.velocity.x, carState.body.velocity.z);
+  const carSpeed = Math.hypot(duneBuggy.body.velocity.x, duneBuggy.body.velocity.z);
   const actorSpeed = Math.hypot(prop.body.velocity.x, prop.body.velocity.z);
   const impactSpeed = carSpeed - actorSpeed * .35;
   if (impactSpeed < 2.15) return;
-  const direction = new THREE.Vector3(carState.body.velocity.x, 0, carState.body.velocity.z);
+  const direction = new THREE.Vector3(duneBuggy.body.velocity.x, 0, duneBuggy.body.velocity.z);
   if (direction.lengthSq() < .01) direction.set(dx, 0, dz);
   knockActor(prop, direction.normalize(), impactSpeed, now);
 }
@@ -2266,19 +1861,19 @@ function updateDynamicProps(now) {
 }
 
 function crashThroughProps(now) {
-  if (!carState.body || carState.destroyed) return;
-  const carSpeed = Math.hypot(carState.body.velocity.x, carState.body.velocity.z);
+  if (!duneBuggy.alive) return;
+  const carSpeed = Math.hypot(duneBuggy.body.velocity.x, duneBuggy.body.velocity.z);
   if (carSpeed < 3.4) return;
   for (let i = props.length - 1; i >= 0; i--) {
     const prop = props[i];
     if (prop.type !== 'palm' && prop.type !== 'rainbow') continue;
-    const dx = prop.body.position.x - carState.body.position.x;
-    const dz = prop.body.position.z - carState.body.position.z;
+    const dx = prop.body.position.x - duneBuggy.body.position.x;
+    const dz = prop.body.position.z - duneBuggy.body.position.z;
     const reach = prop.blastRadius + 1.05;
     if (dx * dx + dz * dz > reach * reach) continue;
     if (now - (prop.lastCrashAt ?? 0) < 400) continue;
     prop.lastCrashAt = now;
-    const center = new THREE.Vector3().copy(carState.body.position);
+    const center = new THREE.Vector3().copy(duneBuggy.body.position);
     explodeProp(prop, center);
     props.splice(i, 1);
     triggerScreenShake(prop.type === 'rainbow' ? .26 : .18, .18);
@@ -2287,7 +1882,7 @@ function crashThroughProps(now) {
 
 function updatePhysics(delta, now) {
   updateActorsPreStep(delta, now);
-  updateCarPhysics(delta, now);
+  duneBuggy.updatePhysics(delta, now, controlMode === 'car');
   world.step(1 / 60, delta, 3);
   processBuildingImpacts();
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -2295,11 +1890,10 @@ function updatePhysics(delta, now) {
     item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
     // Voxel terrain collision is sampled locally; Cannon handles debris/floor dynamics.
     const gx = terrain.worldToGrid(item.body.position.x), gy = terrain.worldToGrid(item.body.position.y), gz = terrain.worldToGrid(item.body.position.z);
-    const hitCar = carState.body && !carState.destroyed && item.body.position.distanceTo(carState.body.position) < 2.15;
+    const hitCar = duneBuggy.alive && item.body.position.distanceTo(duneBuggy.body.position) < 2.15;
     if (item.pendingExplosion || hitCar || terrain.has(gx, gy, gz) || terrain.sphereCollision(item.body.position, .42) || now - item.born > 6500) explode(item);
   }
-  applyCarChassisTerrainContact();
-  updateCarVisuals(delta);
+  duneBuggy.afterPhysicsStep(delta);
   updateBuildingParts(delta, now);
   updateActorsPostStep(delta, now);
   updateDynamicProps(now);
@@ -2484,13 +2078,14 @@ canvas.addEventListener('pointerup', (event) => {
 addEventListener('keydown', (event) => {
   if (event.code === 'Space') {
     event.preventDefault();
-    if (!event.repeat) {
-      if (controlMode === 'car') carState.jumpQueued = true;
-      else throwCenterBomb();
+    if (controlMode === 'car') {
+      keys.add(event.code);
+      return;
     }
+    if (!event.repeat) throwCenterBomb();
     return;
   }
-  if (controlMode === 'car' && event.code.startsWith('Arrow')) event.preventDefault();
+  if (controlMode === 'car' && (event.code.startsWith('Arrow') || ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code))) event.preventDefault();
   keys.add(event.code);
 });
 addEventListener('keyup', (event) => keys.delete(event.code));
@@ -2512,27 +2107,27 @@ document.querySelector('#reset').addEventListener('click', () => {
   projectiles.forEach(removePhysics);
   debris.forEach((item) => { removePhysics(item); disposeDebrisMesh(item); });
   effects.forEach(disposeEffect);
-  disposeCar(false);
+  duneBuggy.dispose(false);
   for (const prop of props) {
     scene.remove(prop.group);
     prop.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
     world.removeBody(prop.body);
   }
   disposeBuildings();
-  projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0; screenShake.age = screenShake.duration; seed = Math.random() * 100; terrain.seed = seed; terrain.generate(); populateProps(); populateBuildings(); spawnCar();
-  if (controlMode === 'car') updateChaseCamera(1 / 60, true);
+  projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0; screenShake.age = screenShake.duration; seed = Math.random() * 100; terrain.seed = seed; terrain.generate(); populateProps(); populateBuildings(); duneBuggy.spawn();
+  if (controlMode === 'car') duneBuggy.updateChaseCamera(1 / 60, true, true);
 });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 let previous = performance.now();
 function terrainStreamAnchor() {
-  if (controlMode === 'car' && carState.body && !carState.destroyed) return carState.body.position;
+  if (controlMode === 'car' && duneBuggy.alive) return duneBuggy.body.position;
   return controls.target;
 }
 
 function animate(now) {
   requestAnimationFrame(animate); const delta = Math.min((now - previous) / 1000, .05); previous = now; updatePhysics(delta, now); updateKeyboard(delta); if (controls.enabled) controls.update();
-  updateChaseCamera(delta);
+  duneBuggy.updateChaseCamera(delta, false, controlMode === 'car');
   terrain.updateVisibleChunks(terrainStreamAnchor());
   updateEffects(delta);
   document.querySelector('#chunks').textContent = terrain.chunks.size + terrain.lodChunks.size; document.querySelector('#debris').textContent = debris.length;
@@ -2540,7 +2135,7 @@ function animate(now) {
 }
 populateProps();
 populateBuildings();
-spawnCar();
+duneBuggy.spawn();
 setFirstPersonMode(firstPersonMode, false);
 setControlMode(controlMode, false);
 requestAnimationFrame(animate);
