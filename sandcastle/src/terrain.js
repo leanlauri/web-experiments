@@ -4,6 +4,11 @@ export const CHUNK_SIZE = 10;
 export const CELL_SIZE = 1.5;
 export const SDF_CELL_SIZE = CELL_SIZE * 0.6;
 export const GRID_HEIGHT = 12;
+export const ACTIVE_CHUNK_RADIUS = 4;
+export const LOD_CHUNK_RADIUS = 18;
+export const LOD_CHUNK_SPAN = 4;
+export const LOD_CELL_STEP = 4;
+export const LOD_UNDERLAY_OFFSET = -0.08;
 
 // Fast deterministic value noise. Keeping density in a voxel grid makes spherical
 // boolean subtraction local: only the chunks touched by a blast are rebuilt.
@@ -63,11 +68,18 @@ export class VoxelTerrain {
     this.scene = scene;
     this.material = material;
     this.seed = seed;
-    this.voxels = new Set();
+    this.addedVoxels = new Set();
+    this.removedVoxels = new Set();
+    this.voxels = this.addedVoxels;
     this.chunks = new Map();
+    this.lodChunks = new Map();
     this.visualEdits = [];
     this.sdfChunks = new Set();
-    this.radius = 3;
+    this.activeRadius = ACTIVE_CHUNK_RADIUS;
+    this.lodRadius = LOD_CHUNK_RADIUS;
+    this.lodChunkSpan = LOD_CHUNK_SPAN;
+    this.lodCellStep = LOD_CELL_STEP;
+    this.streamAnchor = { cx: null, cz: null };
     this.generate();
   }
 
@@ -75,19 +87,24 @@ export class VoxelTerrain {
     this.dispose();
     this.visualEdits = [];
     this.sdfChunks.clear();
-    const half = this.radius * CHUNK_SIZE;
-    for (let x = -half; x < half; x++) {
-      for (let z = -half; z < half; z++) {
-        const height = Math.min(GRID_HEIGHT - 1, Math.floor(terrainHeight(x * CELL_SIZE, z * CELL_SIZE, this.seed) / CELL_SIZE) + 3);
-        for (let y = 0; y <= height; y++) this.voxels.add(key(x, y, z));
-      }
-    }
-    for (let cx = -this.radius; cx < this.radius; cx++) {
-      for (let cz = -this.radius; cz < this.radius; cz++) this.rebuildChunk(cx, cz);
-    }
+    this.addedVoxels.clear();
+    this.removedVoxels.clear();
+    this.streamAnchor = { cx: null, cz: null };
+    this.updateVisibleChunks(new THREE.Vector3(0, 0, 0), true);
   }
 
-  has(x, y, z) { return this.voxels.has(key(x, y, z)); }
+  isBaseSolid(x, y, z) {
+    return y >= 0 && y < GRID_HEIGHT && y < this.baseColumnTopGrid(x, z);
+  }
+
+  has(x, y, z) {
+    if (y < 0 || y >= GRID_HEIGHT) return false;
+    const id = key(x, y, z);
+    if (this.removedVoxels.has(id)) return false;
+    if (this.addedVoxels.has(id)) return true;
+    return this.isBaseSolid(x, y, z);
+  }
+
   worldToGrid(value) { return Math.floor(value / CELL_SIZE); }
   cellCenter(x, y, z) { return new THREE.Vector3((x + 0.5) * CELL_SIZE, (y + 0.5) * CELL_SIZE, (z + 0.5) * CELL_SIZE); }
 
@@ -196,13 +213,15 @@ export class VoxelTerrain {
     for (let x = minX; x <= maxX; x++) for (let y = minY; y <= maxY; y++) for (let z = minZ; z <= maxZ; z++) {
       const position = this.cellCenter(x, y, z);
       const wobble = 0.82 + hash(x + y, z - y, this.seed) * 0.32;
-      if (position.distanceTo(center) < radius * wobble && this.voxels.delete(key(x, y, z))) {
+      const id = key(x, y, z);
+      if (position.distanceTo(center) < radius * wobble && this.has(x, y, z)) {
+        if (!this.addedVoxels.delete(id)) this.removedVoxels.add(id);
         removed.push({ x, y, z, position });
         this.markDirty(dirty, x, z);
       }
     }
     if (removed.length) this.addVisualEdit('carve', center, radius, dirty);
-    for (const item of dirty) { const [cx, cz] = item.split(',').map(Number); this.rebuildChunk(cx, cz); }
+    this.refreshDirtyChunks(dirty);
     return removed;
   }
 
@@ -213,16 +232,16 @@ export class VoxelTerrain {
     let changed = false;
     for (let x = gx - reach; x <= gx + reach; x++) for (let y = Math.max(0, gy - reach); y <= Math.min(GRID_HEIGHT - 1, gy + reach); y++) for (let z = gz - reach; z <= gz + reach; z++) {
       if (this.cellCenter(x, y, z).distanceTo(center) <= radius) {
-        const id = key(x, y, z);
-        if (!this.voxels.has(id)) {
-          this.voxels.add(id);
+        if (!this.has(x, y, z)) {
+          const id = key(x, y, z);
+          if (!this.removedVoxels.delete(id)) this.addedVoxels.add(id);
           this.markDirty(dirty, x, z);
           changed = true;
         }
       }
     }
     if (changed) this.addVisualEdit('add', center, radius, dirty);
-    if (changed) for (const item of dirty) { const [cx, cz] = item.split(',').map(Number); this.rebuildChunk(cx, cz); }
+    if (changed) this.refreshDirtyChunks(dirty);
     return changed;
   }
 
@@ -258,7 +277,7 @@ export class VoxelTerrain {
     const candidates = [];
     for (let x = minX; x <= maxX; x++) for (let y = minY; y <= maxY; y++) for (let z = minZ; z <= maxZ; z++) {
       const id = key(x, y, z);
-      if (this.voxels.has(id)) continue;
+      if (this.has(x, y, z)) continue;
       worldPosition.copy(this.cellCenter(x, y, z));
       local.copy(worldPosition).applyMatrix4(inverse).sub(center);
       const nx = local.x / Math.max(size.x, 0.001);
@@ -274,14 +293,14 @@ export class VoxelTerrain {
     const limit = budget == null ? candidates.length : Math.min(budget, candidates.length);
     for (let i = 0; i < limit; i++) {
       const item = candidates[i];
-      this.voxels.add(item.id);
+      if (!this.removedVoxels.delete(item.id)) this.addedVoxels.add(item.id);
       this.markDirty(dirty, item.x, item.z);
     }
     if (limit > 0) {
       const centerWorld = worldBox.getCenter(new THREE.Vector3());
       this.addVisualEdit('add', centerWorld, equivalentRadius, dirty);
     }
-    if (limit > 0) for (const item of dirty) { const [cx, cz] = item.split(',').map(Number); this.rebuildChunk(cx, cz); }
+    if (limit > 0) this.refreshDirtyChunks(dirty);
     return limit;
   }
 
@@ -325,6 +344,71 @@ export class VoxelTerrain {
     if (z % CHUNK_SIZE === CHUNK_SIZE - 1 || z % CHUNK_SIZE === -1) dirty.add(chunkKey(cx, cz + 1));
   }
 
+  refreshDirtyChunks(dirty) {
+    const lodDirty = new Set();
+    for (const item of dirty) {
+      const [cx, cz] = item.split(',').map(Number);
+      if (this.chunks.has(item)) this.rebuildChunk(cx, cz);
+      lodDirty.add(this.lodKeyForChunk(cx, cz));
+    }
+    for (const item of lodDirty) {
+      const [lx, lz] = item.split(',').map(Number);
+      if (this.lodChunks.has(item)) this.rebuildLodChunk(lx, lz);
+    }
+  }
+
+  lodKeyForChunk(cx, cz) {
+    return chunkKey(Math.floor(cx / this.lodChunkSpan), Math.floor(cz / this.lodChunkSpan));
+  }
+
+  updateVisibleChunks(anchor = new THREE.Vector3(), force = false) {
+    const centerX = Math.floor(this.worldToGrid(anchor.x) / CHUNK_SIZE);
+    const centerZ = Math.floor(this.worldToGrid(anchor.z) / CHUNK_SIZE);
+    if (!force && centerX === this.streamAnchor.cx && centerZ === this.streamAnchor.cz) return false;
+    this.streamAnchor = { cx: centerX, cz: centerZ };
+
+    const highKeys = new Set();
+    for (let cz = centerZ - this.activeRadius; cz <= centerZ + this.activeRadius; cz++) {
+      for (let cx = centerX - this.activeRadius; cx <= centerX + this.activeRadius; cx++) {
+        const id = chunkKey(cx, cz);
+        highKeys.add(id);
+        if (!this.chunks.has(id)) this.rebuildChunk(cx, cz);
+      }
+    }
+
+    for (const [id, mesh] of this.chunks) {
+      if (highKeys.has(id)) continue;
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      this.chunks.delete(id);
+    }
+
+    const lodKeys = new Set();
+    const minLx = Math.floor((centerX - this.lodRadius) / this.lodChunkSpan);
+    const maxLx = Math.floor((centerX + this.lodRadius) / this.lodChunkSpan);
+    const minLz = Math.floor((centerZ - this.lodRadius) / this.lodChunkSpan);
+    const maxLz = Math.floor((centerZ + this.lodRadius) / this.lodChunkSpan);
+    for (let lz = minLz; lz <= maxLz; lz++) {
+      for (let lx = minLx; lx <= maxLx; lx++) {
+        const id = chunkKey(lx, lz);
+        lodKeys.add(id);
+      }
+    }
+
+    for (const [id, mesh] of this.lodChunks) {
+      if (lodKeys.has(id)) continue;
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      this.lodChunks.delete(id);
+    }
+
+    for (const id of lodKeys) {
+      const [lx, lz] = id.split(',').map(Number);
+      if (force || !this.lodChunks.has(id)) this.rebuildLodChunk(lx, lz);
+    }
+    return true;
+  }
+
   nodeSurfaceY(nodeX, nodeZ) {
     let total = 0;
     let samples = 0;
@@ -356,6 +440,52 @@ export class VoxelTerrain {
     geometry.computeBoundingSphere();
     const mesh = new THREE.Mesh(geometry, this.material); mesh.receiveShadow = true; mesh.castShadow = true;
     this.chunks.set(id, mesh); this.scene.add(mesh);
+  }
+
+  rebuildLodChunk(lx, lz) {
+    const id = chunkKey(lx, lz);
+    const old = this.lodChunks.get(id);
+    if (old) { this.scene.remove(old); old.geometry.dispose(); }
+    const positions = [], colors = [], indices = [];
+    const startX = lx * this.lodChunkSpan * CHUNK_SIZE;
+    const startZ = lz * this.lodChunkSpan * CHUNK_SIZE;
+    const cellSpan = this.lodChunkSpan * CHUNK_SIZE;
+    const step = this.lodCellStep;
+    const offsets = [];
+    for (let value = 0; value < cellSpan; value += step) offsets.push(value);
+    if (offsets[offsets.length - 1] !== cellSpan) offsets.push(cellSpan);
+
+    for (const z of offsets) {
+      for (const x of offsets) {
+        const worldX = (startX + x) * CELL_SIZE;
+        const worldZ = (startZ + z) * CELL_SIZE;
+        const y = this.nodeSurfaceY(startX + x, startZ + z) + LOD_UNDERLAY_OFFSET;
+        const color = terrainColor(startX + x, startZ + z, y, this.seed);
+        positions.push(worldX, y, worldZ);
+        colors.push(color.r, color.g, color.b);
+      }
+    }
+
+    const stride = offsets.length;
+    for (let z = 0; z < offsets.length - 1; z++) for (let x = 0; x < offsets.length - 1; x++) {
+      const a = z * stride + x;
+      const b = a + 1;
+      const d = (z + 1) * stride + x;
+      const c = d + 1;
+      indices.push(a, d, b, b, d, c);
+    }
+    if (indices.length === 0) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geometry, this.material);
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    this.lodChunks.set(id, mesh);
+    this.scene.add(mesh);
   }
 
   addHeightfieldSurface(positions, colors, indices, startX, startZ, skipQuad = null) {
@@ -541,7 +671,9 @@ export class VoxelTerrain {
 
   dispose() {
     for (const mesh of this.chunks.values()) { this.scene.remove(mesh); mesh.geometry.dispose(); }
-    this.chunks.clear(); this.voxels.clear();
+    for (const mesh of this.lodChunks?.values?.() ?? []) { this.scene.remove(mesh); mesh.geometry.dispose(); }
+    this.chunks.clear(); this.lodChunks?.clear();
+    this.addedVoxels?.clear(); this.removedVoxels?.clear();
     this.sdfChunks?.clear();
   }
 }

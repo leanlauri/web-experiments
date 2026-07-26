@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { CELL_SIZE, SDF_CELL_SIZE, VoxelTerrain, terrainHeight } from '../src/terrain.js';
+import { ACTIVE_CHUNK_RADIUS, CELL_SIZE, SDF_CELL_SIZE, VoxelTerrain, terrainHeight } from '../src/terrain.js';
 
 describe('procedural terrain', () => {
   it('is deterministic for a seed', () => expect(terrainHeight(12, -5, 42)).toBe(terrainHeight(12, -5, 42)));
@@ -10,12 +10,30 @@ describe('procedural terrain', () => {
     const scene = { add() {}, remove() {} };
     const material = new THREE.MeshBasicMaterial();
     const terrain = new VoxelTerrain(scene, material, 12);
-    const before = terrain.voxels.size;
+    const before = terrain.removedVoxels.size;
     const removed = terrain.carveSphere(new THREE.Vector3(0, terrain.surfaceY(0, 0) - CELL_SIZE, 0), CELL_SIZE * 2.2);
 
     expect(removed.length).toBeGreaterThan(0);
-    expect(terrain.voxels.size).toBeLessThan(before);
-    expect(terrain.chunks.size).toBe(36);
+    expect(terrain.removedVoxels.size).toBeGreaterThan(before);
+    expect(terrain.chunks.size).toBe((ACTIVE_CHUNK_RADIUS * 2 + 1) ** 2);
+    terrain.dispose();
+  });
+
+  it('streams high-detail chunks around a moving anchor and keeps far LOD meshes', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 12);
+    const activeChunkCount = (ACTIVE_CHUNK_RADIUS * 2 + 1) ** 2;
+
+    expect(terrain.chunks.size).toBe(activeChunkCount);
+    expect(terrain.lodChunks.size).toBeGreaterThan(0);
+    expect(terrain.lodChunks.get('0,0')?.geometry.index.count).toBeGreaterThan(0);
+
+    terrain.updateVisibleChunks(new THREE.Vector3(420, 0, -360));
+    expect(terrain.chunks.size).toBe(activeChunkCount);
+    expect(terrain.chunks.has('0,0')).toBe(false);
+    expect(terrain.chunks.has('28,-24')).toBe(true);
+    expect(terrain.lodChunks.size).toBeGreaterThan(0);
     terrain.dispose();
   });
 
