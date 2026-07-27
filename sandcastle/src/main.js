@@ -4,6 +4,7 @@ import * as CANNON from 'cannon-es';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createDuneBuggy } from './duneBuggy.js';
 import { CELL_SIZE, terrainColor, VoxelTerrain } from './terrain.js';
+import { ChunkRegistry } from './chunkRegistry.js';
 import { PerformanceMonitor } from './performance.js';
 
 const canvas = document.querySelector('#scene');
@@ -38,12 +39,32 @@ let seed = Math.random() * 100; let terrain = new VoxelTerrain(scene, terrainMat
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.allowSleep = true;
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
+const simulationChunks = new ChunkRegistry({ world, chunkSize: CELL_SIZE * 10, activeRadius: 2, releaseRadius: 3 });
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const buildings = []; const buildingParts = []; const pendingBuildingImpacts = []; const effects = [];
 const performanceMonitor = new PerformanceMonitor();
 const chunksElement = document.querySelector('#chunks');
 const debrisElement = document.querySelector('#debris');
 const frameTimeElement = document.querySelector('#frame-time');
 const physicsBodiesElement = document.querySelector('#physics-bodies');
+
+function registerSimulationItem(item, { visual = item.mesh, alwaysActive = false } = {}) {
+  item.simulation = simulationChunks.register({
+    body: item.body,
+    visual,
+    alwaysActive,
+    onActivate: () => { item.simulationActive = true; },
+    onDeactivate: () => { item.simulationActive = false; },
+  });
+  item.simulationActive = true;
+  return item;
+}
+
+function unregisterSimulationItem(item) {
+  if (!item?.simulation) return;
+  simulationChunks.unregister(item.simulation);
+  item.simulation = null;
+  item.simulationActive = false;
+}
 const remoteBuildingBlueprints = [];
 const settlementClusters = [];
 const MAX_DEBRIS_BODIES = 110;
@@ -385,7 +406,7 @@ function throwBomb(clientX, clientY) {
   body.userData = { kind: 'projectile' };
   body.position.copy(mesh.position); const velocity = raycaster.ray.direction.clone().multiplyScalar(34); velocity.y += 7;
   body.velocity.set(velocity.x, velocity.y, velocity.z); body.addEventListener('collide', () => { projectile.pendingExplosion = true; }); world.addBody(body);
-  const projectile = { mesh, body, born: performance.now(), exploded: false, pendingExplosion: false }; projectiles.push(projectile);
+  const projectile = registerSimulationItem({ mesh, body, born: performance.now(), exploded: false, pendingExplosion: false }, { alwaysActive: true }); projectiles.push(projectile);
 }
 
 function explode(projectile) {
@@ -587,7 +608,7 @@ function spawnDebris(position, center, voxelCells = 1, color = null) {
   body.position.copy(position); const out = position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random()-.5)*.5, .55 + Math.random()*.55, (Math.random()-.5)*.5)).normalize();
   const impulse = 7 + Math.random() * 8;
   body.velocity.set(out.x * impulse, out.y * impulse, out.z * impulse);
-  body.angularVelocity.set(Math.random()*7, Math.random()*7, Math.random()*7); world.addBody(body); debris.push({ mesh, body, stillSince: null, mergeToTerrain: true, voxelCells, lastImpactAt: 0, rollingResistance: BOULDER_ROLLING_RESISTANCE });
+  body.angularVelocity.set(Math.random()*7, Math.random()*7, Math.random()*7); world.addBody(body); debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: true, voxelCells, lastImpactAt: 0, rollingResistance: BOULDER_ROLLING_RESISTANCE }));
 }
 
 function spawnRockChips(center, removed) {
@@ -619,7 +640,7 @@ function spawnRockChips(center, removed) {
     body.velocity.set(out.x * (8 + Math.random() * 12), out.y * (7 + Math.random() * 11), out.z * (8 + Math.random() * 12));
     body.angularVelocity.set(Math.random() * 12, Math.random() * 12, Math.random() * 12);
     world.addBody(body);
-    debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
+    debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
   }
 }
 
@@ -627,6 +648,7 @@ function explodeDebris(center, radius) {
   const targets = [];
   for (let i = debris.length - 1; i >= 0; i--) {
     const item = debris[i];
+    if (!item.simulationActive) continue;
     const itemRadius = item.mesh.userData.radius ?? item.mesh.geometry.boundingSphere?.radius ?? .4;
     const distance = item.body.position.distanceTo(center);
     if (distance <= radius + itemRadius) targets.push({ item, index: i, distance, itemRadius });
@@ -686,11 +708,11 @@ function spawnBlastChips(position, center, color, count = 4) {
     body.velocity.set(out.x * (7 + Math.random() * 9), out.y * (6 + Math.random() * 9), out.z * (7 + Math.random() * 9));
     body.angularVelocity.set(Math.random() * 10, Math.random() * 10, Math.random() * 10);
     world.addBody(body);
-    debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
+    debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
   }
 }
 
-function removePhysics(item) { scene.remove(item.mesh); world.removeBody(item.body); }
+function removePhysics(item) { unregisterSimulationItem(item); scene.remove(item.mesh); world.removeBody(item.body); }
 function disposeDebrisMesh(item) {
   item.mesh.geometry.dispose();
   if (item.mesh.userData.disposableMaterial) item.mesh.material.dispose();
@@ -1278,6 +1300,7 @@ function createTrackSettlements() {
 
 function disposeBuilding(building) {
   for (const part of building.parts) {
+    unregisterSimulationItem(part);
     if (part.body) world.removeBody(part.body);
     if (part.mesh?.parent) part.mesh.parent.remove(part.mesh);
     part.mesh?.geometry.dispose();
@@ -1285,6 +1308,7 @@ function disposeBuilding(building) {
     if (index >= 0) buildingParts.splice(index, 1);
   }
   for (const block of building.foundation ?? []) {
+    unregisterSimulationItem(block);
     if (block.body) world.removeBody(block.body);
     block.mesh?.geometry.dispose();
   }
@@ -1375,7 +1399,7 @@ function createBuildingFoundation(building, blueprint) {
     body.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
     body.userData = { kind: 'buildingFoundation', building };
     world.addBody(body);
-    building.foundation.push({ mesh, body });
+    building.foundation.push(registerSimulationItem({ mesh, body }));
   }
 }
 
@@ -1411,6 +1435,7 @@ function createBuildingPart(building, spec) {
   };
   const body = createBuildingBody(part, 0);
   part.body = body;
+  registerSimulationItem(part);
   building.parts.push(part);
   buildingParts.push(part);
 }
@@ -1554,9 +1579,11 @@ function detachBuildingPart(part, center, strength = 8) {
   part.mesh.getWorldPosition(worldPosition);
   part.mesh.getWorldQuaternion(worldQuaternion);
   scene.attach(part.mesh);
+  unregisterSimulationItem(part);
   world.removeBody(part.body);
   part.detached = true;
   part.body = createBuildingBody(part, Math.max(.25, part.mass));
+  registerSimulationItem(part);
   part.body.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
   part.body.quaternion.set(worldQuaternion.x, worldQuaternion.y, worldQuaternion.z, worldQuaternion.w);
   const out = worldPosition.clone().sub(center).normalize();
@@ -1698,7 +1725,7 @@ function spawnBuildingShard(position, center, material, sourceSize, strength = 8
     body.userData.activateCollisionAt = performance.now() + options.collisionGraceMs;
   }
   world.addBody(body);
-  debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
+  debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
 }
 
 function fractureBuildingPart(part, center, strength = 8, options = {}) {
@@ -1723,6 +1750,7 @@ function fractureBuildingPart(part, center, strength = 8, options = {}) {
   }
   if (part.mesh.parent) part.mesh.parent.remove(part.mesh);
   else scene.remove(part.mesh);
+  unregisterSimulationItem(part);
   world.removeBody(part.body);
   part.mesh.geometry.dispose();
 }
@@ -1731,9 +1759,11 @@ function updateBuildingParts(delta, now) {
   for (let i = buildingParts.length - 1; i >= 0; i--) {
     const part = buildingParts[i];
     if (part.destroyed) {
+      unregisterSimulationItem(part);
       buildingParts.splice(i, 1);
       continue;
     }
+    if (!part.simulationActive) continue;
     if (!part.detached) continue;
     part.mesh.position.copy(part.body.position);
     part.mesh.quaternion.copy(part.body.quaternion);
@@ -1749,6 +1779,7 @@ function updateBuildingParts(delta, now) {
     if (slow) part.stillSince ??= now; else part.stillSince = null;
     if (part.body.position.y < -7) {
       scene.remove(part.mesh);
+      unregisterSimulationItem(part);
       world.removeBody(part.body);
       part.mesh.geometry.dispose();
       part.destroyed = true;
@@ -1804,7 +1835,7 @@ function createActorState(type, x, z, rotation, variant, parts, bodyOffsetY, rad
 
 function updateActorsPreStep(delta, now) {
   for (const prop of props) {
-    if (!prop.actor) continue;
+    if (!prop.simulationActive || !prop.actor) continue;
     if (prop.actor.state === 'walking' || prop.actor.state === 'annoyed') updateActorIntent(prop, delta, now);
     else if (prop.actor.state === 'recovering') lockActorUpright(prop);
   }
@@ -1812,7 +1843,7 @@ function updateActorsPreStep(delta, now) {
 
 function updateActorsPostStep(delta, now) {
   for (const prop of props) {
-    if (!prop.actor) continue;
+    if (!prop.simulationActive || !prop.actor) continue;
     if (prop.actor.state === 'walking' || prop.actor.state === 'annoyed') {
       maybeKnockActorFromCar(prop, now);
       if (isActorTipped(prop)) knockActor(prop, actorForward(prop).multiplyScalar(-1), 2.4, now);
@@ -2063,7 +2094,7 @@ function createProp(type, x, z, rotation = 0, variant = 0) {
   body.userData = { kind: isActor ? 'actor' : isDynamicProp ? 'dynamicProp' : 'prop', type };
   world.addBody(body);
   group.userData.radius = Math.max(halfExtents.x, halfExtents.y, halfExtents.z);
-  const prop = { type, group, mesh: group, body, blastRadius, bodyOffsetY, dynamic: isDynamicProp, dynamicRadius: isDynamicProp ? .78 : group.userData.radius, lastImpactAt: 0, lastVoiceAt: 0 };
+  const prop = registerSimulationItem({ type, group, mesh: group, body, blastRadius, bodyOffsetY, dynamic: isDynamicProp, dynamicRadius: isDynamicProp ? .78 : group.userData.radius, lastImpactAt: 0, lastVoiceAt: 0 });
   if (isActor) prop.actor = createActorState(type, x, z, rotation, variant, actorParts, bodyOffsetY, group.userData.radius);
   props.push(prop);
 }
@@ -2097,7 +2128,7 @@ function spawnPropShard(position, center, material, scale = 1) {
   body.velocity.set(out.x * (5 + Math.random()*7), out.y * (5 + Math.random()*8), out.z * (5 + Math.random()*7));
   body.angularVelocity.set(Math.random()*8, Math.random()*8, Math.random()*8);
   world.addBody(body);
-  debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
+  debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
 }
 
 function explodeProp(prop, center) {
@@ -2113,12 +2144,14 @@ function explodeProp(prop, center) {
   }
   scene.remove(prop.group);
   prop.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
+  unregisterSimulationItem(prop);
   world.removeBody(prop.body);
 }
 
 function explodeProps(center, radius) {
   for (let i = props.length - 1; i >= 0; i--) {
     const prop = props[i];
+    if (!prop.simulationActive) continue;
     const distance = prop.group.position.distanceTo(center);
     if (distance <= radius + prop.blastRadius) {
       explodeProp(prop, center);
@@ -2139,7 +2172,7 @@ function syncDynamicPropVisual(prop) {
 
 function updateDynamicProps(now) {
   for (const prop of props) {
-    if (!prop.dynamic) continue;
+    if (!prop.simulationActive || !prop.dynamic) continue;
     const collision = terrain.sphereCollision(prop.body.position, prop.dynamicRadius, -1);
     if (collision) applyTerrainContact(prop, collision, now);
     if (!collision && prop.body.sleepState === CANNON.Body.SLEEPING) prop.body.wakeUp();
@@ -2153,6 +2186,7 @@ function crashThroughProps(now) {
   if (carSpeed < 3.4) return;
   for (let i = props.length - 1; i >= 0; i--) {
     const prop = props[i];
+    if (!prop.simulationActive) continue;
     if (prop.type !== 'palm' && prop.type !== 'rainbow') continue;
     const dx = prop.body.position.x - duneBuggy.body.position.x;
     const dz = prop.body.position.z - duneBuggy.body.position.z;
@@ -2168,6 +2202,7 @@ function crashThroughProps(now) {
 }
 
 function updatePhysics(delta, now) {
+  simulationChunks.update(terrainStreamAnchor());
   updateActorsPreStep(delta, now);
   duneBuggy.updatePhysics(delta, now, controlMode === 'car');
   if (duneBuggy.alive) duneBuggy.body.userData.impactVelocity = duneBuggy.body.velocity.clone();
@@ -2187,7 +2222,9 @@ function updatePhysics(delta, now) {
   updateDynamicProps(now);
   crashThroughProps(now);
   for (let i = debris.length - 1; i >= 0; i--) {
-    const item = debris[i]; item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
+    const item = debris[i];
+    if (!item.simulationActive) continue;
+    item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
     if (item.body.userData?.activateCollisionAt && now >= item.body.userData.activateCollisionAt) {
       item.body.collisionResponse = true;
       delete item.body.userData.activateCollisionAt;
@@ -2400,6 +2437,7 @@ document.querySelector('#reset').addEventListener('click', () => {
   debris.forEach((item) => { removePhysics(item); disposeDebrisMesh(item); });
   effects.forEach(disposeEffect);
   duneBuggy.dispose(false);
+  simulationChunks.clear();
   for (const prop of props) {
     scene.remove(prop.group);
     prop.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
