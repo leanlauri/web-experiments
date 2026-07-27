@@ -39,4 +39,15 @@ describe('CameraCuller', () => {
     culler.updateShadowCasting(group);
     expect(mesh.castShadow).toBe(true);
   });
+
+  it('uses only the distance budget when culling a group manually', () => {
+    const culler = new CameraCuller({ maxDistance: 30 });
+    culler.update(createCamera());
+    const group = new THREE.Group();
+
+    group.position.z = 10;
+    expect(culler.updateObject(group, 2)).toBe(true);
+    group.position.z = -50;
+    expect(culler.updateObject(group, 2)).toBe(false);
+  });
 });

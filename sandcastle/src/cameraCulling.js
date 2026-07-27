@@ -18,8 +18,12 @@ export class CameraCuller {
   }
 
   isPointVisible(position, radius = 0, maxDistance = this.maxDistance) {
-    if (this.cameraPosition.distanceTo(position) - radius > maxDistance) return false;
+    if (!this.isPointWithinDistance(position, radius, maxDistance)) return false;
     return this.frustum.intersectsSphere(new THREE.Sphere(position, radius));
+  }
+
+  isPointWithinDistance(position, radius = 0, maxDistance = this.maxDistance) {
+    return this.cameraPosition.distanceTo(position) - radius <= maxDistance;
   }
 
   isObjectVisible(object, maxDistance = this.maxDistance) {
@@ -48,7 +52,9 @@ export class CameraCuller {
   updateObject(object, radius = 0) {
     object.updateWorldMatrix(true, false);
     object.getWorldPosition(this.objectCenter);
-    object.visible = this.isPointVisible(this.objectCenter, radius);
+    // Three.js has accurate geometry bounds for per-mesh frustum culling.
+    // Groups do not, so custom group frustum tests can hide visible children.
+    object.visible = this.isPointWithinDistance(this.objectCenter, radius);
     return object.visible;
   }
 

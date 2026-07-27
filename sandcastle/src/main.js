@@ -2337,7 +2337,7 @@ function updateEffects(delta) {
     const effect = effects[i];
     effect.age += delta;
     const progress = THREE.MathUtils.clamp(effect.age / effect.lifetime, 0, 1);
-    effect.mesh.visible = cameraCuller.isPointVisible(effect.center ?? effect.mesh.position, effect.cullingRadius ?? 2);
+    effect.mesh.visible = cameraCuller.isPointWithinDistance(effect.center ?? effect.mesh.position, effect.cullingRadius ?? 2);
     if (!effect.mesh.visible) {
       if (progress >= 1) {
         disposeEffect(effect);
@@ -2373,18 +2373,21 @@ function updateEffects(delta) {
 }
 
 function updateTerrainMeshCulling(mesh) {
-  mesh.visible = cameraCuller.isObjectVisible(mesh);
+  // Terrain mesh bounds are reliable, so use Three.js's native frustum culling
+  // instead of manually toggling visibility around the viewport edge.
+  mesh.visible = true;
+  mesh.frustumCulled = true;
   mesh.userData.baseCastShadow ??= mesh.castShadow;
-  mesh.castShadow = mesh.visible && mesh.userData.baseCastShadow && cameraCuller.isObjectWithinDistance(mesh, 68);
+  mesh.castShadow = mesh.userData.baseCastShadow && cameraCuller.isObjectWithinDistance(mesh, 68);
 }
 
 function updateSceneCulling() {
   cameraCuller.update(camera);
   for (const mesh of terrain.chunks.values()) updateTerrainMeshCulling(mesh);
-  for (const mesh of terrain.lodChunks.values()) mesh.visible = cameraCuller.isObjectVisible(mesh);
-  if (terrain.lodTransitionSkirt) terrain.lodTransitionSkirt.visible = cameraCuller.isObjectVisible(terrain.lodTransitionSkirt);
-  if (terrain.lodOuterSkirt) terrain.lodOuterSkirt.visible = cameraCuller.isObjectVisible(terrain.lodOuterSkirt);
-  if (terrain.horizonMesh) terrain.horizonMesh.visible = cameraCuller.isObjectVisible(terrain.horizonMesh);
+  for (const mesh of terrain.lodChunks.values()) { mesh.visible = true; mesh.frustumCulled = true; }
+  if (terrain.lodTransitionSkirt) { terrain.lodTransitionSkirt.visible = true; terrain.lodTransitionSkirt.frustumCulled = true; }
+  if (terrain.lodOuterSkirt) { terrain.lodOuterSkirt.visible = true; terrain.lodOuterSkirt.frustumCulled = true; }
+  if (terrain.horizonMesh) { terrain.horizonMesh.visible = true; terrain.horizonMesh.frustumCulled = true; }
 
   for (const building of buildings) {
     cameraCuller.updateObject(building.group, building.cullingRadius);
