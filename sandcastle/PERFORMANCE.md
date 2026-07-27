@@ -53,3 +53,24 @@ exploded debris, and the controlled buggy remain in an explicit always-active se
 - Median frame time remains within 16.7 ms and p95 below 33 ms on the target
   hardware after a sustained destruction sequence.
 - Terrain edit rebuild work is bounded per frame after the streaming-budget phase.
+
+## Implemented
+
+- The telemetry panel reports frame p95, physics p95, active physics bodies,
+  draw calls, and triangles from the live renderer.
+- Props, actors, destructible building pieces, debris, and projectiles are
+  registered to simulation chunks. Distant entries lose their Cannon body and
+  pause evaluation until they return to the active ring.
+- Terrain, buildings, props, debris, and the buggy are explicitly culled by the
+  camera frustum and distance budget. Shadow casting is retained only near the
+  camera.
+- Actor animation and particle vertex updates pause when their visual is outside
+  the camera budget; effect lifetime and cleanup continue normally.
+- Terrain edits are coalesced and rebuilt under a two-high-detail/one-LOD
+  per-frame budget, prioritising the streamed anchor.
+
+## Validation
+
+The complete automated suite and production build must pass for each delivery.
+The in-app telemetry is the source of truth for checking the 16.7 ms median and
+33 ms p95 targets on the deployment hardware after a sustained destruction run.
