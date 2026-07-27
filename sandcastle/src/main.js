@@ -41,7 +41,7 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.a
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
 const simulationChunks = new ChunkRegistry({ world, chunkSize: CELL_SIZE * 10, activeRadius: 2, releaseRadius: 3 });
-const cameraCuller = new CameraCuller({ maxDistance: 382.5, shadowDistance: 68 });
+const cameraCuller = new CameraCuller({ maxDistance: 573.75, shadowDistance: 68 });
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const buildings = []; const buildingParts = []; const pendingBuildingImpacts = []; const effects = [];
 const performanceMonitor = new PerformanceMonitor();
 const chunksElement = document.querySelector('#chunks');
