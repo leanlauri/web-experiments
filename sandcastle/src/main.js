@@ -4,6 +4,7 @@ import * as CANNON from 'cannon-es';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createDuneBuggy } from './duneBuggy.js';
 import { CELL_SIZE, terrainColor, VoxelTerrain } from './terrain.js';
+import { PerformanceMonitor } from './performance.js';
 
 const canvas = document.querySelector('#scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -38,6 +39,11 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.a
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const buildings = []; const buildingParts = []; const pendingBuildingImpacts = []; const effects = [];
+const performanceMonitor = new PerformanceMonitor();
+const chunksElement = document.querySelector('#chunks');
+const debrisElement = document.querySelector('#debris');
+const frameTimeElement = document.querySelector('#frame-time');
+const physicsBodiesElement = document.querySelector('#physics-bodies');
 const remoteBuildingBlueprints = [];
 const settlementClusters = [];
 const MAX_DEBRIS_BODIES = 110;
@@ -2413,13 +2419,29 @@ function terrainStreamAnchor() {
 }
 
 function animate(now) {
-  requestAnimationFrame(animate); const delta = Math.min((now - previous) / 1000, .05); previous = now; updatePhysics(delta, now); updateKeyboard(delta); if (controls.enabled) controls.update();
-  duneBuggy.updateChaseCamera(delta, false, controlMode === 'car');
-  terrain.updateVisibleChunks(terrainStreamAnchor());
-  updateSettlementLod(terrainStreamAnchor());
-  updateEffects(delta);
-  document.querySelector('#chunks').textContent = terrain.chunks.size + terrain.lodChunks.size; document.querySelector('#debris').textContent = debris.length;
-  renderScene(delta);
+  requestAnimationFrame(animate);
+  performanceMonitor.beginFrame(now);
+  const delta = Math.min((now - previous) / 1000, .05);
+  previous = now;
+  performanceMonitor.measure('physics', () => updatePhysics(delta, now));
+  performanceMonitor.measure('input', () => {
+    updateKeyboard(delta);
+    if (controls.enabled) controls.update();
+    duneBuggy.updateChaseCamera(delta, false, controlMode === 'car');
+  });
+  performanceMonitor.measure('streaming', () => {
+    terrain.updateVisibleChunks(terrainStreamAnchor());
+    updateSettlementLod(terrainStreamAnchor());
+  });
+  performanceMonitor.measure('effects', () => updateEffects(delta));
+  performanceMonitor.measure('render', () => renderScene(delta));
+  performanceMonitor.endFrame();
+
+  const snapshot = performanceMonitor.snapshot();
+  chunksElement.textContent = terrain.chunks.size + terrain.lodChunks.size;
+  debrisElement.textContent = debris.length;
+  frameTimeElement.textContent = `${snapshot.frame.p95.toFixed(1)}ms`;
+  physicsBodiesElement.textContent = world.bodies.length;
 }
 populateProps();
 populateBuildings();
