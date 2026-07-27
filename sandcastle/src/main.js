@@ -47,7 +47,10 @@ const performanceMonitor = new PerformanceMonitor();
 const chunksElement = document.querySelector('#chunks');
 const debrisElement = document.querySelector('#debris');
 const frameTimeElement = document.querySelector('#frame-time');
+const physicsTimeElement = document.querySelector('#physics-time');
 const physicsBodiesElement = document.querySelector('#physics-bodies');
+const drawCallsElement = document.querySelector('#draw-calls');
+const trianglesElement = document.querySelector('#triangles');
 
 function registerSimulationItem(item, { visual = item.mesh, alwaysActive = false } = {}) {
   item.simulation = simulationChunks.register({
@@ -2528,7 +2531,10 @@ function animate(now) {
   chunksElement.textContent = terrain.chunks.size + terrain.lodChunks.size;
   debrisElement.textContent = debris.length;
   frameTimeElement.textContent = `${snapshot.frame.p95.toFixed(1)}ms`;
+  physicsTimeElement.textContent = `${(snapshot.phaseP95.physics ?? 0).toFixed(1)}ms`;
   physicsBodiesElement.textContent = world.bodies.length;
+  drawCallsElement.textContent = renderer.info.render.calls;
+  trianglesElement.textContent = renderer.info.render.triangles.toLocaleString();
 }
 populateProps();
 populateBuildings();

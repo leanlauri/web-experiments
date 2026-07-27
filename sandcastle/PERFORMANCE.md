@@ -23,8 +23,9 @@ exploded debris, and the controlled buggy remain in an explicit always-active se
 
 ## Delivery phases
 
-1. **Instrumentation** — expose frame p95, phase timings, draw calls, triangle
-   count, and live physics bodies. Use the numbers as the acceptance baseline.
+1. **Instrumentation** — expose frame p95, physics phase p95, draw calls,
+   triangle count, and live physics bodies. Use the numbers as the acceptance
+   baseline.
 2. **Chunk registry** — assign props, buildings, dynamic parts, debris, and
    projectiles to chunks; pause their evaluation and remove their Cannon bodies
    outside the simulation-active set while preserving state for reactivation.

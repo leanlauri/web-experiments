@@ -10,7 +10,7 @@ canvas { display: block; touch-action: none; }
 h1 { margin: 15px 0 12px; font-size: clamp(42px, 5vw, 76px); line-height: .89; letter-spacing: -.065em; font-weight: 600; }
 h1 em { color: #f5f1da; font-style: normal; text-shadow: 0 1px 14px rgba(27,48,49,.12); }
 .mission p { font-size: 11px; line-height: 1.65; opacity: .64; }
-.telemetry { position: fixed; right: 31px; top: 30px; display: flex; gap: 30px; text-align: right; }
+.telemetry { position: fixed; right: 31px; top: 30px; display: flex; gap: 20px; text-align: right; }
 .telemetry span { font: 500 7px DM Mono; letter-spacing: .13em; opacity: .55; display: block; }
 .telemetry strong { font: 500 18px DM Mono; }
 .reticle { position: fixed; width: 27px; height: 27px; left: 50%; top: 50%; transform: translate(-50%,-50%); pointer-events: none; opacity: .55; transition: opacity .22s; }
