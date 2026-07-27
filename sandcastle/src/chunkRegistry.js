@@ -46,7 +46,10 @@ export class ChunkRegistry {
   setActive(entry, active) {
     if (entry.active === active) return;
     entry.active = active;
-    if (entry.visual) entry.visual.visible = active;
+    // Physics activation is intentionally independent from rendering. A chunk
+    // can be outside the interaction ring yet still be in the camera view.
+    // Rendering is owned by the camera culler, so rotating the camera can never
+    // leave a simulation-paused visual permanently hidden.
     if (active) {
       if (entry.body && !this.world.bodies.includes(entry.body)) this.world.addBody(entry.body);
       entry.onActivate?.(entry);

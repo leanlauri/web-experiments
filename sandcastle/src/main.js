@@ -2398,18 +2398,16 @@ function updateSceneCulling() {
     for (const building of cluster.lodGroup.children) cameraCuller.updateObject(building, building.userData.cullingRadius ?? 12);
   }
   for (const prop of props) {
-    if (!prop.simulationActive) continue;
     cameraCuller.updateObject(prop.group, prop.group.userData.radius ?? prop.blastRadius);
     if (prop.group.visible) cameraCuller.updateShadowCasting(prop.group);
   }
   for (const item of [...projectiles, ...debris]) {
-    if (!item.simulationActive) continue;
     const radius = item.mesh.userData.radius ?? .5;
     cameraCuller.updateObject(item.mesh, radius);
     if (item.mesh.visible) cameraCuller.updateShadowCasting(item.mesh);
   }
   for (const part of buildingParts) {
-    if (!part.detached || !part.simulationActive) continue;
+    if (!part.detached) continue;
     cameraCuller.updateObject(part.mesh, part.mesh.userData.radius ?? 1);
     if (part.mesh.visible) cameraCuller.updateShadowCasting(part.mesh);
   }

@@ -10,7 +10,7 @@ function createWorld() {
 }
 
 describe('ChunkRegistry', () => {
-  it('removes inactive chunk bodies and restores them when the anchor returns', () => {
+  it('removes inactive chunk bodies without hiding their visual', () => {
     const world = createWorld();
     const body = { position: { x: 75, z: 0 } };
     const visual = { visible: true };
@@ -20,7 +20,7 @@ describe('ChunkRegistry', () => {
 
     registry.update({ x: 0, z: 0 });
     expect(entry.active).toBe(false);
-    expect(visual.visible).toBe(false);
+    expect(visual.visible).toBe(true);
     expect(world.bodies).toEqual([]);
 
     registry.update({ x: 75, z: 0 });

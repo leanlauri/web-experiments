@@ -15,7 +15,7 @@ split into three independent sets:
 | --- | --- | --- |
 | Render-visible | Camera | Render and shadow work only for visible, in-range chunks. |
 | Prewarm | Camera/player | Keep nearby assets ready so entering a region does not hitch. |
-| Simulation-active | Player/interaction anchor | Run Cannon bodies, actor AI, terrain contact, debris, and effects. |
+| Simulation-active | Player/interaction anchor | Run Cannon bodies, actor AI, terrain contact, debris, and effects; it never controls render visibility. |
 
 Simulation enters at a two-chunk radius and exits at a three-chunk radius. This
 hysteresis prevents loading/unloading on chunk boundaries. Projectiles, recently
