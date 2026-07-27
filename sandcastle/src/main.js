@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createDuneBuggy } from './duneBuggy.js';
 import { CELL_SIZE, terrainColor, VoxelTerrain } from './terrain.js';
 import { ChunkRegistry } from './chunkRegistry.js';
+import { CameraCuller } from './cameraCulling.js';
 import { PerformanceMonitor } from './performance.js';
 
 const canvas = document.querySelector('#scene');
@@ -40,6 +41,7 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.a
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
 const simulationChunks = new ChunkRegistry({ world, chunkSize: CELL_SIZE * 10, activeRadius: 2, releaseRadius: 3 });
+const cameraCuller = new CameraCuller({ maxDistance: 255, shadowDistance: 68 });
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const buildings = []; const buildingParts = []; const pendingBuildingImpacts = []; const effects = [];
 const performanceMonitor = new PerformanceMonitor();
 const chunksElement = document.querySelector('#chunks');
@@ -1227,6 +1229,7 @@ function createSettlementLod(cluster) {
     const building = new THREE.Group();
     building.position.set(blueprint.x, baseY, blueprint.z);
     building.rotation.y = blueprint.rotation;
+    building.userData.cullingRadius = Math.hypot(blueprint.width, height, blueprint.depth) * .55;
 
     const walls = new THREE.Mesh(new THREE.BoxGeometry(blueprint.width, height, blueprint.depth), blueprint.palette.wall);
     walls.position.y = height * .5;
@@ -1359,7 +1362,7 @@ function createBuilding(blueprint) {
   group.position.set(blueprint.x, terrain.surfaceY(blueprint.x, blueprint.z) + .08, blueprint.z);
   group.rotation.y = blueprint.rotation;
   scene.add(group);
-  const building = { name: blueprint.name, group, parts: [], foundation: [] };
+  const building = { name: blueprint.name, group, parts: [], foundation: [], cullingRadius: Math.hypot(blueprint.width, blueprint.depth) * .62 + 4 };
   createBuildingFoundation(building, blueprint);
   const specs = createRectBuildingSpecs(blueprint);
   for (const spec of specs) createBuildingPart(building, spec);
@@ -2358,6 +2361,50 @@ function updateEffects(delta) {
   }
 }
 
+function updateTerrainMeshCulling(mesh) {
+  mesh.visible = cameraCuller.isObjectVisible(mesh);
+  mesh.userData.baseCastShadow ??= mesh.castShadow;
+  mesh.castShadow = mesh.visible && mesh.userData.baseCastShadow && cameraCuller.isObjectWithinDistance(mesh, 68);
+}
+
+function updateSceneCulling() {
+  cameraCuller.update(camera);
+  for (const mesh of terrain.chunks.values()) updateTerrainMeshCulling(mesh);
+  for (const mesh of terrain.lodChunks.values()) mesh.visible = cameraCuller.isObjectVisible(mesh);
+  if (terrain.lodTransitionSkirt) terrain.lodTransitionSkirt.visible = cameraCuller.isObjectVisible(terrain.lodTransitionSkirt);
+  if (terrain.lodOuterSkirt) terrain.lodOuterSkirt.visible = cameraCuller.isObjectVisible(terrain.lodOuterSkirt);
+  if (terrain.horizonMesh) terrain.horizonMesh.visible = cameraCuller.isObjectVisible(terrain.horizonMesh);
+
+  for (const building of buildings) {
+    cameraCuller.updateObject(building.group, building.cullingRadius);
+    if (building.group.visible) cameraCuller.updateShadowCasting(building.group);
+  }
+  for (const cluster of settlementClusters) {
+    if (cluster.detailed) continue;
+    for (const building of cluster.lodGroup.children) cameraCuller.updateObject(building, building.userData.cullingRadius ?? 12);
+  }
+  for (const prop of props) {
+    if (!prop.simulationActive) continue;
+    cameraCuller.updateObject(prop.group, prop.group.userData.radius ?? prop.blastRadius);
+    if (prop.group.visible) cameraCuller.updateShadowCasting(prop.group);
+  }
+  for (const item of [...projectiles, ...debris]) {
+    if (!item.simulationActive) continue;
+    const radius = item.mesh.userData.radius ?? .5;
+    cameraCuller.updateObject(item.mesh, radius);
+    if (item.mesh.visible) cameraCuller.updateShadowCasting(item.mesh);
+  }
+  for (const part of buildingParts) {
+    if (!part.detached || !part.simulationActive) continue;
+    cameraCuller.updateObject(part.mesh, part.mesh.userData.radius ?? 1);
+    if (part.mesh.visible) cameraCuller.updateShadowCasting(part.mesh);
+  }
+  if (duneBuggy.alive) {
+    cameraCuller.updateObject(duneBuggy.group, 3);
+    if (duneBuggy.group.visible) cameraCuller.updateShadowCasting(duneBuggy.group);
+  }
+}
+
 function renderScene(delta) {
   if (screenShake.age >= screenShake.duration) {
     renderer.render(scene, camera);
@@ -2470,6 +2517,7 @@ function animate(now) {
   performanceMonitor.measure('streaming', () => {
     terrain.updateVisibleChunks(terrainStreamAnchor());
     updateSettlementLod(terrainStreamAnchor());
+    updateSceneCulling();
   });
   performanceMonitor.measure('effects', () => updateEffects(delta));
   performanceMonitor.measure('render', () => renderScene(delta));
