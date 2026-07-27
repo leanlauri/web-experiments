@@ -120,6 +120,10 @@ export class VoxelTerrain {
     this.lodRadius = LOD_CHUNK_RADIUS;
     this.lodChunkSpan = LOD_CHUNK_SPAN;
     this.lodCellStep = LOD_CELL_STEP;
+    this.deferRemesh = options.deferRemesh ?? false;
+    this.pendingHighChunks = new Set();
+    this.pendingLodChunks = new Set();
+    this.needsTransitionRefresh = false;
     this.streamAnchor = { cx: null, cz: null };
     this.track = null;
     this.generate();
@@ -133,6 +137,9 @@ export class VoxelTerrain {
     this.addedVoxels.clear();
     this.removedVoxels.clear();
     this.highChunkKeys.clear();
+    this.pendingHighChunks.clear();
+    this.pendingLodChunks.clear();
+    this.needsTransitionRefresh = false;
     this.streamAnchor = { cx: null, cz: null };
     this.updateVisibleChunks(new THREE.Vector3(0, 0, 0), true);
   }
@@ -381,20 +388,59 @@ export class VoxelTerrain {
   }
 
   refreshDirtyChunks(dirty) {
-    const lodDirty = new Set();
+    this.queueDirtyChunks(dirty);
+    if (!this.deferRemesh) this.processRemeshQueue({ highBudget: Infinity, lodBudget: Infinity });
+  }
+
+  queueDirtyChunks(dirty) {
     for (const item of dirty) {
+      if (this.chunks.has(item)) this.pendingHighChunks.add(item);
       const [cx, cz] = item.split(',').map(Number);
-      if (this.chunks.has(item)) this.rebuildChunk(cx, cz);
-      lodDirty.add(this.lodKeyForChunk(cx, cz));
+      const lodId = this.lodKeyForChunk(cx, cz);
+      if (this.lodChunks.has(lodId)) this.pendingLodChunks.add(lodId);
     }
-    for (const item of lodDirty) {
+  }
+
+  takeNearestPending(pending, span = 1) {
+    let nearest = null;
+    let bestDistance = Infinity;
+    for (const id of pending) {
+      const [x, z] = id.split(',').map(Number);
+      const distance = (x * span - this.streamAnchor.cx) ** 2 + (z * span - this.streamAnchor.cz) ** 2;
+      if (distance >= bestDistance) continue;
+      nearest = id;
+      bestDistance = distance;
+    }
+    if (nearest) pending.delete(nearest);
+    return nearest;
+  }
+
+  processRemeshQueue({ highBudget = 2, lodBudget = 1 } = {}) {
+    let high = 0;
+    let lod = 0;
+    while (high < highBudget && this.pendingHighChunks.size > 0) {
+      const item = this.takeNearestPending(this.pendingHighChunks);
+      if (!this.chunks.has(item)) continue;
+      const [cx, cz] = item.split(',').map(Number);
+      this.rebuildChunk(cx, cz);
+      const lodId = this.lodKeyForChunk(cx, cz);
+      if (this.lodChunks.has(lodId)) this.pendingLodChunks.add(lodId);
+      this.needsTransitionRefresh = true;
+      high++;
+    }
+    while (lod < lodBudget && this.pendingLodChunks.size > 0) {
+      const item = this.takeNearestPending(this.pendingLodChunks, this.lodChunkSpan);
+      if (!this.lodChunks.has(item)) continue;
       const [lx, lz] = item.split(',').map(Number);
-      if (this.lodChunks.has(item)) this.rebuildLodChunk(lx, lz);
+      this.rebuildLodChunk(lx, lz);
+      lod++;
     }
-    if (dirty.size > 0) {
+    if (this.needsTransitionRefresh && this.pendingHighChunks.size === 0) {
       this.rebuildLodTransitionSkirt();
       this.rebuildLodOuterSkirt();
+      this.needsTransitionRefresh = false;
     }
+    return { high, lod, pendingHigh: this.pendingHighChunks.size, pendingLod: this.pendingLodChunks.size };
   }
 
   lodKeyForChunk(cx, cz) {
@@ -942,6 +988,8 @@ export class VoxelTerrain {
     if (this.lodOuterSkirt) { this.scene.remove(this.lodOuterSkirt); this.lodOuterSkirt.geometry.dispose(); }
     if (this.horizonMesh) { this.scene.remove(this.horizonMesh); this.horizonMesh.geometry.dispose(); }
     this.chunks.clear(); this.lodChunks?.clear();
+    this.pendingHighChunks?.clear();
+    this.pendingLodChunks?.clear();
     this.lodTransitionSkirt = null;
     this.lodOuterSkirt = null;
     this.horizonMesh = null;

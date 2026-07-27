@@ -35,7 +35,7 @@ scene.add(sun);
 const terrainMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .96, metalness: 0 });
 const urlParams = new URLSearchParams(location.search);
 const trackEnabled = urlParams.get('track') !== 'false';
-let seed = Math.random() * 100; let terrain = new VoxelTerrain(scene, terrainMaterial, seed, { trackEnabled });
+let seed = Math.random() * 100; let terrain = new VoxelTerrain(scene, terrainMaterial, seed, { trackEnabled, deferRemesh: true });
 
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.allowSleep = true;
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
@@ -2516,6 +2516,7 @@ function animate(now) {
   });
   performanceMonitor.measure('streaming', () => {
     terrain.updateVisibleChunks(terrainStreamAnchor());
+    terrain.processRemeshQueue();
     updateSettlementLod(terrainStreamAnchor());
     updateSceneCulling();
   });
