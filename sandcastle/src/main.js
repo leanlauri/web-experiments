@@ -13,7 +13,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.toneMapping = THREE.A
 renderer.toneMappingExposure = 1.15; renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#b8d8dc'); scene.fog = new THREE.Fog('#b8d8dc', 80, 280);
-const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, .1, 360); camera.position.set(34, 34, 46);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, .1, 2_000); camera.position.set(34, 34, 46);
 const controls = new OrbitControls(camera, canvas); controls.target.set(0, 12, 0); controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * .48; controls.minDistance = 11; controls.maxDistance = 150;
 controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
@@ -38,11 +38,16 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.a
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const buildings = []; const buildingParts = []; const pendingBuildingImpacts = []; const effects = [];
+const remoteBuildingBlueprints = [];
+const settlementClusters = [];
 const MAX_DEBRIS_BODIES = 110;
 const MAX_MERGEABLE_DEBRIS_PER_BLAST = 36;
 const MAX_VISUAL_CHIPS = 30;
 const MAX_BUILDING_SHARDS = 44;
-const CRUMBLE_SHARD_OPTIONS = { impulseScale: .26, scatterScale: .55, upwardBias: .06, upwardRange: .2, baseSpeed: 1.7, verticalBase: 1.1, spinScale: .42, panelScatterScale: .64 };
+// Vehicle impacts should crumble a wall in its footprint, not turn it into a radial blast.
+// The impact direction is supplied per collision below; these values only provide a little
+// breakup variation around that direction.
+const CRUMBLE_SHARD_OPTIONS = { impulseScale: .1, scatterScale: .08, spawnScatterScale: .08, upwardBias: .01, upwardRange: .04, baseSpeed: .3, verticalBase: .18, spinScale: .16, panelScatterScale: .15, directionBias: .92, collisionGraceMs: 180 };
 const MIN_FRAGMENT_CELLS = 2;
 const BOULDER_ROLLING_RESISTANCE = .88;
 const CHIP_ROLLING_RESISTANCE = .42;
@@ -115,7 +120,7 @@ const duneBuggy = createDuneBuggy({
   createParticleBurst,
   spawnShard: spawnPropShard,
   triggerScreenShake,
-  getSpawnObstacles: () => ({ buildingBlueprints, props }),
+  getSpawnObstacles: () => ({ buildingBlueprints: [...buildingBlueprints, ...remoteBuildingBlueprints], props }),
   onDestroyed: () => {
     if (controlMode === 'car') setControlMode('bomber', false);
   },
@@ -183,6 +188,7 @@ function setControlMode(mode, persist = true) {
   if (controlMode === 'car') {
     if (!duneBuggy.alive) duneBuggy.spawn();
     duneBuggy.updateChaseCamera(1 / 60, true, true);
+    updateSettlementLod(duneBuggy.body.position, true);
   } else if (!firstPersonMode) {
     updateCameraTarget();
   }
@@ -1097,6 +1103,226 @@ const buildingBlueprints = [
   { name: 'power-plant', x: -34, z: 3, rotation: 1.35, width: 12.8, depth: 9.2, stories: 2, floorHeight: 3.1, roomsX: 3, roomsZ: 3, roof: 'saw', palette: buildingPalettes.plant, industrial: 3, tanks: 4, stacks: 4 },
 ];
 
+const SETTLEMENT_LOD_ENTER_DISTANCE = 118;
+const SETTLEMENT_LOD_EXIT_DISTANCE = 156;
+
+function settlementRng(seed) {
+  let state = (Math.floor(seed * 1e6) ^ 0x9E3779B9) >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function trackSampleAtDistance(track, distance) {
+  const target = ((distance % track.length) + track.length) % track.length;
+  return track.samples.find((sample) => sample.s >= target) ?? track.samples[0];
+}
+
+function terrainVariationAt(x, z, radius = 12) {
+  const values = [
+    terrain.surfaceY(x, z),
+    terrain.surfaceY(x - radius, z), terrain.surfaceY(x + radius, z),
+    terrain.surfaceY(x, z - radius), terrain.surfaceY(x, z + radius),
+  ];
+  return Math.max(...values) - Math.min(...values);
+}
+
+function findSettlementSite(sample, side, rng) {
+  let best = null;
+  for (let attempt = 0; attempt < 7; attempt++) {
+    const distance = 34 + rng() * 30;
+    const along = (rng() - .5) * 48;
+    const x = sample.x + sample.normalX * side * distance + sample.tangentX * along;
+    const z = sample.z + sample.normalZ * side * distance + sample.tangentZ * along;
+    const variation = terrainVariationAt(x, z);
+    if (!best || variation < best.variation) best = { x, z, variation };
+  }
+  return best;
+}
+
+function createTrackStartTown(track) {
+  const pose = track.startPose();
+  const road = track.sample(pose.x, pose.z);
+  if (!road) return;
+
+  const rng = settlementRng(terrain.seed + 73.1);
+  const blueprints = [];
+  const streetOffsets = [-24, -8, 9, 25];
+  for (const side of [-1, 1]) {
+    for (let index = 0; index < streetOffsets.length; index++) {
+      const along = streetOffsets[index] + (rng() - .5) * 2.4;
+      const setback = 15 + rng() * 1.8;
+      const towardRoadX = -road.normalX * side;
+      const towardRoadZ = -road.normalZ * side;
+      blueprints.push({
+        name: `start-town-${side < 0 ? 'west' : 'east'}-${index + 1}`,
+        x: pose.x + road.tangentX * along + road.normalX * side * setback,
+        z: pose.z + road.tangentZ * along + road.normalZ * side * setback,
+        // The local front (negative Z) faces the race street, leaving a clear
+        // corridor around the buggy's start position.
+        rotation: Math.atan2(-towardRoadX, -towardRoadZ),
+        width: 4.8 + rng() * 1.6,
+        depth: 4.6 + rng() * 1.5,
+        stories: rng() < .22 ? 2 : 1,
+        floorHeight: 2.45 + rng() * .28,
+        roomsX: 2,
+        roomsZ: rng() < .42 ? 2 : 1,
+        roof: rng() < .72 ? 'gable' : 'flat',
+        palette: rng() < .7 ? buildingPalettes.house : buildingPalettes.brick,
+      });
+    }
+  }
+  const cluster = {
+    name: 'start-town',
+    x: pose.x,
+    z: pose.z,
+    blueprints,
+    lodGroup: null,
+    detailedBuildings: [],
+    detailed: false,
+  };
+  remoteBuildingBlueprints.push(...blueprints);
+  settlementClusters.push(cluster);
+  createSettlementLod(cluster);
+}
+
+function createSettlementLod(cluster) {
+  const group = new THREE.Group();
+  group.name = `${cluster.name}-lod`;
+  for (const blueprint of cluster.blueprints) {
+    const height = (blueprint.floorHeight ?? 2.6) * blueprint.stories;
+    const baseY = terrain.surfaceY(blueprint.x, blueprint.z);
+    const building = new THREE.Group();
+    building.position.set(blueprint.x, baseY, blueprint.z);
+    building.rotation.y = blueprint.rotation;
+
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(blueprint.width, height, blueprint.depth), blueprint.palette.wall);
+    walls.position.y = height * .5;
+    walls.castShadow = false;
+    walls.receiveShadow = true;
+    building.add(walls);
+
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(blueprint.width + .35, .26, blueprint.depth + .35), blueprint.palette.roof);
+    roof.position.y = height + .13;
+    roof.castShadow = false;
+    roof.receiveShadow = true;
+    building.add(roof);
+    group.add(building);
+  }
+  cluster.lodGroup = group;
+  scene.add(group);
+}
+
+function createTrackSettlements() {
+  disposeSettlementLods();
+  remoteBuildingBlueprints.length = 0;
+  if (!terrain.track) return;
+
+  const rng = settlementRng(terrain.seed + 31.7);
+  createTrackStartTown(terrain.track);
+  const clusterCount = 5;
+  for (let clusterIndex = 0; clusterIndex < clusterCount; clusterIndex++) {
+    const progress = (.08 + clusterIndex * .18 + (rng() - .5) * .05) % 1;
+    const sample = trackSampleAtDistance(terrain.track, terrain.track.length * progress);
+    const side = rng() < .5 ? -1 : 1;
+    const site = findSettlementSite(sample, side, rng);
+    const blueprints = [];
+    const buildingCount = 3 + Math.floor(rng() * 2);
+    const heading = Math.atan2(sample.tangentX, sample.tangentZ);
+    for (let buildingIndex = 0; buildingIndex < buildingCount; buildingIndex++) {
+      const along = (rng() - .5) * 34;
+      const across = (rng() - .5) * 24;
+      const x = site.x + sample.tangentX * along + sample.normalX * across;
+      const z = site.z + sample.tangentZ * along + sample.normalZ * across;
+      const palette = rng() < .7 ? buildingPalettes.house : buildingPalettes.brick;
+      const blueprint = {
+        name: `track-settlement-${clusterIndex + 1}-home-${buildingIndex + 1}`,
+        x,
+        z,
+        rotation: heading + (rng() - .5) * .42,
+        width: 4.7 + rng() * 1.8,
+        depth: 4.3 + rng() * 1.6,
+        stories: rng() < .2 ? 2 : 1,
+        floorHeight: 2.45 + rng() * .28,
+        roomsX: 2,
+        roomsZ: rng() < .45 ? 2 : 1,
+        roof: rng() < .72 ? 'gable' : 'flat',
+        palette,
+      };
+      blueprints.push(blueprint);
+      remoteBuildingBlueprints.push(blueprint);
+    }
+    const cluster = {
+      name: `track-settlement-${clusterIndex + 1}`,
+      x: site.x,
+      z: site.z,
+      blueprints,
+      lodGroup: null,
+      detailedBuildings: [],
+      detailed: false,
+    };
+    settlementClusters.push(cluster);
+    createSettlementLod(cluster);
+  }
+}
+
+function disposeBuilding(building) {
+  for (const part of building.parts) {
+    if (part.body) world.removeBody(part.body);
+    if (part.mesh?.parent) part.mesh.parent.remove(part.mesh);
+    part.mesh?.geometry.dispose();
+    const index = buildingParts.indexOf(part);
+    if (index >= 0) buildingParts.splice(index, 1);
+  }
+  for (const block of building.foundation ?? []) {
+    if (block.body) world.removeBody(block.body);
+    block.mesh?.geometry.dispose();
+  }
+  scene.remove(building.group);
+  const index = buildings.indexOf(building);
+  if (index >= 0) buildings.splice(index, 1);
+}
+
+function setSettlementDetail(cluster, enabled) {
+  if (enabled === cluster.detailed) return;
+  if (enabled) {
+    cluster.lodGroup.visible = false;
+    cluster.detailedBuildings = cluster.blueprints.map(createBuilding);
+  } else {
+    for (const building of cluster.detailedBuildings) disposeBuilding(building);
+    cluster.detailedBuildings = [];
+    cluster.lodGroup.visible = true;
+  }
+  cluster.detailed = enabled;
+}
+
+function updateSettlementLod(anchor, force = false) {
+  for (const cluster of settlementClusters) {
+    const distance = Math.hypot(anchor.x - cluster.x, anchor.z - cluster.z);
+    if (!cluster.detailed && (force ? distance < SETTLEMENT_LOD_ENTER_DISTANCE : distance < SETTLEMENT_LOD_ENTER_DISTANCE)) {
+      setSettlementDetail(cluster, true);
+    } else if (cluster.detailed && distance > SETTLEMENT_LOD_EXIT_DISTANCE) {
+      setSettlementDetail(cluster, false);
+    }
+  }
+}
+
+function disposeSettlementLods() {
+  for (const cluster of settlementClusters) {
+    for (const building of cluster.detailedBuildings) {
+      if (buildings.includes(building)) disposeBuilding(building);
+    }
+    cluster.detailedBuildings = [];
+    cluster.lodGroup?.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
+    if (cluster.lodGroup) scene.remove(cluster.lodGroup);
+  }
+  settlementClusters.length = 0;
+}
+
 function createBuilding(blueprint) {
   const group = new THREE.Group();
   group.name = blueprint.name;
@@ -1108,6 +1334,7 @@ function createBuilding(blueprint) {
   const specs = createRectBuildingSpecs(blueprint);
   for (const spec of specs) createBuildingPart(building, spec);
   buildings.push(building);
+  return building;
 }
 
 function createBuildingFoundation(building, blueprint) {
@@ -1207,51 +1434,81 @@ function createBuildingBody(part, mass) {
 
 function populateBuildings() {
   buildingBlueprints.forEach(createBuilding);
+  createTrackSettlements();
+  updateSettlementLod(terrainStreamAnchor(), true);
 }
 
 function bodySpeed(body) {
   return body?.velocity ? Math.hypot(body.velocity.x, body.velocity.y, body.velocity.z) : 0;
 }
 
-function relativeBodySpeed(a, b) {
-  return Math.hypot(
-    (a?.velocity?.x ?? 0) - (b?.velocity?.x ?? 0),
-    (a?.velocity?.y ?? 0) - (b?.velocity?.y ?? 0),
-    (a?.velocity?.z ?? 0) - (b?.velocity?.z ?? 0),
-  );
+function isKineticBuildingImpact(body) {
+  const kind = body?.userData?.kind;
+  return kind === 'car' || kind === 'debris' || kind === 'buildingPart' || kind === 'dynamicProp';
 }
 
-function isDynamicImpactBody(body) {
-  const kind = body?.userData?.kind;
-  return kind === 'car' || kind === 'debris' || kind === 'projectile' || kind === 'buildingPart' || kind === 'dynamicProp';
+function impactEnergy(body, speed) {
+  return .5 * Math.max(0, body?.mass ?? 0) * speed * speed;
+}
+
+function markExplosiveMomentum(body) {
+  if (body?.userData) body.userData.explosiveUntil = performance.now() + 650;
 }
 
 function handleBuildingPartCollision(part, otherBody) {
-  if (part.destroyed || !isDynamicImpactBody(otherBody)) return;
+  if (part.destroyed || !isKineticBuildingImpact(otherBody)) return;
   const now = performance.now();
   if (now - part.lastDamageAt < 130) return;
-  const speed = relativeBodySpeed(part.body, otherBody);
-  if (speed < part.impactThreshold) return;
+  // The contact callback runs after Cannon has resolved the static wall contact.
+  // Keep the pre-solve vehicle velocity so a break is judged from the actual hit,
+  // and so the buggy can carry through the newly opened gap.
+  const recordedVelocity = otherBody.userData?.impactVelocity;
+  const impactVelocity = recordedVelocity
+    ? new THREE.Vector3(recordedVelocity.x, recordedVelocity.y, recordedVelocity.z)
+    : new THREE.Vector3(otherBody.velocity?.x ?? 0, otherBody.velocity?.y ?? 0, otherBody.velocity?.z ?? 0);
+  impactVelocity.sub(new THREE.Vector3(part.body.velocity.x, part.body.velocity.y, part.body.velocity.z));
+  const speed = impactVelocity.length();
+  // A light fragment needs much more speed than the buggy to break a wall.
+  // This admits meaningful kinetic hits without letting ordinary rubble chain
+  // through a building.
+  const requiredEnergy = part.strength * 22;
+  const energy = impactEnergy(otherBody, speed);
+  if (speed < 3.5 || energy < requiredEnergy) return;
   part.lastDamageAt = now;
   const center = new THREE.Vector3().copy(otherBody.position ?? part.body.position);
-  pendingBuildingImpacts.push({ part, center, speed, now, crumble: otherBody?.userData?.kind !== 'projectile' });
+  const direction = speed > .001 ? impactVelocity.multiplyScalar(1 / speed) : null;
+  pendingBuildingImpacts.push({
+    part,
+    center,
+    speed,
+    direction,
+    otherBody,
+    now,
+    crumble: true,
+    // Blast energy only affects a brief, genuinely high-energy collision window;
+    // a tagged part that has already settled fractures like ordinary rubble.
+    explosive: now < (otherBody.userData?.explosiveUntil ?? 0) && energy >= requiredEnergy * 1.35,
+  });
 }
 
 function processBuildingImpacts() {
   if (!pendingBuildingImpacts.length) return;
   const impacts = pendingBuildingImpacts.splice(0, pendingBuildingImpacts.length);
-  for (const { part, center, speed, crumble } of impacts) {
+  for (const { part, center, speed, direction, otherBody, crumble, explosive } of impacts) {
     if (part.destroyed) continue;
     if (performance.now() - part.lastDamageAt > 900) continue;
-    applyBuildingImpact(part, center, speed, { crumble });
+    applyBuildingImpact(part, center, speed, { crumble, direction, otherBody, explosive });
   }
 }
 
 function applyBuildingImpact(part, center, speed, options = {}) {
   if (options.crumble) {
     const crumbleStrength = Math.max(2.2, speed * .2);
-    fractureBuildingPart(part, center, crumbleStrength, CRUMBLE_SHARD_OPTIONS);
-    damageBuildingAtPoint(center, speed * .14, part.building, part, { crumble: true });
+    const shardOptions = options.explosive
+      ? { explosive: true }
+      : { ...CRUMBLE_SHARD_OPTIONS, direction: options.direction, ignoreBody: options.otherBody };
+    fractureBuildingPart(part, center, crumbleStrength, shardOptions);
+    carryVehicleThroughBreak(options.otherBody, options.direction, speed);
     return;
   }
   if (part.type === 'roof' || part.type === 'floor') {
@@ -1268,6 +1525,20 @@ function applyBuildingImpact(part, center, speed, options = {}) {
   damageBuildingAtPoint(center, speed * .32, part.building, part);
   if (speed > part.impactThreshold + 5 || part.brittle) fractureBuildingPart(part, center, speed * .45);
   triggerScreenShake(THREE.MathUtils.clamp(speed / 55, .08, .32), .18);
+}
+
+function carryVehicleThroughBreak(body, direction, impactSpeed) {
+  if (body?.userData?.kind !== 'car' || !direction) return;
+  const now = performance.now();
+  // A single bumper can touch several adjacent pieces in one simulation step.
+  // Only compensate once, otherwise each break would add another full impulse.
+  if (now - (body.userData.lastBuildingBreakAt ?? 0) < 90) return;
+  body.userData.lastBuildingBreakAt = now;
+  const forwardSpeed = body.velocity.x * direction.x + body.velocity.y * direction.y + body.velocity.z * direction.z;
+  const carrySpeed = impactSpeed * .58;
+  if (forwardSpeed >= carrySpeed) return;
+  const impulse = (carrySpeed - forwardSpeed) * body.mass;
+  body.applyImpulse(new CANNON.Vec3(direction.x * impulse, direction.y * impulse, direction.z * impulse));
 }
 
 function detachBuildingPart(part, center, strength = 8) {
@@ -1311,15 +1582,21 @@ function damageBuildingAtPoint(center, strength, sourceBuilding = null, primaryP
     const falloff = THREE.MathUtils.clamp(1 - distance / Math.max(1, 1.4 + strength * .28), .12, 1);
     const roll = falloff * strength + (part.brittle ? 2 : 0);
     if (options.crumble) {
-      if (roll > part.strength * .72) fractureBuildingPart(part, center, strength * falloff, CRUMBLE_SHARD_OPTIONS);
+      const shardOptions = options.explosive
+        ? { explosive: true }
+        : { ...CRUMBLE_SHARD_OPTIONS, direction: options.direction, ignoreBody: options.ignoreBody };
+      if (roll > part.strength * .72) fractureBuildingPart(part, center, strength * falloff, shardOptions);
       continue;
     }
     if ((part.type === 'roof' || part.type === 'floor') && roll > part.strength * .65) {
-      fractureBuildingPart(part, center, strength * falloff);
+      fractureBuildingPart(part, center, strength * falloff, options.explosive ? { explosive: true } : {});
       continue;
     }
-    if (!part.detached && roll > part.strength * (.82 + Math.random() * .45)) detachBuildingPart(part, center, strength * falloff);
-    if ((part.detached || part.brittle) && roll > part.strength * 1.35 && Math.random() < .55) fractureBuildingPart(part, center, strength * falloff);
+    if (!part.detached && roll > part.strength * (.82 + Math.random() * .45)) {
+      detachBuildingPart(part, center, strength * falloff);
+      if (options.explosive) markExplosiveMomentum(part.body);
+    }
+    if ((part.detached || part.brittle) && roll > part.strength * 1.35 && Math.random() < .55) fractureBuildingPart(part, center, strength * falloff, options.explosive ? { explosive: true } : {});
   }
 }
 
@@ -1338,20 +1615,22 @@ function damageBuildings(center, radius) {
     const falloff = THREE.MathUtils.clamp(1 - distance / Math.max(radius + partRadius, .001), .08, 1);
     const strength = 4 + falloff * 13;
     if (part.detached) {
+      markExplosiveMomentum(part.body);
       const out = new THREE.Vector3().copy(part.body.position).sub(blastCenter).normalize();
       part.body.velocity.x += out.x * strength;
       part.body.velocity.y += Math.max(.6, out.y + .35) * strength;
       part.body.velocity.z += out.z * strength;
-      if (falloff > .48 || part.brittle) fractureBuildingPart(part, blastCenter, strength);
+      if (falloff > .48 || part.brittle) fractureBuildingPart(part, blastCenter, strength, { explosive: true });
     } else if (strength > part.strength * (.72 + Math.random() * .38)) {
       if (part.type === 'roof' || part.type === 'floor') {
-        fractureBuildingPart(part, blastCenter, strength);
-        damageBuildingAtPoint(part.body.position, strength * .3, part.building, part);
+        fractureBuildingPart(part, blastCenter, strength, { explosive: true });
+        damageBuildingAtPoint(part.body.position, strength * .3, part.building, part, { explosive: true });
         continue;
       }
       detachBuildingPart(part, blastCenter, strength);
-      if (falloff > .62 || (part.brittle && falloff > .32)) fractureBuildingPart(part, blastCenter, strength);
-      damageBuildingAtPoint(part.body.position, strength * .42, part.building, part);
+      markExplosiveMomentum(part.body);
+      if (falloff > .62 || (part.brittle && falloff > .32)) fractureBuildingPart(part, blastCenter, strength, { explosive: true });
+      damageBuildingAtPoint(part.body.position, strength * .42, part.building, part, { explosive: true });
     }
   }
 }
@@ -1383,7 +1662,10 @@ function spawnBuildingShard(position, center, material, sourceSize, strength = 8
   const geometry = createStructuralShardGeometry(radius, sourceSize);
   const mesh = new THREE.Mesh(geometry, material);
   const scatterScale = options.scatterScale ?? 1;
-  mesh.position.copy(position).add(new THREE.Vector3((Math.random() - .5) * .8 * scatterScale, (Math.random() - .5) * .4 * scatterScale, (Math.random() - .5) * .8 * scatterScale));
+  // Spawn close to the source surface. The velocity below, rather than a large
+  // initial offset, supplies the visible energy for both impacts and explosions.
+  const spawnScatterScale = options.spawnScatterScale ?? .2;
+  mesh.position.copy(position).add(new THREE.Vector3((Math.random() - .5) * .8 * spawnScatterScale, (Math.random() - .5) * .4 * spawnScatterScale, (Math.random() - .5) * .8 * spawnScatterScale));
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.userData.radius = Math.max(radius, geometry.boundingSphere?.radius ?? radius);
@@ -1392,19 +1674,31 @@ function spawnBuildingShard(position, center, material, sourceSize, strength = 8
   const body = new CANNON.Body({ mass: .18 + radius * 1.2, shape: new CANNON.Sphere(mesh.userData.radius), linearDamping: .11, angularDamping: .16, allowSleep: true, sleepSpeedLimit: .2, sleepTimeLimit: .8 });
   body.position.copy(mesh.position);
   body.userData = { kind: 'debris' };
+  if (options.explosive) markExplosiveMomentum(body);
   const upwardBias = options.upwardBias ?? .45;
   const upwardRange = options.upwardRange ?? .65;
-  const out = mesh.position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random() - .5) * .55 * scatterScale, upwardBias + Math.random() * upwardRange, (Math.random() - .5) * .55 * scatterScale)).normalize();
+  const radial = mesh.position.clone().sub(center).normalize();
+  const impactDirection = options.direction?.clone?.();
+  const baseDirection = impactDirection?.lengthSq() ? impactDirection.normalize().lerp(radial, 1 - (options.directionBias ?? 0)) : radial;
+  const out = baseDirection.add(new THREE.Vector3((Math.random() - .5) * .55 * scatterScale, upwardBias + Math.random() * upwardRange, (Math.random() - .5) * .55 * scatterScale)).normalize();
   const impulseScale = options.impulseScale ?? 1;
   body.velocity.set(out.x * ((options.baseSpeed ?? 5) + strength * .52) * impulseScale, out.y * ((options.verticalBase ?? 4) + strength * .58) * impulseScale, out.z * ((options.baseSpeed ?? 5) + strength * .52) * impulseScale);
   const spinScale = options.spinScale ?? 1;
   body.angularVelocity.set(Math.random() * 10 * spinScale, Math.random() * 10 * spinScale, Math.random() * 10 * spinScale);
+  if (options.ignoreBody?.userData?.kind === 'car' && options.collisionGraceMs) {
+    // Fresh fragments start inside the collision footprint of the wall.  Let them
+    // leave it before they become solid so they cannot kick the buggy backward.
+    body.collisionResponse = false;
+    body.userData.activateCollisionAt = performance.now() + options.collisionGraceMs;
+  }
   world.addBody(body);
   debris.push({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE });
 }
 
 function fractureBuildingPart(part, center, strength = 8, options = {}) {
   if (part.destroyed || part.fractured) return;
+  // High fragment velocity is reserved for damage created by explode().
+  const shardOptions = options.explosive ? options : { ...CRUMBLE_SHARD_OPTIONS, ...options };
   part.fractured = true;
   part.destroyed = true;
   const position = new THREE.Vector3().copy(part.body.position);
@@ -1415,11 +1709,11 @@ function fractureBuildingPart(part, center, strength = 8, options = {}) {
   for (let i = 0; i < count; i++) {
     const shardPosition = position.clone();
     if (slab) {
-      const panelScatterScale = options.panelScatterScale ?? 1;
+      const panelScatterScale = shardOptions.panelScatterScale ?? 1;
       const offset = new THREE.Vector3((Math.random() - .5) * part.size.x * .82 * panelScatterScale, (Math.random() - .5) * part.size.y, (Math.random() - .5) * part.size.z * .82 * panelScatterScale).applyQuaternion(quaternion);
       shardPosition.add(offset);
     }
-    spawnBuildingShard(shardPosition, center, part.material, part.size, strength, options);
+    spawnBuildingShard(shardPosition, center, part.material, part.size, strength, shardOptions);
   }
   if (part.mesh.parent) part.mesh.parent.remove(part.mesh);
   else scene.remove(part.mesh);
@@ -1458,22 +1752,7 @@ function updateBuildingParts(delta, now) {
 }
 
 function disposeBuildings() {
-  for (const part of buildingParts) {
-    if (part.body) world.removeBody(part.body);
-    if (part.mesh) {
-      if (part.mesh.parent) part.mesh.parent.remove(part.mesh);
-      part.mesh.geometry.dispose();
-    }
-  }
-  for (const building of buildings) {
-    for (const block of building.foundation ?? []) {
-      if (block.body) world.removeBody(block.body);
-      if (block.mesh) block.mesh.geometry.dispose();
-    }
-    scene.remove(building.group);
-  }
-  buildings.length = 0;
-  buildingParts.length = 0;
+  for (const building of [...buildings]) disposeBuilding(building);
 }
 
 function addPart(group, geometry, material, position, scale = [1, 1, 1], rotation = [0, 0, 0]) {
@@ -1885,6 +2164,7 @@ function crashThroughProps(now) {
 function updatePhysics(delta, now) {
   updateActorsPreStep(delta, now);
   duneBuggy.updatePhysics(delta, now, controlMode === 'car');
+  if (duneBuggy.alive) duneBuggy.body.userData.impactVelocity = duneBuggy.body.velocity.clone();
   world.step(1 / 60, delta, 3);
   processBuildingImpacts();
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -1902,6 +2182,10 @@ function updatePhysics(delta, now) {
   crashThroughProps(now);
   for (let i = debris.length - 1; i >= 0; i--) {
     const item = debris[i]; item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
+    if (item.body.userData?.activateCollisionAt && now >= item.body.userData.activateCollisionAt) {
+      item.body.collisionResponse = true;
+      delete item.body.userData.activateCollisionAt;
+    }
     const radius = item.mesh.userData.radius ?? item.mesh.geometry.boundingSphere?.radius ?? .5;
     const collision = terrain.sphereCollision(item.body.position, radius);
     if (collision) applyTerrainContact(item, collision, now);
@@ -2116,6 +2400,7 @@ document.querySelector('#reset').addEventListener('click', () => {
     world.removeBody(prop.body);
   }
   disposeBuildings();
+  disposeSettlementLods();
   projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0; screenShake.age = screenShake.duration; seed = Math.random() * 100; terrain.seed = seed; terrain.generate(); populateProps(); populateBuildings(); duneBuggy.spawn();
   if (controlMode === 'car') duneBuggy.updateChaseCamera(1 / 60, true, true);
 });
@@ -2131,6 +2416,7 @@ function animate(now) {
   requestAnimationFrame(animate); const delta = Math.min((now - previous) / 1000, .05); previous = now; updatePhysics(delta, now); updateKeyboard(delta); if (controls.enabled) controls.update();
   duneBuggy.updateChaseCamera(delta, false, controlMode === 'car');
   terrain.updateVisibleChunks(terrainStreamAnchor());
+  updateSettlementLod(terrainStreamAnchor());
   updateEffects(delta);
   document.querySelector('#chunks').textContent = terrain.chunks.size + terrain.lodChunks.size; document.querySelector('#debris').textContent = debris.length;
   renderScene(delta);

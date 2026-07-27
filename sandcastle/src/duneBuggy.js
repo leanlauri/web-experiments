@@ -3,27 +3,45 @@ import * as CANNON from 'cannon-es';
 
 const config = {
   wheelRadius: .38,
-  suspensionRest: .84,
-  suspensionMax: 1.42,
-  suspensionMin: .18,
-  spring: 190,
-  damper: 30,
-  engineForce: 138,
+  // Keep the wheels close to the chassis. Long travel was letting them bridge
+  // the far side of ramps instead of allowing a clean launch.
+  suspensionRest: .62,
+  suspensionMax: .94,
+  suspensionMin: .14,
+  spring: 220,
+  damper: 34,
+  reboundSpeed: 2.8,
+  compressionSpeed: 9.5,
+  engineForce: 165,
+  topSpeed: 63,
   cornerStiffness: 68,
   frontGripBias: 1.12,
   rearGripBias: .92,
   maxSteer: .54,
   handbrakeForce: 168,
   activeRollingDrag: 4.2,
+  // Let the buggy carry momentum after the driver lifts off.  Powered drag is
+  // intentionally higher to keep the top speed in check, but applying it
+  // while coasting made each wheel act like a brake.
+  coastRollingDrag: .55,
   passiveRollingDrag: 9.5,
   chassisRadius: .72,
+  rollCageRadius: .46,
+  rollCageOffset: [0, .88, .16],
+  // Negative Z is the front of the buggy. Keeping the physics origin here
+  // gives the engine/front axle a larger share of the vehicle's weight.
+  centerOfMass: [0, 0, -.3],
+  roofHopSpeed: 5.2,
+  roofHopCooldown: 460,
 };
 
 const wheelSpecs = [
-  ['front-left', [-.92, .1, -1.08], true, .55],
-  ['front-right', [.92, .1, -1.08], true, .55],
-  ['rear-left', [-.94, .1, 1.04], false, 1],
-  ['rear-right', [.94, .1, 1.04], false, 1],
+  // Equal front/rear torque split. The per-wheel value preserves the previous
+  // overall drive force while letting the front axle pull the buggy straight.
+  ['front-left', [-.92, .1, -1.08], true, .775],
+  ['front-right', [.92, .1, -1.08], true, .775],
+  ['rear-left', [-.94, .1, 1.04], false, .775],
+  ['rear-right', [.94, .1, 1.04], false, .775],
 ];
 
 function createMaterials() {
@@ -70,7 +88,11 @@ function addBar(group, start, end, radius, material) {
 function createWheel(name, localAnchor, front, powered) {
   return {
     name,
-    localAnchor: new CANNON.Vec3(localAnchor[0], localAnchor[1], localAnchor[2]),
+    localAnchor: new CANNON.Vec3(
+      localAnchor[0] - config.centerOfMass[0],
+      localAnchor[1] - config.centerOfMass[1],
+      localAnchor[2] - config.centerOfMass[2],
+    ),
     localVisualAnchor: new THREE.Vector3(localAnchor[0], localAnchor[1], localAnchor[2]),
     front,
     powered,
@@ -245,6 +267,7 @@ class DuneBuggy {
     this.throttle = 0;
     this.groundedWheels = 0;
     this.chaseReady = false;
+    this.lastRoofHopAt = -Infinity;
   }
 
   get alive() {
@@ -338,14 +361,28 @@ class DuneBuggy {
 
     const body = new CANNON.Body({
       mass: 7.4,
-      shape: new CANNON.Box(new CANNON.Vec3(.82, .48, 1.18)),
       linearDamping: .08,
       angularDamping: .36,
       allowSleep: false,
     });
-    body.position.set(spawn.x, spawn.y, spawn.z);
+    const centerOfMass = new CANNON.Vec3(...config.centerOfMass);
+    const chassisOffset = centerOfMass.scale(-1, new CANNON.Vec3());
+    body.addShape(new CANNON.Box(new CANNON.Vec3(.82, .48, 1.18)), chassisOffset);
+    // The rounded cage is deliberately a compound collider rather than only a
+    // visual bar. It catches the terrain first when the buggy rolls, helping it
+    // tumble back onto its wheels instead of settling on a flat roof.
+    body.addShape(
+      new CANNON.Sphere(config.rollCageRadius),
+      new CANNON.Vec3(
+        config.rollCageOffset[0] - config.centerOfMass[0],
+        config.rollCageOffset[1] - config.centerOfMass[1],
+        config.rollCageOffset[2] - config.centerOfMass[2],
+      ),
+    );
     if (fallback.quaternion) body.quaternion.set(fallback.quaternion.x, fallback.quaternion.y, fallback.quaternion.z, fallback.quaternion.w);
     else body.quaternion.setFromEuler(0, fallback.heading, 0);
+    const worldCenterOfMass = body.vectorToWorldFrame(centerOfMass, new CANNON.Vec3());
+    body.position.set(spawn.x + worldCenterOfMass.x, spawn.y + worldCenterOfMass.y, spawn.z + worldCenterOfMass.z);
     body.angularFactor.set(.82, 1, .82);
     body.userData = { kind: 'car' };
     this.world.addBody(body);
@@ -358,6 +395,7 @@ class DuneBuggy {
     this.throttle = 0;
     this.groundedWheels = 0;
     this.chaseReady = false;
+    this.lastRoofHopAt = -Infinity;
     this.updateVisuals(0);
   }
 
@@ -375,6 +413,14 @@ class DuneBuggy {
 
   worldVector(local) {
     return this.body.vectorToWorldFrame(local, new CANNON.Vec3());
+  }
+
+  bodyLocalFromVisual(position) {
+    return new CANNON.Vec3(
+      position[0] - config.centerOfMass[0],
+      position[1] - config.centerOfMass[1],
+      position[2] - config.centerOfMass[2],
+    );
   }
 
   applyForce(force, point) {
@@ -426,6 +472,42 @@ class DuneBuggy {
     return this.terrain.estimateNormal(new THREE.Vector3(point.x, this.terrain.surfaceY(point.x, point.z), point.z));
   }
 
+  getRoofTerrainContact() {
+    const center = cannonToThree(this.body.pointToWorldFrame(
+      this.bodyLocalFromVisual(config.rollCageOffset),
+      new CANNON.Vec3(),
+    ));
+    const distance = this.terrain.sampleSignedDistance(center);
+    if (distance > config.rollCageRadius + .035) return null;
+    return { center, normal: this.terrain.estimateNormal(center) };
+  }
+
+  hopFromRoof(contact) {
+    // The buggy's local down direction points from the roof toward its tires.
+    // Blend in the terrain normal so the impulse always clears the surface.
+    const tireDirection = cannonToThree(this.worldVector(new CANNON.Vec3(0, -1, 0))).normalize();
+    const hopDirection = tireDirection.addScaledVector(contact.normal, .65).normalize();
+    const impulse = hopDirection.multiplyScalar(this.body.mass * config.roofHopSpeed);
+    this.body.applyImpulse(
+      new CANNON.Vec3(impulse.x, impulse.y, impulse.z),
+      new CANNON.Vec3(contact.center.x - this.body.position.x, contact.center.y - this.body.position.y, contact.center.z - this.body.position.z),
+    );
+
+    // A small righting spin makes a completely inverted, stationary buggy tip
+    // toward the wheels during the hop instead of repeatedly landing on the cage.
+    const bodyUp = cannonToThree(this.worldVector(new CANNON.Vec3(0, 1, 0))).normalize();
+    const rightingAxis = new THREE.Vector3().crossVectors(bodyUp, contact.normal);
+    if (rightingAxis.lengthSq() < .002 && bodyUp.dot(contact.normal) < 0) {
+      rightingAxis.copy(cannonToThree(this.worldVector(new CANNON.Vec3(0, 0, -1))));
+    }
+    if (rightingAxis.lengthSq() > .0001) {
+      rightingAxis.normalize().multiplyScalar(2.4);
+      this.body.angularVelocity.x += rightingAxis.x;
+      this.body.angularVelocity.y += rightingAxis.y;
+      this.body.angularVelocity.z += rightingAxis.z;
+    }
+  }
+
   updatePhysics(delta, now, driving) {
     if (!this.alive) return;
     const accelerate = this.keys.has('ArrowUp') || this.keys.has('KeyW');
@@ -433,11 +515,18 @@ class DuneBuggy {
     const steerLeft = this.keys.has('ArrowLeft') || this.keys.has('KeyA');
     const steerRight = this.keys.has('ArrowRight') || this.keys.has('KeyD');
     const throttleTarget = driving ? (accelerate ? 1 : reverse ? -.55 : 0) : 0;
+    const applyingThrottle = accelerate || reverse;
     const handbrake = driving && this.keys.has('Space');
     const steerTarget = driving ? (steerLeft ? config.maxSteer : steerRight ? -config.maxSteer : 0) : 0;
     this.throttle = THREE.MathUtils.lerp(this.throttle, throttleTarget, 1 - Math.exp(-delta * 8));
     this.steering = THREE.MathUtils.lerp(this.steering, steerTarget, 1 - Math.exp(-delta * 9));
     this.groundedWheels = 0;
+    const roofContact = this.getRoofTerrainContact();
+    const roofHop = handbrake && roofContact && now - this.lastRoofHopAt >= config.roofHopCooldown;
+    if (roofHop) {
+      this.hopFromRoof(roofContact);
+      this.lastRoofHopAt = now;
+    }
 
     const bodyForward = cannonToThree(this.worldVector(new CANNON.Vec3(0, 0, -1))).normalize();
     const bodyRight = cannonToThree(this.worldVector(new CANNON.Vec3(1, 0, 0))).normalize();
@@ -446,8 +535,13 @@ class DuneBuggy {
     for (const wheel of this.wheels) {
       const anchor = this.body.pointToWorldFrame(wheel.localAnchor, new CANNON.Vec3());
       const contact = this.findSuspensionContact(anchor, suspensionDown);
-      wheel.currentLength = THREE.MathUtils.clamp(contact.length, config.suspensionMin, config.suspensionMax);
-      wheel.compression = THREE.MathUtils.clamp(config.suspensionRest - contact.length, 0, config.suspensionRest);
+      const suspensionLength = THREE.MathUtils.clamp(contact.length, config.suspensionMin, config.suspensionMax);
+      // A shock can compress quickly on landing, but it should extend at a
+      // finite rate when the wheels leave the ground. This keeps a launch from
+      // looking like the suspension teleported to full droop.
+      const travelSpeed = suspensionLength > wheel.currentLength ? config.reboundSpeed : config.compressionSpeed;
+      wheel.currentLength = THREE.MathUtils.damp(wheel.currentLength, suspensionLength, travelSpeed, delta);
+      wheel.compression = THREE.MathUtils.clamp(config.suspensionRest - suspensionLength, 0, config.suspensionRest);
       wheel.contact = contact.contact;
       if (!wheel.contact) continue;
 
@@ -480,19 +574,25 @@ class DuneBuggy {
 
       const longSpeed = velocity.x * wheelForward.x + velocity.y * wheelForward.y + velocity.z * wheelForward.z;
       const sideSpeed = velocity.x * wheelRight.x + velocity.y * wheelRight.y + velocity.z * wheelRight.z;
-      const rearWheel = wheel.powered > .8;
+      const rearWheel = !wheel.front;
       const axleGrip = wheel.front ? config.frontGripBias : config.rearGripBias;
       const grip = THREE.MathUtils.clamp(.58 + normal.y * .54 - Math.abs(sideSpeed) * .018, .36, 1.08) * axleGrip * (handbrake && rearWheel ? .34 : 1);
       const tractionLimit = springForce * grip;
-      const speedFade = THREE.MathUtils.clamp(1 - Math.abs(longSpeed) / 42, .28, 1);
+      const speedFade = THREE.MathUtils.clamp(1 - Math.abs(longSpeed) / config.topSpeed, .28, 1);
       const driveForce = handbrake && rearWheel ? 0 : this.throttle * config.engineForce * wheel.powered * speedFade;
-      const rollingDrag = -longSpeed * (handbrake && rearWheel ? config.handbrakeForce : driving ? config.activeRollingDrag : config.passiveRollingDrag);
+      const rollingDrag = -longSpeed * (
+        handbrake && rearWheel
+          ? config.handbrakeForce
+          : driving
+            ? applyingThrottle ? config.activeRollingDrag : config.coastRollingDrag
+            : config.passiveRollingDrag
+      );
       const forwardForce = THREE.MathUtils.clamp(driveForce + rollingDrag, -tractionLimit, tractionLimit);
       const sideForce = THREE.MathUtils.clamp(-sideSpeed * config.cornerStiffness, -tractionLimit, tractionLimit);
       this.applyForce(wheelForward.clone().multiplyScalar(forwardForce), contact.center);
       this.applyForce(wheelRight.clone().multiplyScalar(sideForce), contactPoint);
 
-      const enginePowering = Math.abs(this.throttle) > .12 && wheel.powered > .8;
+      const enginePowering = Math.abs(this.throttle) > .12 && wheel.powered > 0;
       if (enginePowering && now - wheel.lastSprayAt > 48) {
         const sprayDirection = wheelForward.clone().multiplyScalar(this.throttle > 0 ? -1 : 1).add(normal.clone().multiplyScalar(.28)).normalize();
         this.spawnWheelSand(contactPoint, sprayDirection, THREE.MathUtils.clamp(Math.abs(this.throttle) + Math.abs(longSpeed) * .035, .35, 1.25));
@@ -500,7 +600,7 @@ class DuneBuggy {
       }
     }
 
-    if (handbrake && this.groundedWheels >= 2 && this.body.velocity.lengthSquared() < .18 && this.body.angularVelocity.lengthSquared() < .18) {
+    if (!roofHop && handbrake && this.groundedWheels >= 2 && this.body.velocity.lengthSquared() < .18 && this.body.angularVelocity.lengthSquared() < .18) {
       this.body.velocity.set(0, 0, 0);
       this.body.angularVelocity.set(0, 0, 0);
     }
@@ -508,19 +608,29 @@ class DuneBuggy {
 
   applyChassisTerrainContact() {
     if (!this.alive) return;
-    const surfaceY = this.terrain.surfaceY(this.body.position.x, this.body.position.z);
-    const clearance = this.body.position.y - surfaceY;
-    if (clearance >= config.chassisRadius) return;
-    const normal = this.groundNormalAt(this.body.position);
-    const penetration = config.chassisRadius - clearance;
-    this.body.position.x += normal.x * penetration * .75;
-    this.body.position.y += normal.y * penetration * .75;
-    this.body.position.z += normal.z * penetration * .75;
-    const normalSpeed = this.body.velocity.x * normal.x + this.body.velocity.y * normal.y + this.body.velocity.z * normal.z;
-    if (normalSpeed < 0) {
-      this.body.velocity.x -= normal.x * normalSpeed * 1.08;
-      this.body.velocity.y -= normal.y * normalSpeed * 1.08;
-      this.body.velocity.z -= normal.z * normalSpeed * 1.08;
+    const colliders = [
+      { localCenter: this.bodyLocalFromVisual([0, 0, 0]), radius: config.chassisRadius, roof: false },
+      { localCenter: this.bodyLocalFromVisual(config.rollCageOffset), radius: config.rollCageRadius, roof: true },
+    ];
+    for (const collider of colliders) {
+      const center = cannonToThree(this.body.pointToWorldFrame(collider.localCenter, new CANNON.Vec3()));
+      const collision = this.terrain.sphereCollision(center, collider.radius);
+      if (!collision) continue;
+
+      const { normal, penetration } = collision;
+      this.body.position.x += normal.x * penetration * .75;
+      this.body.position.y += normal.y * penetration * .75;
+      this.body.position.z += normal.z * penetration * .75;
+      const contactPoint = center.clone().addScaledVector(normal, -collider.radius);
+      const velocity = velocityAtPoint(this.body, new CANNON.Vec3(contactPoint.x, contactPoint.y, contactPoint.z));
+      const normalSpeed = velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
+      if (normalSpeed < 0) {
+        const impulse = normal.clone().multiplyScalar(-normalSpeed * this.body.mass * (collider.roof ? .82 : 1.05));
+        this.body.applyImpulse(
+          new CANNON.Vec3(impulse.x, impulse.y, impulse.z),
+          new CANNON.Vec3(contactPoint.x - this.body.position.x, contactPoint.y - this.body.position.y, contactPoint.z - this.body.position.z),
+        );
+      }
     }
   }
 
@@ -531,7 +641,12 @@ class DuneBuggy {
 
   updateVisuals(delta) {
     if (!this.group || !this.body) return;
-    this.group.position.copy(this.body.position);
+    const worldCenterOfMass = this.worldVector(new CANNON.Vec3(...config.centerOfMass));
+    this.group.position.set(
+      this.body.position.x - worldCenterOfMass.x,
+      this.body.position.y - worldCenterOfMass.y,
+      this.body.position.z - worldCenterOfMass.z,
+    );
     this.group.quaternion.copy(this.body.quaternion);
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.group.quaternion);
     const speed = new THREE.Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z).dot(forward);

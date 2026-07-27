@@ -54,21 +54,6 @@ function addLine(points, start, end, spacing, metadata) {
   }
 }
 
-function addArc(points, center, radius, startAngle, endAngle, spacing, transform, metadata) {
-  const arcLength = Math.abs(endAngle - startAngle) * radius;
-  const steps = Math.max(8, Math.ceil(arcLength / spacing));
-  for (let i = 0; i < steps; i++) {
-    const t = i / steps;
-    const angle = lerp(startAngle, endAngle, t);
-    const local = {
-      x: center.x + Math.cos(angle) * radius,
-      z: center.z + Math.sin(angle) * radius,
-    };
-    const world = transform(local.x, local.z);
-    pushPoint(points, world.x, world.z, metadata);
-  }
-}
-
 function addQuadratic(points, start, control, end, spacing, metadata) {
   let length = 0;
   let previous = start;
@@ -93,41 +78,26 @@ function addQuadratic(points, start, control, end, spacing, metadata) {
   }
 }
 
-function buildStadiumTrack(rng, spacing, layoutScale) {
-  const points = [];
-  const straightLength = (178 + rng() * 52) * layoutScale;
-  const radius = (34 + rng() * 16) * layoutScale;
-  const rotation = rng() * TAU;
-  const centerX = (rng() - 0.5) * 18 * layoutScale;
-  const centerZ = (rng() - 0.5) * 18 * layoutScale;
-  const half = straightLength * 0.5;
-  const transform = (x, z) => {
-    const rotated = rotatePoint(x, z, rotation);
-    return { x: rotated.x + centerX, z: rotated.z + centerZ };
-  };
-  const topA = transform(-half, radius);
-  const topB = transform(half, radius);
-  const bottomA = transform(half, -radius);
-  const bottomB = transform(-half, -radius);
-
-  addLine(points, topA, topB, spacing, { kind: 'straight', straightIndex: 0 });
-  addArc(points, { x: half, z: 0 }, radius, Math.PI / 2, -Math.PI / 2, spacing, transform, { kind: 'turn', cornerIndex: 0 });
-  addLine(points, bottomA, bottomB, spacing, { kind: 'straight', straightIndex: 1 });
-  addArc(points, { x: -half, z: 0 }, radius, -Math.PI / 2, Math.PI / 2, spacing, transform, { kind: 'turn', cornerIndex: 1 });
-  return points;
-}
-
 function buildRoundedPolygonTrack(rng, straightCount, spacing, layoutScale) {
   const points = [];
   const rotation = rng() * TAU;
   const radiusX = (106 + rng() * 38) * layoutScale;
   const radiusZ = (86 + rng() * 32) * layoutScale;
   const angleOffset = rng() * TAU;
+  const cornerCount = straightCount + 4 + Math.floor(rng() * 3);
   const vertices = [];
+  const straightEdges = new Set();
+  const straightIndexByEdge = new Map();
 
   for (let i = 0; i < straightCount; i++) {
-    const angle = angleOffset + i * TAU / straightCount + (rng() - 0.5) * 0.22;
-    const radiusJitter = 0.9 + rng() * 0.22;
+    const edge = Math.floor(i * cornerCount / straightCount);
+    straightEdges.add(edge);
+    straightIndexByEdge.set(edge, i);
+  }
+
+  for (let i = 0; i < cornerCount; i++) {
+    const angle = angleOffset + i * TAU / cornerCount + (rng() - 0.5) * 0.14;
+    const radiusJitter = 0.88 + rng() * 0.26;
     const localX = Math.cos(angle) * radiusX * radiusJitter;
     const localZ = Math.sin(angle) * radiusZ * radiusJitter;
     const rotated = rotatePoint(localX, localZ, rotation);
@@ -149,7 +119,20 @@ function buildRoundedPolygonTrack(rng, straightCount, spacing, layoutScale) {
 
   for (let i = 0; i < corners.length; i++) {
     const next = (i + 1) % corners.length;
-    addLine(points, corners[i].outgoing, corners[next].incoming, spacing, { kind: 'straight', straightIndex: i });
+    const start = corners[i].outgoing;
+    const end = corners[next].incoming;
+    if (straightEdges.has(i)) {
+      addLine(points, start, end, spacing, { kind: 'straight', straightIndex: straightIndexByEdge.get(i) });
+    } else {
+      const midpoint = { x: (start.x + end.x) * 0.5, z: (start.z + end.z) * 0.5 };
+      const radial = normalize2(midpoint.x, midpoint.z);
+      const bend = (26 + rng() * 42) * layoutScale;
+      const control = {
+        x: midpoint.x + radial.x * bend,
+        z: midpoint.z + radial.z * bend,
+      };
+      addQuadratic(points, start, control, end, spacing, { kind: 'turn', cornerIndex: corners.length + i });
+    }
     addQuadratic(points, corners[next].incoming, corners[next].vertex, corners[next].outgoing, spacing, { kind: 'turn', cornerIndex: next });
   }
   return points;
@@ -169,13 +152,13 @@ function annotateSamples(points, baseHeight, rng) {
       samples[i].height = a * 0.08 + b * 0.22 + c * 0.4 + d * 0.22 + e * 0.08;
     }
   }
-  for (let pass = 0; pass < 5; pass++) {
+  for (let pass = 0; pass < 10; pass++) {
     for (let direction = 0; direction < 2; direction++) {
       for (let step = 0; step < count; step++) {
         const i = direction === 0 ? step : count - 1 - step;
         const next = direction === 0 ? (i + 1) % count : (i - 1 + count) % count;
         const distance = Math.hypot(samples[next].x - samples[i].x, samples[next].z - samples[i].z);
-        const maxDelta = Math.max(0.12, distance * 0.07);
+        const maxDelta = Math.max(0.02, distance * 0.055);
         samples[next].height = clamp(samples[next].height, samples[i].height - maxDelta, samples[i].height + maxDelta);
       }
     }
@@ -213,11 +196,37 @@ function annotateSamples(points, baseHeight, rng) {
   return samples;
 }
 
-function segmentNearest(samples, x, z, maxDistance) {
+function createSegmentIndex(samples, maxDistance) {
+  const cellSize = Math.max(20, maxDistance * 2.5);
+  const buckets = new Map();
+  const add = (cellX, cellZ, index) => {
+    const key = `${cellX},${cellZ}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(index);
+    buckets.set(key, bucket);
+  };
+  for (let index = 0; index < samples.length; index++) {
+    const a = samples[index];
+    const b = samples[(index + 1) % samples.length];
+    const minX = Math.floor((Math.min(a.x, b.x) - maxDistance) / cellSize);
+    const maxX = Math.floor((Math.max(a.x, b.x) + maxDistance) / cellSize);
+    const minZ = Math.floor((Math.min(a.z, b.z) - maxDistance) / cellSize);
+    const maxZ = Math.floor((Math.max(a.z, b.z) + maxDistance) / cellSize);
+    for (let cellZ = minZ; cellZ <= maxZ; cellZ++) {
+      for (let cellX = minX; cellX <= maxX; cellX++) add(cellX, cellZ, index);
+    }
+  }
+  return { cellSize, buckets };
+}
+
+function segmentNearest(samples, index, x, z, maxDistance) {
   let best = null;
   const count = samples.length;
   const maxDistanceSq = maxDistance * maxDistance;
-  for (let i = 0; i < count; i++) {
+  const cellX = Math.floor(x / index.cellSize);
+  const cellZ = Math.floor(z / index.cellSize);
+  const candidates = index.buckets.get(`${cellX},${cellZ}`) ?? [];
+  for (const i of candidates) {
     const a = samples[i];
     const b = samples[(i + 1) % count];
     const dx = b.x - a.x;
@@ -242,11 +251,10 @@ export function createRaceTrack(seed = 8, options = {}) {
   const width = options.width ?? 7.2;
   const shoulderWidth = options.shoulderWidth ?? 4.8;
   const sampleSpacing = options.sampleSpacing ?? 1.8;
-  const layoutScale = options.layoutScale ?? 1;
+  // The circuit deliberately occupies the broader streamed landscape, not just town.
+  const layoutScale = options.layoutScale ?? 5;
   const baseHeight = options.baseHeight ?? (() => 5);
-  const points = straightCount === 2
-    ? buildStadiumTrack(rng, sampleSpacing, layoutScale)
-    : buildRoundedPolygonTrack(rng, straightCount, sampleSpacing, layoutScale);
+  const points = buildRoundedPolygonTrack(rng, straightCount, sampleSpacing, layoutScale);
   const samples = annotateSamples(points, baseHeight, rng);
   const count = samples.length;
   const last = samples[count - 1];
@@ -254,6 +262,7 @@ export function createRaceTrack(seed = 8, options = {}) {
   const totalLength = last.s + Math.hypot(first.x - last.x, first.z - last.z);
   const halfWidth = width * 0.5;
   const maxDistance = halfWidth + shoulderWidth;
+  const segmentIndex = createSegmentIndex(samples, maxDistance);
   const bounds = samples.reduce((box, sample) => ({
     minX: Math.min(box.minX, sample.x - maxDistance),
     maxX: Math.max(box.maxX, sample.x + maxDistance),
@@ -269,18 +278,20 @@ export function createRaceTrack(seed = 8, options = {}) {
   }
   const straights = straightLengths.map((length, index) => ({ index, length }));
   const longestStraight = straights.reduce((best, item) => item.length > best.length ? item : best, straights[0]);
+  const turns = new Set(samples.filter((sample) => sample.kind === 'turn').map((sample) => sample.cornerIndex));
 
   const track = {
     seed,
     samples,
     straights,
+    turnCount: turns.size,
     width,
     shoulderWidth,
     length: totalLength,
     bounds,
     sample(x, z) {
       if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) return null;
-      const nearest = segmentNearest(samples, x, z, maxDistance);
+      const nearest = segmentNearest(samples, segmentIndex, x, z, maxDistance);
       if (!nearest) return null;
       const { a, b, t } = nearest;
       const tangent = normalize2(b.x - a.x, b.z - a.z);
@@ -319,14 +330,9 @@ export function createRaceTrack(seed = 8, options = {}) {
     colorAt(x, z) {
       const sample = this.sample(x, z);
       if (!sample) return null;
-      const curbDistance = Math.abs(sample.distance - halfWidth);
-      const curb = curbDistance < 0.42 && sample.roadMask > 0.35;
-      const stripePhase = Math.floor(sample.s / 3.4) % 2;
       return {
         roadMask: sample.roadMask,
         shoulderMask: sample.distance > halfWidth ? sample.roadMask : 0,
-        curb,
-        curbColor: stripePhase === 0 ? [0.92, 0.9, 0.82] : [0.75, 0.1, 0.08],
       };
     },
     startPose() {
