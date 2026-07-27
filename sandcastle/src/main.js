@@ -491,7 +491,7 @@ function createParticleBurst(center, {
   const mesh = new THREE.Points(geometry, material);
   mesh.renderOrder = renderOrder;
   scene.add(mesh);
-  effects.push({ type: 'particles', mesh, age: 0, lifetime, velocities, gravity, drag, startOpacity: opacity, startSize: size, endSize: size * sizeGrowth, fadePower });
+  effects.push({ type: 'particles', mesh, center: center.clone(), cullingRadius: speed[1] * lifetime + spread + size * sizeGrowth, age: 0, lifetime, velocities, gravity, drag, startOpacity: opacity, startSize: size, endSize: size * sizeGrowth, fadePower });
 }
 
 function spawnExplosionParticles(center, removed) {
@@ -1860,7 +1860,7 @@ function updateActorsPostStep(delta, now) {
     } else if (prop.actor.state === 'recovering') {
       updateRecoveringActor(prop, now);
     }
-    animateActorParts(prop, delta, now);
+    if (prop.group.visible) animateActorParts(prop, delta, now);
   }
 }
 
@@ -2337,6 +2337,14 @@ function updateEffects(delta) {
     const effect = effects[i];
     effect.age += delta;
     const progress = THREE.MathUtils.clamp(effect.age / effect.lifetime, 0, 1);
+    effect.mesh.visible = cameraCuller.isPointVisible(effect.center ?? effect.mesh.position, effect.cullingRadius ?? 2);
+    if (!effect.mesh.visible) {
+      if (progress >= 1) {
+        disposeEffect(effect);
+        effects.splice(i, 1);
+      }
+      continue;
+    }
     if (effect.type === 'ring') {
       effect.mesh.scale.setScalar(1 + progress * 5.8);
       effect.mesh.material.opacity = 1 - progress;
