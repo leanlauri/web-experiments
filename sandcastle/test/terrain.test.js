@@ -75,6 +75,24 @@ describe('procedural terrain', () => {
     terrain.dispose();
   });
 
+  it('coalesces deferred terrain rebuilds into a bounded per-frame queue', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 12, { deferRemesh: true });
+    const center = new THREE.Vector3(0, terrain.surfaceY(0, 0) - CELL_SIZE, 0);
+
+    terrain.carveSphere(center, CELL_SIZE * 2.2);
+    terrain.carveSphere(center, CELL_SIZE * 1.4);
+    expect(terrain.pendingHighChunks.size).toBeGreaterThan(0);
+
+    const firstPass = terrain.processRemeshQueue({ highBudget: 1, lodBudget: 1 });
+    expect(firstPass.high).toBe(1);
+    expect(firstPass.pendingHigh).toBeGreaterThanOrEqual(0);
+    terrain.processRemeshQueue({ highBudget: Infinity, lodBudget: Infinity });
+    expect(terrain.pendingHighChunks.size).toBe(0);
+    terrain.dispose();
+  });
+
   it('streams high-detail chunks around a moving anchor and keeps far LOD meshes', () => {
     const scene = { add() {}, remove() {} };
     const material = new THREE.MeshBasicMaterial();

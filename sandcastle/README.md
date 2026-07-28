@@ -1,9 +1,9 @@
 # Sandcastle
 
-An interactive, chunked voxel-terrain experiment. Click or tap to launch a charge,
-drag to orbit, and scroll or pinch to zoom. Explosions subtract a noisy sphere from
-the density field and turn part of the removed volume into physical debris. Debris
-that remains still for five seconds is voxelized back into the landscape.
+An interactive modular world experiment. Terrain, the dune buggy, and the procedural
+city are independently selectable. The city generator builds blocks into neighborhoods,
+neighborhoods into boroughs, and boroughs into a connected city, with road-following
+vehicles, people, and animals.
 
 ## Run
 
@@ -14,6 +14,46 @@ bun run dev
 
 Use `bun test` for the procedural terrain tests and `bun run build` for a production
 bundle.
+
+## Feature Switches
+
+Use URL parameters to choose the active world modules:
+
+```text
+?terrain=false
+?buggy=false
+?city=false
+?citySize=small
+?citySize=medium
+?citySize=large
+?terrainPlugin=voxel
+?terrainPlugin=flat
+?cityPlugin=procedural
+?cityPlugin=settlements
+```
+
+## Architecture
+
+`src/main.js` is only the browser entry point. `src/engine.js` owns application
+setup, the frame loop, input, and the current world. Game objects live in the
+renderer-independent ECS under `src/ecs/`; physics, visuals, input, camera behavior,
+and damage are separate components. The buggy migration in `src/objects/buggy.js`
+also keeps a compatibility facade while older systems move to component queries.
+
+Large replaceable features use `src/plugins/registry.js`. Terrain and city plugins
+are selected by ID, activated into stable slots, and expose their content through
+an `api`. Built-in implementations live below `src/plugins/terrain/` and
+`src/plugins/city/`. Registering another implementation with the same `type` is
+enough to make it selectable without changing engine consumers.
+
+For server-side tests or batch runs, `createHeadlessSimulation()` from
+`src/headless.js` constructs Cannon physics, ECS entities, and a terrain API without
+a Three.js scene, renderer, camera, or visual components.
+
+The procedural city remains split into `src/city/layout.js`, `src/city/agents.js`,
+and `src/city/city.js`. Its awake chunks use the existing piece-built destructible
+building factory, while sleeping chunks release those detailed physics structures
+until the player returns.
 
 ## Implementation
 
