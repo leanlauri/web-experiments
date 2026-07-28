@@ -1,4 +1,4 @@
-import { createBuggyEntity } from './objects/buggy.js';
+import { createBuggyEntity } from './objects/buggy/index.js';
 import { createDefaultPluginRegistry } from './plugins/defaults.js';
 import { flatColor } from './plugins/terrain/flat.js';
 
@@ -35,22 +35,8 @@ export function createTerrainFeature({
   return registry.activate('terrain', 'terrain', plugin, context).api;
 }
 
-function createDisabledBuggy() {
-  return {
-    alive: false,
-    body: null,
-    group: null,
-    spawn() {},
-    dispose() {},
-    updatePhysics() {},
-    afterPhysicsStep() {},
-    updateChaseCamera() {},
-    damageFromExplosion() {},
-  };
-}
-
 export function createBuggyFeature(options, enabled = true) {
-  return enabled ? createBuggyEntity(options) : createDisabledBuggy();
+  return enabled ? createBuggyEntity(options) : null;
 }
 
 export { flatColor };

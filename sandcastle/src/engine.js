@@ -192,7 +192,7 @@ const soundState = {
   noiseBuffer: null,
   lastImpactAt: 0,
 };
-const duneBuggy = createBuggyFeature({
+const buggyEntity = createBuggyFeature({
   scene,
   world,
   terrain,
@@ -207,7 +207,12 @@ const duneBuggy = createBuggyFeature({
     if (controlMode === 'car') setControlMode('bomber', false);
   },
 }, features.buggy);
-if (duneBuggy.entity) ecs.add(duneBuggy.entity);
+if (buggyEntity) ecs.add(buggyEntity);
+const buggyPhysics = buggyEntity?.get(COMPONENTS.physics) ?? null;
+const buggyInput = buggyEntity?.get(COMPONENTS.input) ?? null;
+const buggyVisual = buggyEntity?.get(COMPONENTS.visual) ?? null;
+const buggyCamera = buggyEntity?.get(COMPONENTS.camera) ?? null;
+const buggyDamage = buggyEntity?.get(COMPONENTS.damage) ?? null;
 
 updateSoundButton();
 
@@ -269,9 +274,9 @@ function setFirstPersonMode(enabled, persist = true) {
 function setControlMode(mode, persist = true) {
   controlMode = !features.buggy && mode === 'car' ? 'bomber' : mode;
   if (controlMode === 'car') {
-    if (!duneBuggy.alive) duneBuggy.spawn();
-    duneBuggy.updateChaseCamera(1 / 60, true, true);
-    updateSettlementLod(duneBuggy.body.position, true);
+    if (!buggyPhysics?.alive) buggyPhysics?.spawn();
+    buggyCamera?.update(1 / 60, true, true);
+    updateSettlementLod(buggyPhysics.body.position, true);
   } else if (!firstPersonMode) {
     updateCameraTarget();
   }
@@ -477,7 +482,7 @@ function explode(projectile) {
   spawnExplosionParticles(center, removed);
   triggerScreenShake(.72, .42);
   explodeProps(center, 5.2);
-  duneBuggy.damageFromExplosion(center, 5.2);
+  buggyDamage?.explosion(center, 5.2);
   const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .72, 32), new THREE.MeshBasicMaterial({ color: '#fff0ad', transparent: true, side: THREE.DoubleSide }));
   ring.position.copy(center); ring.lookAt(camera.position); scene.add(ring); effects.push(registerVisualItem({ type: 'ring', mesh: ring, age: 0, lifetime: .42 }));
 }
@@ -1985,17 +1990,17 @@ function actorForward(prop) {
 }
 
 function maybeKnockActorFromCar(prop, now) {
-  if (!duneBuggy.alive || prop.actor.state === 'knocked') return;
-  const dx = prop.body.position.x - duneBuggy.body.position.x;
-  const dz = prop.body.position.z - duneBuggy.body.position.z;
-  const dy = Math.abs(prop.body.position.y - duneBuggy.body.position.y);
+  if (!buggyPhysics?.alive || prop.actor.state === 'knocked') return;
+  const dx = prop.body.position.x - buggyPhysics.body.position.x;
+  const dz = prop.body.position.z - buggyPhysics.body.position.z;
+  const dy = Math.abs(prop.body.position.y - buggyPhysics.body.position.y);
   const reach = prop.actor.radius + 1.25;
   if (dx * dx + dz * dz > reach * reach || dy > 2.4) return;
-  const carSpeed = Math.hypot(duneBuggy.body.velocity.x, duneBuggy.body.velocity.z);
+  const carSpeed = Math.hypot(buggyPhysics.body.velocity.x, buggyPhysics.body.velocity.z);
   const actorSpeed = Math.hypot(prop.body.velocity.x, prop.body.velocity.z);
   const impactSpeed = carSpeed - actorSpeed * .35;
   if (impactSpeed < 2.15) return;
-  const direction = new THREE.Vector3(duneBuggy.body.velocity.x, 0, duneBuggy.body.velocity.z);
+  const direction = new THREE.Vector3(buggyPhysics.body.velocity.x, 0, buggyPhysics.body.velocity.z);
   if (direction.lengthSq() < .01) direction.set(dx, 0, dz);
   knockActor(prop, direction.normalize(), impactSpeed, now);
 }
@@ -2270,20 +2275,20 @@ function updateDynamicProps(now) {
 }
 
 function crashThroughProps(now) {
-  if (!duneBuggy.alive) return;
-  const carSpeed = Math.hypot(duneBuggy.body.velocity.x, duneBuggy.body.velocity.z);
+  if (!buggyPhysics?.alive) return;
+  const carSpeed = Math.hypot(buggyPhysics.body.velocity.x, buggyPhysics.body.velocity.z);
   if (carSpeed < 3.4) return;
   for (let i = props.length - 1; i >= 0; i--) {
     const prop = props[i];
     if (!prop.simulationActive) continue;
     if (prop.type !== 'palm' && prop.type !== 'rainbow') continue;
-    const dx = prop.body.position.x - duneBuggy.body.position.x;
-    const dz = prop.body.position.z - duneBuggy.body.position.z;
+    const dx = prop.body.position.x - buggyPhysics.body.position.x;
+    const dz = prop.body.position.z - buggyPhysics.body.position.z;
     const reach = prop.blastRadius + 1.05;
     if (dx * dx + dz * dz > reach * reach) continue;
     if (now - (prop.lastCrashAt ?? 0) < 400) continue;
     prop.lastCrashAt = now;
-    const center = new THREE.Vector3().copy(duneBuggy.body.position);
+    const center = new THREE.Vector3().copy(buggyPhysics.body.position);
     explodeProp(prop, center);
     props.splice(i, 1);
     triggerScreenShake(prop.type === 'rainbow' ? .26 : .18, .18);
@@ -2294,8 +2299,8 @@ function updatePhysics(delta, now) {
   simulationChunks.update(terrainStreamAnchor());
   city?.update(delta, terrainStreamAnchor());
   updateActorsPreStep(delta, now);
-  duneBuggy.updatePhysics(delta, now, controlMode === 'car');
-  if (duneBuggy.alive) duneBuggy.body.userData.impactVelocity = duneBuggy.body.velocity.clone();
+  buggyInput?.update(delta, now, controlMode === 'car');
+  if (buggyPhysics?.alive) buggyPhysics.body.userData.impactVelocity = buggyPhysics.body.velocity.clone();
   world.step(1 / 60, delta, 3);
   processBuildingImpacts();
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -2303,10 +2308,11 @@ function updatePhysics(delta, now) {
     item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
     // Voxel terrain collision is sampled locally; Cannon handles debris/floor dynamics.
     const gx = terrain.worldToGrid(item.body.position.x), gy = terrain.worldToGrid(item.body.position.y), gz = terrain.worldToGrid(item.body.position.z);
-    const hitCar = duneBuggy.alive && item.body.position.distanceTo(duneBuggy.body.position) < 2.15;
+    const hitCar = buggyPhysics?.alive && item.body.position.distanceTo(buggyPhysics.body.position) < 2.15;
     if (item.pendingExplosion || hitCar || terrain.has(gx, gy, gz) || terrain.sphereCollision(item.body.position, .42) || now - item.born > 6500) explode(item);
   }
-  duneBuggy.afterPhysicsStep(delta);
+  buggyPhysics?.afterStep(delta);
+  buggyVisual?.sync(delta);
   updateBuildingParts(delta, now);
   updateActorsPostStep(delta, now);
   updateDynamicProps(now);
@@ -2497,9 +2503,9 @@ function updateSceneCulling() {
     cameraCuller.updateObject(part.mesh, part.mesh.userData.radius ?? 1);
     if (part.mesh.visible) cameraCuller.updateShadowCasting(part.mesh);
   }
-  if (duneBuggy.alive) {
-    cameraCuller.updateObject(duneBuggy.group, 3);
-    if (duneBuggy.group.visible) cameraCuller.updateShadowCasting(duneBuggy.group);
+  if (buggyPhysics?.alive) {
+    cameraCuller.updateObject(buggyVisual?.object, 3);
+    if (buggyVisual?.object.visible) cameraCuller.updateShadowCasting(buggyVisual?.object);
   }
 }
 
@@ -2582,7 +2588,7 @@ document.querySelector('#reset').addEventListener('click', () => {
   projectiles.forEach(removePhysics);
   debris.forEach((item) => { removePhysics(item); disposeDebrisMesh(item); });
   effects.forEach(disposeEffect);
-  duneBuggy.dispose(false);
+  buggyPhysics?.dispose(false);
   simulationChunks.clear();
   for (const prop of props) {
     scene.remove(prop.group);
@@ -2591,15 +2597,15 @@ document.querySelector('#reset').addEventListener('click', () => {
   }
   plugins.deactivate('city');
   city = null;
-  projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0; screenShake.age = screenShake.duration; seed = Math.random() * 100; terrain.seed = seed; terrain.generate(); populateProps(); populateBuildings(); duneBuggy.spawn();
-  if (controlMode === 'car') duneBuggy.updateChaseCamera(1 / 60, true, true);
+  projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0; screenShake.age = screenShake.duration; seed = Math.random() * 100; terrain.seed = seed; terrain.generate(); populateProps(); populateBuildings(); buggyPhysics?.spawn();
+  if (controlMode === 'car') buggyCamera?.update(1 / 60, true, true);
 });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 let previous = performance.now();
 let running = false;
 function terrainStreamAnchor() {
-  if (controlMode === 'car' && duneBuggy.alive) return duneBuggy.body.position;
+  if (controlMode === 'car' && buggyPhysics?.alive) return buggyPhysics.body.position;
   return controls.target;
 }
 
@@ -2613,7 +2619,7 @@ function animate(now) {
   performanceMonitor.measure('input', () => {
     updateKeyboard(delta);
     if (controls.enabled) controls.update();
-    duneBuggy.updateChaseCamera(delta, false, controlMode === 'car');
+    buggyCamera?.update(delta, false, controlMode === 'car');
   });
   performanceMonitor.measure('streaming', () => {
     terrain.updateVisibleChunks(terrainStreamAnchor());
@@ -2635,7 +2641,7 @@ function animate(now) {
 }
 populateProps();
 populateBuildings();
-duneBuggy.spawn();
+buggyPhysics?.spawn();
 setFirstPersonMode(firstPersonMode, false);
 setControlMode(controlMode, false);
 
@@ -2644,7 +2650,7 @@ return {
   plugins,
   get terrain() { return terrain; },
   get city() { return city; },
-  get buggy() { return duneBuggy; },
+  get buggy() { return buggyEntity; },
   get running() { return running; },
   start() {
     if (running) return;

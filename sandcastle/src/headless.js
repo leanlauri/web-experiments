@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { ECSWorld } from './ecs/world.js';
 import { COMPONENTS } from './ecs/components.js';
-import { createBuggyEntity } from './objects/buggy.js';
+import { createBuggyEntity } from './objects/buggy/index.js';
 import { createDefaultPluginRegistry } from './plugins/defaults.js';
 
 export function createHeadlessSimulation({
@@ -21,7 +21,7 @@ export function createHeadlessSimulation({
     keys,
     visuals: false,
   });
-  ecs.add(buggy.entity);
+  ecs.add(buggy);
 
   return {
     ecs,
@@ -31,9 +31,9 @@ export function createHeadlessSimulation({
     buggy,
     keys,
     step(delta = 1 / 60, now = 0, driving = false) {
-      buggy.entity.require(COMPONENTS.input).update(delta, now, driving);
+      buggy.require(COMPONENTS.input).update(delta, now, driving);
       physicsWorld.step(1 / 60, delta, 3);
-      buggy.entity.require(COMPONENTS.physics).afterStep(delta);
+      buggy.require(COMPONENTS.physics).afterStep(delta);
     },
     dispose() {
       ecs.dispose();

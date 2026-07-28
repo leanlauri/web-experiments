@@ -1,0 +1,33 @@
+export const BUGGY_CONFIG = Object.freeze({
+  wheelRadius: .38,
+  suspensionRest: .62,
+  suspensionMax: .94,
+  suspensionMin: .14,
+  spring: 220,
+  damper: 34,
+  reboundSpeed: 2.8,
+  compressionSpeed: 9.5,
+  engineForce: 165,
+  topSpeed: 63,
+  cornerStiffness: 68,
+  frontGripBias: 1.12,
+  rearGripBias: .92,
+  maxSteer: .54,
+  handbrakeForce: 168,
+  activeRollingDrag: 4.2,
+  coastRollingDrag: .55,
+  passiveRollingDrag: 9.5,
+  chassisRadius: .72,
+  rollCageRadius: .46,
+  rollCageOffset: [0, .88, .16],
+  centerOfMass: [0, 0, -.3],
+  roofHopSpeed: 5.2,
+  roofHopCooldown: 460,
+});
+
+export const WHEEL_SPECS = Object.freeze([
+  ['front-left', [-.92, .1, -1.08], true, .775],
+  ['front-right', [.92, .1, -1.08], true, .775],
+  ['rear-left', [-.94, .1, 1.04], false, .775],
+  ['rear-right', [.94, .1, 1.04], false, .775],
+]);

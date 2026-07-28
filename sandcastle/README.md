@@ -37,8 +37,9 @@ Use URL parameters to choose the active world modules:
 `src/main.js` is only the browser entry point. `src/engine.js` owns application
 setup, the frame loop, input, and the current world. Game objects live in the
 renderer-independent ECS under `src/ecs/`; physics, visuals, input, camera behavior,
-and damage are separate components. The buggy migration in `src/objects/buggy.js`
-also keeps a compatibility facade while older systems move to component queries.
+and damage are separate components. The buggy is an entity-first feature under
+`src/objects/buggy/`, where each component owns its implementation and the engine
+accesses it through ECS component queries.
 
 Large replaceable features use `src/plugins/registry.js`. Terrain and city plugins
 are selected by ID, activated into stable slots, and expose their content through
