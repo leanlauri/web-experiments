@@ -235,17 +235,18 @@ export function createDuneBuggy(options) {
 
 class DuneBuggy {
   constructor({
-    scene,
+    scene = null,
     world,
     terrain,
-    camera,
-    controls,
-    keys,
-    createParticleBurst,
-    spawnShard,
-    triggerScreenShake,
+    camera = null,
+    controls = null,
+    keys = new Set(),
+    createParticleBurst = () => {},
+    spawnShard = () => {},
+    triggerScreenShake = () => {},
     getSpawnObstacles = () => ({ buildingBlueprints: [], props: [] }),
     onDestroyed = () => {},
+    visualEnabled = true,
   }) {
     this.scene = scene;
     this.world = world;
@@ -258,7 +259,8 @@ class DuneBuggy {
     this.triggerScreenShake = triggerScreenShake;
     this.getSpawnObstacles = getSpawnObstacles;
     this.onDestroyed = onDestroyed;
-    this.materials = createMaterials();
+    this.visualEnabled = visualEnabled;
+    this.materials = null;
     this.body = null;
     this.group = null;
     this.wheels = [];
@@ -353,11 +355,6 @@ class DuneBuggy {
     const fallback = position ? { position, heading: heading ?? 0, quaternion: null } : this.defaultSpawn();
     const spawn = fallback.position;
     const wheels = wheelSpecs.map((spec) => createWheel(...spec));
-    const group = createDuneBuggyGroup(wheels, this.materials);
-    group.position.copy(spawn);
-    if (fallback.quaternion) group.quaternion.copy(fallback.quaternion);
-    else group.rotation.y = fallback.heading;
-    this.scene.add(group);
 
     const body = new CANNON.Body({
       mass: 7.4,
@@ -388,7 +385,6 @@ class DuneBuggy {
     this.world.addBody(body);
 
     this.body = body;
-    this.group = group;
     this.wheels = wheels;
     this.destroyed = false;
     this.steering = 0;
@@ -396,19 +392,47 @@ class DuneBuggy {
     this.groundedWheels = 0;
     this.chaseReady = false;
     this.lastRoofHopAt = -Infinity;
-    this.updateVisuals(0);
+    if (this.visualEnabled) this.attachVisual();
   }
 
   dispose(markDestroyed = false) {
-    if (this.group) {
-      this.scene.remove(this.group);
-      this.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
-    }
+    this.detachVisual();
     if (this.body) this.world.removeBody(this.body);
     this.body = null;
     this.group = null;
     this.wheels = [];
     this.destroyed = markDestroyed;
+  }
+
+  setVisualEnabled(enabled) {
+    this.visualEnabled = enabled;
+    if (enabled) this.attachVisual();
+    else this.detachVisual();
+  }
+
+  attachVisual() {
+    if (this.group || !this.body || !this.scene) return;
+    this.materials ??= createMaterials();
+    const group = createDuneBuggyGroup(this.wheels, this.materials);
+    this.group = group;
+    this.scene.add(group);
+    this.updateVisuals(0);
+  }
+
+  detachVisual() {
+    if (!this.group) return;
+    this.scene?.remove(this.group);
+    this.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
+    this.group = null;
+    for (const wheel of this.wheels) {
+      wheel.pivot = null;
+      wheel.tire = null;
+      wheel.shock = null;
+      wheel.spring = null;
+      wheel.upperArm = null;
+      wheel.lowerArm = null;
+      wheel.steeringLink = null;
+    }
   }
 
   worldVector(local) {
@@ -696,7 +720,7 @@ class DuneBuggy {
   }
 
   updateChaseCamera(delta, snap = false, enabled = true) {
-    if (!enabled || !this.alive) return;
+    if (!enabled || !this.alive || !this.camera || !this.controls) return;
     const position = new THREE.Vector3().copy(this.body.position);
     const quaternion = new THREE.Quaternion().copy(this.body.quaternion);
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion).normalize();
@@ -716,7 +740,7 @@ class DuneBuggy {
     const position = new THREE.Vector3().copy(this.body.position);
     if (position.distanceTo(center) > radius + 2.1) return;
     const shardSources = [];
-    this.group.traverse((child) => { if (child.isMesh) shardSources.push(child); });
+    this.group?.traverse((child) => { if (child.isMesh) shardSources.push(child); });
     for (let i = 0; i < Math.min(18, shardSources.length); i++) {
       const source = shardSources[i % shardSources.length];
       const shardPosition = new THREE.Vector3();
