@@ -93,10 +93,10 @@ rim.rotation.x = -Math.PI / 2;
 rim.position.y = 0.032;
 hole.add(rim);
 const well = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.79, 0.62, 3.65, 48, 1, true),
+  new THREE.CylinderGeometry(0.79, 0.62, 12, 48, 1, true),
   new THREE.MeshStandardMaterial({ color: '#0d1521', roughness: 0.74, metalness: 0.04, side: THREE.BackSide }),
 );
-well.position.y = -1.91;
+well.position.y = -6.08;
 hole.add(well);
 
 const holePosition = new THREE.Vector3(0, 0, 0);
@@ -104,6 +104,8 @@ const moveTarget = new THREE.Vector3(0, 0, 0);
 let holeRadius = 1.35;
 const OPENING_RATIO = 0.68;
 const WALL_HALF_THICKNESS = 0.16;
+const HOLE_DEPTH = 12;
+const CONSUME_DEPTH = -4.3;
 let lastTime = performance.now();
 let score = 0;
 let total = 0;
@@ -120,7 +122,7 @@ bucketBodies.push(bucketBottom);
 for (let i = 0; i < 18; i += 1) {
   const angle = (i / 18) * Math.PI * 2;
   const wall = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC });
-  wall.addShape(new CANNON.Box(new CANNON.Vec3(0.16, 1.8, 0.42)));
+  wall.addShape(new CANNON.Box(new CANNON.Vec3(0.16, HOLE_DEPTH / 2, 0.42)));
   wall.collisionFilterGroup = GROUP_BUCKET;
   wall.collisionFilterMask = GROUP_SINKING;
   wall.userData = { angle };
@@ -141,14 +143,14 @@ function resizeBucket() {
 }
 
 function updateBucket() {
-  bucketBottom.position.set(holePosition.x, -3.65, holePosition.z);
+  bucketBottom.position.set(holePosition.x, -HOLE_DEPTH - 0.45, holePosition.z);
   bucketBottom.aabbNeedsUpdate = true;
   bucketBottom.updateAABB();
   for (const wall of bucketBodies.slice(1)) {
     const radius = holeRadius * OPENING_RATIO + WALL_HALF_THICKNESS;
     wall.position.set(
       holePosition.x + Math.cos(wall.userData.angle) * radius,
-      -1.72,
+      -HOLE_DEPTH / 2 - 0.1,
       holePosition.z + Math.sin(wall.userData.angle) * radius,
     );
     wall.quaternion.setFromEuler(0, -wall.userData.angle, 0);
@@ -406,7 +408,7 @@ function updateObjects(dt) {
         cancelSinking(item);
         continue;
       }
-      if (body.position.y < -3.3 || item.sinkAge > 4.5) {
+      if (body.position.y < CONSUME_DEPTH || (item.sinkAge > 2 && body.position.y < -1.2)) {
         world.removeBody(body);
         scene.remove(item.mesh);
         objects.splice(i, 1);
