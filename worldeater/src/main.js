@@ -96,7 +96,7 @@ const well = new THREE.Mesh(
   new THREE.CylinderGeometry(0.79, 0.62, 3.65, 48, 1, true),
   new THREE.MeshStandardMaterial({ color: '#0d1521', roughness: 0.74, metalness: 0.04, side: THREE.BackSide }),
 );
-well.position.y = -1.78;
+well.position.y = -1.91;
 hole.add(well);
 
 const holePosition = new THREE.Vector3(0, 0, 0);
@@ -197,7 +197,7 @@ function activateItem(item) {
   body.allowSleep = true;
   body.sleepSpeedLimit = 0.18;
   body.collisionFilterGroup = GROUP_OBJECT;
-  body.collisionFilterMask = GROUP_GROUND | GROUP_OBJECT;
+  body.collisionFilterMask = GROUP_GROUND | GROUP_OBJECT | GROUP_SINKING;
   world.addBody(body);
   item.mesh = mesh;
   item.body = body;
@@ -206,22 +206,40 @@ function activateItem(item) {
   writeStaticTransform(item, false);
 }
 
+function addStaticCollider(item) {
+  if (item.state !== 'idle') return;
+  const { shape } = collisionFor(item.type, item.size);
+  const body = new CANNON.Body({ mass: 0 });
+  body.addShape(shape);
+  body.position.set(item.x, item.y, item.z);
+  body.quaternion.copy(item.rotation);
+  body.collisionFilterGroup = GROUP_OBJECT;
+  body.collisionFilterMask = GROUP_OBJECT | GROUP_SINKING;
+  world.addBody(body);
+  item.body = body;
+  item.state = 'static';
+}
+
 function buildBatches() {
-  for (const type of Object.keys(geometry)) {
-    const items = objects.filter((item) => item.type === type);
-    const material = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.04, vertexColors: true });
+  const groups = new Map();
+  for (const item of objects) {
+    const key = `${item.type}:${item.color}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  for (const [key, items] of groups) {
+    const [type, color] = key.split(':');
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.04 });
     const batch = new THREE.InstancedMesh(geometry[type], material, items.length);
     batch.castShadow = true;
     batch.receiveShadow = true;
     scene.add(batch);
-    batches.set(type, batch);
+    batches.set(key, batch);
     items.forEach((item, index) => {
       item.batch = batch;
       item.instance = index;
-      batch.setColorAt(index, new THREE.Color(item.color));
       writeStaticTransform(item, true);
     });
-    batch.instanceColor.needsUpdate = true;
   }
 }
 
@@ -232,17 +250,19 @@ function queueObject(type, x, z, size, color, y = null) {
 
 function populate() {
   const specs = [
-    ['cube', -5.2, -2.8, 0.58], ['ball', -3.1, -3.8, 0.62], ['cone', -1.4, -2.8, 0.62], ['tower', 2.2, -3.9, 0.58], ['cube', 5.2, -3.4, 0.78],
-    ['ball', -5.8, 0.5, 0.73], ['block', -3.4, 0.3, 0.65], ['cone', -0.7, 0.3, 0.8], ['cube', 2.3, -0.2, 0.86], ['tower', 5.3, 0.55, 0.78],
-    ['block', -5.2, 3.7, 0.86], ['ball', -2.4, 3.4, 0.95], ['tower', 0.55, 3.5, 0.92], ['cone', 3.4, 3.5, 1.06], ['cube', 5.6, 3.8, 1.16],
-    ['block', -1.0, 6.0, 1.22], ['tower', 2.2, 6.1, 1.27], ['cube', 5.1, 6.0, 1.42],
+    ['ball', -5.7, -3.7, 0.54], ['cone', -2.9, -3.8, 0.76],
+    ['cube', -0.4, -3.6, 1.04], ['tower', 2.5, -3.7, 1.15], ['block', 5.2, -3.4, 1.28],
+    ['ball', -5.8, 0.5, 1.08], ['cone', -3.1, 0.4, 1.34], ['cube', -0.5, 0.5, 1.48], ['tower', 2.5, 0.35, 1.66],
+    ['block', 5.1, 0.5, 1.82], ['cube', -5.3, 3.7, 2.05], ['tower', 0.4, 3.6, 2.48], ['cone', 3.1, 3.5, 2.72],
+    ['block', 5.5, 3.7, 3.05],
+    // A five-piece pile; the lower static colliders support later activated pieces.
+    ['block', 4.25, 6.0, 2.8, 0.95], ['cube', 4.25, 6.0, 1.9, 2.0], ['tower', 4.25, 6.0, 1.25, 3.1], ['ball', 4.25, 6.0, 1.05, 4.25], ['cone', 4.25, 6.0, 0.64, 5.22],
   ];
   for (let row = 0; row < WORLD_GRID_ROWS; row += 1) {
     for (let column = 0; column < WORLD_GRID_COLUMNS; column += 1) {
       const offsetX = (column - 4.5) * 25;
       const offsetZ = (row - 4.5) * 22;
-      specs.forEach(([type, x, z, size], index) => queueObject(type, x + offsetX, z + offsetZ, size, palette[index % palette.length]));
-      queueObject('cube', -6 + offsetX, -0.9 + offsetZ, 0.62, '#f2b544', 1.32);
+      specs.forEach(([type, x, z, size, y], index) => queueObject(type, x + offsetX, z + offsetZ, size, palette[index % palette.length], y));
     }
   }
   total = objects.length;
@@ -254,7 +274,7 @@ function syncHoleVisual() {
   const visualScale = holeRadius / 1.35;
   hole.scale.set(visualScale, 1, visualScale);
   holeMask.center.set(holePosition.x, holePosition.z);
-  holeMask.radius.value = holeRadius * 0.79;
+  holeMask.radius.value = holeRadius * 0.68;
   apertureEl.textContent = `${holeRadius.toFixed(2)}m`;
   resizeBucket();
 }
@@ -262,7 +282,34 @@ function syncHoleVisual() {
 function startSinking(item) {
   item.state = 'sinking';
   item.body.collisionFilterGroup = GROUP_SINKING;
-  item.body.collisionFilterMask = GROUP_OBJECT | GROUP_BUCKET;
+  item.body.collisionFilterMask = GROUP_OBJECT | GROUP_SINKING | GROUP_BUCKET;
+  item.body.wakeUp();
+}
+
+function cancelSinking(item) {
+  const { body } = item;
+  body.collisionFilterGroup = GROUP_OBJECT;
+  body.collisionFilterMask = GROUP_GROUND | GROUP_OBJECT | GROUP_SINKING;
+  body.position.y = Math.max(body.position.y, item.height + 0.04);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+  item.state = 'ground';
+  item.sinkAge = 0;
+  body.wakeUp();
+}
+
+function canTeeter(item, distance) {
+  return (item.type === 'cube' || item.type === 'block')
+    && item.size >= holeRadius * 0.78
+    && item.size <= holeRadius * 1.28
+    && distance < holeRadius * 0.72;
+}
+
+function startTeetering(item) {
+  activateItem(item);
+  item.state = 'teeter';
+  item.body.collisionFilterGroup = GROUP_SINKING;
+  item.body.collisionFilterMask = GROUP_OBJECT | GROUP_SINKING | GROUP_BUCKET;
   item.body.wakeUp();
 }
 
@@ -282,7 +329,7 @@ function deactivateItem(item) {
 function updateObjects(dt) {
   for (let i = objects.length - 1; i >= 0; i -= 1) {
     const item = objects[i];
-    if (item.state === 'idle') continue;
+    if (item.state === 'idle' || item.state === 'static') continue;
     const { body } = item;
     const dx = holePosition.x - body.position.x;
     const dz = holePosition.z - body.position.z;
@@ -290,9 +337,20 @@ function updateObjects(dt) {
     if (item.state === 'ground' && canSwallow({
       size: item.size, holeRadius, distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
+    if (item.state === 'teeter' && canSwallow({
+      size: item.size, holeRadius, distance, height: item.height, bodyY: body.position.y,
+    })) startSinking(item);
+    if (item.state === 'teeter' && distance > holeRadius * 0.82) {
+      cancelSinking(item);
+      continue;
+    }
     if (item.state === 'sinking') {
       item.sinkAge += dt;
       // Once ground contact is removed, normal gravity and remaining body contacts do the work.
+      if (distance > holeRadius * 0.78) {
+        cancelSinking(item);
+        continue;
+      }
       if (body.position.y < -3.3 || item.sinkAge > 4.5) {
         world.removeBody(body);
         scene.remove(item.mesh);
@@ -321,6 +379,26 @@ function updateObjects(dt) {
 function updateStreaming() {
   let activations = 0;
   for (const item of objects) {
+    if (item.state === 'static') {
+      const distance = Math.hypot(item.x - holePosition.x, item.z - holePosition.z);
+      if (distance > 18) {
+        world.removeBody(item.body);
+        item.body = null;
+        item.state = 'idle';
+      } else if (canTeeter(item, distance) && activations < 12) {
+        world.removeBody(item.body);
+        item.body = null;
+        item.state = 'idle';
+        startTeetering(item);
+        activations += 1;
+      } else if (item.size < holeRadius * 0.78) {
+        world.removeBody(item.body);
+        item.body = null;
+        item.state = 'idle';
+        activateItem(item);
+      }
+      continue;
+    }
     if (item.state !== 'idle') continue;
     const distance = Math.hypot(item.x - holePosition.x, item.z - holePosition.z);
     const shouldShow = distance < 48;
@@ -328,10 +406,17 @@ function updateStreaming() {
       item.visible = shouldShow;
       writeStaticTransform(item, shouldShow);
     }
-    // Distant and currently-too-large props remain lightweight static instances.
-    if (activations < 12 && shouldShow && distance < 15 && item.size < holeRadius * 0.78) {
-      activateItem(item);
-      activations += 1;
+    // Distant props stay as culled instances. Nearby oversized pieces add only a static support collider.
+    if (shouldShow && distance < 15) {
+      if (item.size < holeRadius * 0.78 && activations < 12) {
+        activateItem(item);
+        activations += 1;
+      } else if (canTeeter(item, distance) && activations < 12) {
+        startTeetering(item);
+        activations += 1;
+      } else if (item.size >= holeRadius * 0.78) {
+        addStaticCollider(item);
+      }
     }
   }
 }
