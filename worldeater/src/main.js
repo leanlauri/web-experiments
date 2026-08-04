@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
 import { canSwallow, grownHoleRadius } from './game-rules.js';
+import { WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 
 const canvas = document.querySelector('#game');
 const scoreEl = document.querySelector('#score');
@@ -19,7 +20,7 @@ renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#cbd9e3');
-scene.fog = new THREE.Fog('#cbd9e3', 24, 54);
+scene.fog = new THREE.Fog('#cbd9e3', 52, 115);
 
 const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
 camera.position.set(15, 19, 18);
@@ -55,20 +56,24 @@ ground.collisionFilterGroup = GROUP_GROUND;
 ground.collisionFilterMask = GROUP_OBJECT;
 world.addBody(ground);
 
+const groundMaterial = new THREE.MeshStandardMaterial({ color: '#718c83', roughness: 0.94, metalness: 0 });
+const holeMask = { center: new THREE.Vector2(), radius: { value: 1 } };
+groundMaterial.onBeforeCompile = (shader) => {
+  shader.uniforms.holeCenter = { value: holeMask.center };
+  shader.uniforms.holeRadius = holeMask.radius;
+  shader.vertexShader = `varying vec3 vMaskWorldPosition;\n${shader.vertexShader}`
+    .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n  vMaskWorldPosition = worldPosition.xyz;');
+  shader.fragmentShader = `varying vec3 vMaskWorldPosition;\nuniform vec2 holeCenter;\nuniform float holeRadius;\n${shader.fragmentShader}`
+    .replace('#include <dithering_fragment>', 'if (distance(vMaskWorldPosition.xz, holeCenter) < holeRadius) discard;\n#include <dithering_fragment>');
+};
+groundMaterial.customProgramCacheKey = () => 'world-eater-ground-hole-mask';
 const groundMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(72, 72),
-  new THREE.MeshStandardMaterial({ color: '#718c83', roughness: 0.94, metalness: 0 }),
+  new THREE.PlaneGeometry(300, 280),
+  groundMaterial,
 );
 groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
-
-// A sparse grid makes the intact, visual ground easier to read as a surface.
-const grid = new THREE.GridHelper(70, 35, '#6a827b', '#81998e');
-grid.position.y = 0.006;
-grid.material.opacity = 0.16;
-grid.material.transparent = true;
-scene.add(grid);
 
 const hole = new THREE.Group();
 scene.add(hole);
@@ -86,20 +91,12 @@ const rim = new THREE.Mesh(
 rim.rotation.x = -Math.PI / 2;
 rim.position.y = 0.032;
 hole.add(rim);
-const voidDisk = new THREE.Mesh(
-  new THREE.CircleGeometry(0.81, 64),
-  new THREE.MeshBasicMaterial({ color: '#070b13', side: THREE.DoubleSide }),
+const well = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.79, 0.62, 3.65, 48, 1, true),
+  new THREE.MeshStandardMaterial({ color: '#0d1521', roughness: 0.74, metalness: 0.04, side: THREE.BackSide }),
 );
-voidDisk.rotation.x = -Math.PI / 2;
-voidDisk.position.y = 0.03;
-hole.add(voidDisk);
-const innerGlow = new THREE.Mesh(
-  new THREE.RingGeometry(0.58, 0.80, 64),
-  new THREE.MeshBasicMaterial({ color: '#141f35', transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
-);
-innerGlow.rotation.x = -Math.PI / 2;
-innerGlow.position.y = 0.037;
-hole.add(innerGlow);
+well.position.y = -1.78;
+hole.add(well);
 
 const holePosition = new THREE.Vector3(0, 0, 0);
 const moveTarget = new THREE.Vector3(0, 0, 0);
@@ -150,6 +147,9 @@ function updateBucket() {
 
 const palette = ['#e85d4a', '#f2b544', '#2d9d94', '#497ac8', '#b85fa6', '#e77f9f', '#e8e0bf'];
 const objects = [];
+const batches = new Map();
+const instanceDummy = new THREE.Object3D();
+const worldBounds = { x: 121, z: 102 };
 const geometry = {
   cube: new THREE.BoxGeometry(1, 1, 1),
   ball: new THREE.SphereGeometry(0.55, 16, 12),
@@ -158,14 +158,7 @@ const geometry = {
   block: new THREE.BoxGeometry(1.45, 0.65, 0.9),
 };
 
-function addObject(type, x, z, scale = 1, color = palette[Math.floor(Math.random() * palette.length)]) {
-  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.04 });
-  const mesh = new THREE.Mesh(geometry[type], material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.scale.setScalar(scale);
-  scene.add(mesh);
-
+function collisionFor(type, scale) {
   let shape;
   let height;
   if (type === 'ball') { shape = new CANNON.Sphere(0.55 * scale); height = 0.55 * scale; }
@@ -173,9 +166,31 @@ function addObject(type, x, z, scale = 1, color = palette[Math.floor(Math.random
   else if (type === 'cone') { shape = new CANNON.Cylinder(0.56 * scale, 0.09 * scale, 1.15 * scale, 5); height = 0.575 * scale; }
   else if (type === 'block') { shape = new CANNON.Box(new CANNON.Vec3(0.725 * scale, 0.325 * scale, 0.45 * scale)); height = 0.325 * scale; }
   else { shape = new CANNON.Box(new CANNON.Vec3(0.5 * scale, 0.5 * scale, 0.5 * scale)); height = 0.5 * scale; }
-  const body = new CANNON.Body({ mass: Math.max(0.35, scale ** 3) });
+  return { shape, height };
+}
+
+function writeStaticTransform(item, visible) {
+  instanceDummy.position.set(item.x, item.y, item.z);
+  instanceDummy.quaternion.copy(item.rotation);
+  instanceDummy.scale.setScalar(visible ? item.size : 0.0001);
+  instanceDummy.updateMatrix();
+  item.batch.setMatrixAt(item.instance, instanceDummy.matrix);
+  item.batch.instanceMatrix.needsUpdate = true;
+}
+
+function activateItem(item) {
+  if (item.state !== 'idle') return;
+  const { shape, height } = collisionFor(item.type, item.size);
+  const material = new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.7, metalness: 0.04 });
+  const mesh = new THREE.Mesh(geometry[item.type], material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.scale.setScalar(item.size);
+  scene.add(mesh);
+  const body = new CANNON.Body({ mass: Math.max(0.35, item.size ** 3) });
   body.addShape(shape);
-  body.position.set(x, height + 0.04, z);
+  body.position.set(item.x, item.y || height + 0.04, item.z);
+  body.quaternion.copy(item.rotation);
   body.linearDamping = 0.25;
   body.angularDamping = 0.42;
   body.allowSleep = true;
@@ -183,9 +198,35 @@ function addObject(type, x, z, scale = 1, color = palette[Math.floor(Math.random
   body.collisionFilterGroup = GROUP_OBJECT;
   body.collisionFilterMask = GROUP_GROUND | GROUP_OBJECT;
   world.addBody(body);
-  const entry = { mesh, body, size: scale, height, state: 'ground', sinkAge: 0 };
-  objects.push(entry);
-  total += 1;
+  item.mesh = mesh;
+  item.body = body;
+  item.height = height;
+  item.state = 'ground';
+  writeStaticTransform(item, false);
+}
+
+function buildBatches() {
+  for (const type of Object.keys(geometry)) {
+    const items = objects.filter((item) => item.type === type);
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.04, vertexColors: true });
+    const batch = new THREE.InstancedMesh(geometry[type], material, items.length);
+    batch.castShadow = true;
+    batch.receiveShadow = true;
+    scene.add(batch);
+    batches.set(type, batch);
+    items.forEach((item, index) => {
+      item.batch = batch;
+      item.instance = index;
+      batch.setColorAt(index, new THREE.Color(item.color));
+      writeStaticTransform(item, true);
+    });
+    batch.instanceColor.needsUpdate = true;
+  }
+}
+
+function queueObject(type, x, z, size, color, y = null) {
+  const { height } = collisionFor(type, size);
+  objects.push({ type, x, y: y ?? height + 0.04, z, size, color, rotation: new THREE.Quaternion(), body: null, mesh: null, state: 'idle', sinkAge: 0, visible: true });
 }
 
 function populate() {
@@ -195,17 +236,24 @@ function populate() {
     ['block', -5.2, 3.7, 0.86], ['ball', -2.4, 3.4, 0.95], ['tower', 0.55, 3.5, 0.92], ['cone', 3.4, 3.5, 1.06], ['cube', 5.6, 3.8, 1.16],
     ['block', -1.0, 6.0, 1.22], ['tower', 2.2, 6.1, 1.27], ['cube', 5.1, 6.0, 1.42],
   ];
-  specs.forEach(([type, x, z, size], index) => addObject(type, x, z, size, palette[index % palette.length]));
-  // A deliberate stack demonstrates that removing a lower item releases its neighbours.
-  addObject('cube', -6.0, -0.9, 0.62, '#f2b544');
-  const top = objects.at(-1);
-  top.body.position.y = 1.32;
+  for (let row = 0; row < WORLD_GRID_ROWS; row += 1) {
+    for (let column = 0; column < WORLD_GRID_COLUMNS; column += 1) {
+      const offsetX = (column - 4.5) * 25;
+      const offsetZ = (row - 4.5) * 22;
+      specs.forEach(([type, x, z, size], index) => queueObject(type, x + offsetX, z + offsetZ, size, palette[index % palette.length]));
+      queueObject('cube', -6 + offsetX, -0.9 + offsetZ, 0.62, '#f2b544', 1.32);
+    }
+  }
+  total = objects.length;
+  buildBatches();
 }
 
 function syncHoleVisual() {
   hole.position.copy(holePosition);
   const visualScale = holeRadius / 1.35;
-  hole.scale.setScalar(visualScale);
+  hole.scale.set(visualScale, 1, visualScale);
+  holeMask.center.set(holePosition.x, holePosition.z);
+  holeMask.radius.value = holeRadius * 0.79;
   apertureEl.textContent = `${holeRadius.toFixed(2)}m`;
   resizeBucket();
 }
@@ -217,9 +265,23 @@ function startSinking(item) {
   item.body.wakeUp();
 }
 
+function deactivateItem(item) {
+  item.x = item.body.position.x;
+  item.y = item.body.position.y;
+  item.z = item.body.position.z;
+  item.rotation.copy(item.body.quaternion);
+  world.removeBody(item.body);
+  scene.remove(item.mesh);
+  item.body = null;
+  item.mesh = null;
+  item.state = 'idle';
+  writeStaticTransform(item, item.visible);
+}
+
 function updateObjects(dt) {
   for (let i = objects.length - 1; i >= 0; i -= 1) {
     const item = objects[i];
+    if (item.state === 'idle') continue;
     const { body } = item;
     const dx = holePosition.x - body.position.x;
     const dz = holePosition.z - body.position.z;
@@ -229,10 +291,8 @@ function updateObjects(dt) {
     })) startSinking(item);
     if (item.state === 'sinking') {
       item.sinkAge += dt;
-      // This is the local bucket's funnel force. Body-to-body collisions stay active,
-      // so a stacked object is still released by the object underneath it moving away.
-      body.applyForce(new CANNON.Vec3(dx * 18, -body.mass * 7, dz * 18), body.position);
-      if (body.position.y < -2.35 || item.sinkAge > 2.6) {
+      // Once ground contact is removed, normal gravity and remaining body contacts do the work.
+      if (body.position.y < -3.3 || item.sinkAge > 4.5) {
         world.removeBody(body);
         scene.remove(item.mesh);
         objects.splice(i, 1);
@@ -240,6 +300,10 @@ function updateObjects(dt) {
         holeRadius = grownHoleRadius(holeRadius, item.size);
         syncHoleVisual();
       }
+    }
+    if (item.state === 'ground' && distance > 28 && body.sleepState === CANNON.Body.SLEEPING) {
+      deactivateItem(item);
+      continue;
     }
     if (item.state !== 'removed') {
       item.mesh.position.copy(body.position);
@@ -253,6 +317,24 @@ function updateObjects(dt) {
   }
 }
 
+function updateStreaming() {
+  let activations = 0;
+  for (const item of objects) {
+    if (item.state !== 'idle') continue;
+    const distance = Math.hypot(item.x - holePosition.x, item.z - holePosition.z);
+    const shouldShow = distance < 48;
+    if (shouldShow !== item.visible) {
+      item.visible = shouldShow;
+      writeStaticTransform(item, shouldShow);
+    }
+    // Distant and currently-too-large props remain lightweight static instances.
+    if (activations < 12 && shouldShow && distance < 15 && item.size < holeRadius * 0.78) {
+      activateItem(item);
+      activations += 1;
+    }
+  }
+}
+
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 canvas.addEventListener('pointerdown', (event) => {
@@ -261,7 +343,7 @@ canvas.addEventListener('pointerdown', (event) => {
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObject(groundMesh)[0];
-  if (hit) moveTarget.set(THREE.MathUtils.clamp(hit.point.x, -11, 11), 0, THREE.MathUtils.clamp(hit.point.z, -9, 9));
+  if (hit) moveTarget.set(THREE.MathUtils.clamp(hit.point.x, -worldBounds.x, worldBounds.x), 0, THREE.MathUtils.clamp(hit.point.z, -worldBounds.z, worldBounds.z));
 });
 
 const keyState = new Set();
@@ -276,8 +358,8 @@ function updateInput(dt) {
   if (keyState.has('ArrowRight')) moveTarget.x += speed;
   if (keyState.has('ArrowUp')) moveTarget.z -= speed;
   if (keyState.has('ArrowDown')) moveTarget.z += speed;
-  moveTarget.x = THREE.MathUtils.clamp(moveTarget.x, -11, 11);
-  moveTarget.z = THREE.MathUtils.clamp(moveTarget.z, -9, 9);
+  moveTarget.x = THREE.MathUtils.clamp(moveTarget.x, -worldBounds.x, worldBounds.x);
+  moveTarget.z = THREE.MathUtils.clamp(moveTarget.z, -worldBounds.z, worldBounds.z);
   holePosition.lerp(moveTarget, 1 - Math.exp(-8 * dt));
 }
 
@@ -286,6 +368,7 @@ function render(now) {
   lastTime = now;
   updateInput(dt);
   syncHoleVisual();
+  updateStreaming();
   updateBucket();
   world.step(1 / 60, dt, 3);
   updateObjects(dt);
