@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
 import { canCancelSinking, canSwallow, grownHoleRadius } from './game-rules.js';
-import { WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
+import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 import { cameraRelativeMovement } from './camera-input.js';
 
 const canvas = document.querySelector('#game');
@@ -260,21 +260,63 @@ function queueObject(type, x, z, size, color, y = null) {
   objects.push({ type, x, y: y ?? height + 0.04, z, size, footprint, color, rotation: new THREE.Quaternion(), body: null, mesh: null, state: 'idle', sinkAge: 0, visible: true });
 }
 
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function choose(random, values) {
+  return values[Math.floor(random() * values.length)];
+}
+
+function scatteredPoint(random, occupied) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const point = { x: (random() - 0.5) * 19, z: (random() - 0.5) * 16 };
+    if (occupied.every((other) => Math.hypot(point.x - other.x, point.z - other.z) > 2.5)) {
+      occupied.push(point);
+      return point;
+    }
+  }
+  return { x: (random() - 0.5) * 18, z: (random() - 0.5) * 15 };
+}
+
 function populate() {
-  const specs = [
-    ['ball', -5.7, -3.7, 0.54], ['cone', -2.9, -3.8, 0.76],
-    ['cube', -0.4, -3.6, 1.04], ['tower', 2.5, -3.7, 1.15], ['block', 5.2, -3.4, 1.28],
-    ['ball', -5.8, 0.5, 1.08], ['cone', -3.1, 0.4, 1.34], ['cube', -0.5, 0.5, 1.48], ['tower', 2.5, 0.35, 1.66],
-    ['block', 5.1, 0.5, 1.82], ['cube', -5.3, 3.7, 2.05], ['tower', 0.4, 3.6, 2.48], ['cone', 3.1, 3.5, 2.72],
-    ['block', 5.5, 3.7, 3.05],
-    // A five-piece pile; the lower static colliders support later activated pieces.
-    ['block', 4.25, 6.0, 2.8, 0.95], ['cube', 4.25, 6.0, 1.9, 2.0], ['tower', 4.25, 6.0, 1.25, 3.1], ['ball', 4.25, 6.0, 1.05, 4.25], ['cone', 4.25, 6.0, 0.64, 5.22],
-  ];
   for (let row = 0; row < WORLD_GRID_ROWS; row += 1) {
     for (let column = 0; column < WORLD_GRID_COLUMNS; column += 1) {
       const offsetX = (column - 4.5) * 25;
       const offsetZ = (row - 4.5) * 22;
-      specs.forEach(([type, x, z, size, y], index) => queueObject(type, x + offsetX, z + offsetZ, size, palette[index % palette.length], y));
+      const random = seededRandom(1009 + row * 97 + column * 7919);
+      const stackCenters = [];
+      stackCenters.push(scatteredPoint(random, stackCenters));
+      stackCenters.push(scatteredPoint(random, stackCenters));
+      const occupied = [...stackCenters];
+
+      for (let index = 0; index < INDIVIDUALS_PER_TILE; index += 1) {
+        const point = scatteredPoint(random, occupied);
+        // Three small props per area keep the initial world playable; the rest are deliberately larger.
+        const size = index < 3 ? 0.44 + random() * 0.36 : 1.02 + random() * 2.15;
+        queueObject(choose(random, Object.keys(geometry)), point.x + offsetX, point.z + offsetZ, size, choose(random, palette));
+      }
+
+      for (let stackIndex = 0; stackIndex < STACKS_PER_TILE; stackIndex += 1) {
+        const center = stackCenters[stackIndex];
+        const baseSize = 1.05 + random() * 1.75;
+        let nextY = 0;
+        for (let level = 0; level < OBJECTS_PER_STACK; level += 1) {
+          const type = choose(random, ['cube', 'block', 'tower', 'cone']);
+          const size = baseSize * (0.9 + random() * 0.16);
+          const { height } = collisionFor(type, size);
+          nextY += height + 0.04;
+          queueObject(type, center.x + offsetX, center.z + offsetZ, size, choose(random, palette), nextY);
+          nextY += height + 0.06;
+        }
+      }
     }
   }
   total = objects.length;
