@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#182133" />
+    <title>World Eater</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game" aria-label="World Eater game"></canvas>
+      <section class="hud" aria-live="polite">
+        <div class="brand"><span class="brand-dot"></span><span>WORLD EATER</span></div>
+        <div class="readout"><span>MATTER CONSUMED</span><strong id="score">0 / 0</strong></div>
+        <div class="readout radius"><span>APERTURE</span><strong id="aperture">1.35m</strong></div>
+      </section>
+      <aside class="help"><kbd>Click</kbd> to move &nbsp;·&nbsp; <kbd>← ↑ ↓ →</kbd> to steer</aside>
+      <section id="end-card" class="end-card" hidden>
+        <p class="eyebrow">SECTOR CLEARED</p>
+        <h1>Nothing left<br />but the void.</h1>
+        <button id="restart">Grow another world</button>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
