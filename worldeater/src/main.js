@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
-import { canSwallow, grownHoleRadius } from './game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius } from './game-rules.js';
 import { WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 import { cameraRelativeMovement } from './camera-input.js';
 
@@ -353,14 +353,14 @@ function updateObjects(dt) {
     if (item.state === 'teeter' && canSwallow({
       footprintRadius: item.footprint, openingRadius: holeRadius * OPENING_RATIO, distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
-    if (item.state === 'teeter' && distance > holeRadius * 0.82) {
+    if (item.state === 'teeter' && canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.82 })) {
       cancelSinking(item);
       continue;
     }
     if (item.state === 'sinking') {
       item.sinkAge += dt;
       // Once ground contact is removed, normal gravity and remaining body contacts do the work.
-      if (distance > holeRadius * 0.78) {
+      if (canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.78 })) {
         cancelSinking(item);
         continue;
       }
