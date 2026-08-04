@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
+import { canSwallow, grownHoleRadius } from './game-rules.js';
 
 const canvas = document.querySelector('#game');
 const scoreEl = document.querySelector('#score');
@@ -122,7 +123,7 @@ for (let i = 0; i < 18; i += 1) {
   wall.addShape(new CANNON.Box(new CANNON.Vec3(0.16, 1.8, 0.42)));
   wall.collisionFilterGroup = GROUP_BUCKET;
   wall.collisionFilterMask = GROUP_SINKING;
-  wall.userData.angle = angle;
+  wall.userData = { angle };
   world.addBody(wall);
   bucketBodies.push(wall);
 }
@@ -223,8 +224,9 @@ function updateObjects(dt) {
     const dx = holePosition.x - body.position.x;
     const dz = holePosition.z - body.position.z;
     const distance = Math.hypot(dx, dz);
-    const fits = item.size < holeRadius * 0.72;
-    if (item.state === 'ground' && fits && distance < holeRadius * 0.62 && body.position.y < item.height * 2.8) startSinking(item);
+    if (item.state === 'ground' && canSwallow({
+      size: item.size, holeRadius, distance, height: item.height, bodyY: body.position.y,
+    })) startSinking(item);
     if (item.state === 'sinking') {
       item.sinkAge += dt;
       // This is the local bucket's funnel force. Body-to-body collisions stay active,
@@ -235,7 +237,7 @@ function updateObjects(dt) {
         scene.remove(item.mesh);
         objects.splice(i, 1);
         score += 1;
-        holeRadius += 0.055 + item.size * 0.16;
+        holeRadius = grownHoleRadius(holeRadius, item.size);
         syncHoleVisual();
       }
     }
