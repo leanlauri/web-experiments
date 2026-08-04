@@ -1,6 +1,6 @@
-export function canSwallow({ size, holeRadius, distance, height, bodyY }) {
-  return size < holeRadius * 0.72
-    && distance < holeRadius * 0.62
+export function canSwallow({ footprintRadius, openingRadius, distance, height, bodyY }) {
+  return footprintRadius <= openingRadius * 0.92
+    && distance < openingRadius - footprintRadius * 0.35
     && bodyY < height * 2.8;
 }
 

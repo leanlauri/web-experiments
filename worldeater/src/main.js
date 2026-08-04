@@ -102,6 +102,8 @@ hole.add(well);
 const holePosition = new THREE.Vector3(0, 0, 0);
 const moveTarget = new THREE.Vector3(0, 0, 0);
 let holeRadius = 1.35;
+const OPENING_RATIO = 0.68;
+const WALL_HALF_THICKNESS = 0.16;
 let lastTime = performance.now();
 let score = 0;
 let total = 0;
@@ -127,22 +129,31 @@ for (let i = 0; i < 18; i += 1) {
 }
 
 function resizeBucket() {
-  const scale = holeRadius / bucketRadius;
-  bucketBottom.shapes[0].halfExtents.set(scale * 0.72, 0.14, scale * 0.72);
+  const openingRadius = holeRadius * OPENING_RATIO;
+  bucketBottom.shapes[0].halfExtents.set(openingRadius * 0.78, 0.14, openingRadius * 0.78);
   bucketBottom.shapes[0].updateConvexPolyhedronRepresentation();
   bucketBottom.updateBoundingRadius();
+  for (const wall of bucketBodies.slice(1)) {
+    wall.shapes[0].halfExtents.z = Math.max(0.42, openingRadius * Math.PI / 18 + 0.06);
+    wall.shapes[0].updateConvexPolyhedronRepresentation();
+    wall.updateBoundingRadius();
+  }
 }
 
 function updateBucket() {
   bucketBottom.position.set(holePosition.x, -3.65, holePosition.z);
+  bucketBottom.aabbNeedsUpdate = true;
+  bucketBottom.updateAABB();
   for (const wall of bucketBodies.slice(1)) {
-    const radius = holeRadius * 0.84;
+    const radius = holeRadius * OPENING_RATIO + WALL_HALF_THICKNESS;
     wall.position.set(
       holePosition.x + Math.cos(wall.userData.angle) * radius,
       -1.72,
       holePosition.z + Math.sin(wall.userData.angle) * radius,
     );
     wall.quaternion.setFromEuler(0, -wall.userData.angle, 0);
+    wall.aabbNeedsUpdate = true;
+    wall.updateAABB();
   }
 }
 
@@ -162,12 +173,13 @@ const geometry = {
 function collisionFor(type, scale) {
   let shape;
   let height;
-  if (type === 'ball') { shape = new CANNON.Sphere(0.55 * scale); height = 0.55 * scale; }
-  else if (type === 'tower') { shape = new CANNON.Cylinder(0.45 * scale, 0.45 * scale, 1.6 * scale, 6); height = 0.8 * scale; }
-  else if (type === 'cone') { shape = new CANNON.Cylinder(0.56 * scale, 0.09 * scale, 1.15 * scale, 5); height = 0.575 * scale; }
-  else if (type === 'block') { shape = new CANNON.Box(new CANNON.Vec3(0.725 * scale, 0.325 * scale, 0.45 * scale)); height = 0.325 * scale; }
-  else { shape = new CANNON.Box(new CANNON.Vec3(0.5 * scale, 0.5 * scale, 0.5 * scale)); height = 0.5 * scale; }
-  return { shape, height };
+  let footprint;
+  if (type === 'ball') { shape = new CANNON.Sphere(0.55 * scale); height = 0.55 * scale; footprint = 0.55 * scale; }
+  else if (type === 'tower') { shape = new CANNON.Cylinder(0.45 * scale, 0.45 * scale, 1.6 * scale, 6); height = 0.8 * scale; footprint = 0.45 * scale; }
+  else if (type === 'cone') { shape = new CANNON.Cylinder(0.56 * scale, 0.09 * scale, 1.15 * scale, 5); height = 0.575 * scale; footprint = 0.56 * scale; }
+  else if (type === 'block') { shape = new CANNON.Box(new CANNON.Vec3(0.725 * scale, 0.325 * scale, 0.45 * scale)); height = 0.325 * scale; footprint = Math.hypot(0.725, 0.45) * scale; }
+  else { shape = new CANNON.Box(new CANNON.Vec3(0.5 * scale, 0.5 * scale, 0.5 * scale)); height = 0.5 * scale; footprint = Math.SQRT1_2 * scale; }
+  return { shape, height, footprint };
 }
 
 function writeStaticTransform(item, visible) {
@@ -244,8 +256,8 @@ function buildBatches() {
 }
 
 function queueObject(type, x, z, size, color, y = null) {
-  const { height } = collisionFor(type, size);
-  objects.push({ type, x, y: y ?? height + 0.04, z, size, color, rotation: new THREE.Quaternion(), body: null, mesh: null, state: 'idle', sinkAge: 0, visible: true });
+  const { height, footprint } = collisionFor(type, size);
+  objects.push({ type, x, y: y ?? height + 0.04, z, size, footprint, color, rotation: new THREE.Quaternion(), body: null, mesh: null, state: 'idle', sinkAge: 0, visible: true });
 }
 
 function populate() {
@@ -274,7 +286,7 @@ function syncHoleVisual() {
   const visualScale = holeRadius / 1.35;
   hole.scale.set(visualScale, 1, visualScale);
   holeMask.center.set(holePosition.x, holePosition.z);
-  holeMask.radius.value = holeRadius * 0.68;
+  holeMask.radius.value = holeRadius * OPENING_RATIO;
   apertureEl.textContent = `${holeRadius.toFixed(2)}m`;
   resizeBucket();
 }
@@ -299,10 +311,11 @@ function cancelSinking(item) {
 }
 
 function canTeeter(item, distance) {
+  const openingRadius = holeRadius * OPENING_RATIO;
   return (item.type === 'cube' || item.type === 'block')
-    && item.size >= holeRadius * 0.78
-    && item.size <= holeRadius * 1.28
-    && distance < holeRadius * 0.72;
+    && item.footprint > openingRadius * 0.92
+    && item.footprint <= openingRadius * 1.7
+    && distance < openingRadius + item.footprint * 0.25;
 }
 
 function startTeetering(item) {
@@ -335,10 +348,10 @@ function updateObjects(dt) {
     const dz = holePosition.z - body.position.z;
     const distance = Math.hypot(dx, dz);
     if (item.state === 'ground' && canSwallow({
-      size: item.size, holeRadius, distance, height: item.height, bodyY: body.position.y,
+      footprintRadius: item.footprint, openingRadius: holeRadius * OPENING_RATIO, distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
     if (item.state === 'teeter' && canSwallow({
-      size: item.size, holeRadius, distance, height: item.height, bodyY: body.position.y,
+      footprintRadius: item.footprint, openingRadius: holeRadius * OPENING_RATIO, distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
     if (item.state === 'teeter' && distance > holeRadius * 0.82) {
       cancelSinking(item);
@@ -391,7 +404,7 @@ function updateStreaming() {
         item.state = 'idle';
         startTeetering(item);
         activations += 1;
-      } else if (item.size < holeRadius * 0.78) {
+      } else if (item.footprint < holeRadius * OPENING_RATIO * 0.92) {
         world.removeBody(item.body);
         item.body = null;
         item.state = 'idle';
@@ -408,13 +421,13 @@ function updateStreaming() {
     }
     // Distant props stay as culled instances. Nearby oversized pieces add only a static support collider.
     if (shouldShow && distance < 15) {
-      if (item.size < holeRadius * 0.78 && activations < 12) {
+      if (item.footprint < holeRadius * OPENING_RATIO * 0.92 && activations < 12) {
         activateItem(item);
         activations += 1;
       } else if (canTeeter(item, distance) && activations < 12) {
         startTeetering(item);
         activations += 1;
-      } else if (item.size >= holeRadius * 0.78) {
+      } else if (item.footprint >= holeRadius * OPENING_RATIO * 0.92) {
         addStaticCollider(item);
       }
     }
