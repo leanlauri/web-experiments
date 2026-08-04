@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && mkdir -p dist/server && cp src/worker.js dist/server/index.js",
     "test": "vitest run"
   },
   "dependencies": {
