@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es';
 import './style.css';
 import { canSwallow, grownHoleRadius } from './game-rules.js';
 import { WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
+import { cameraRelativeMovement } from './camera-input.js';
 
 const canvas = document.querySelector('#game');
 const scoreEl = document.querySelector('#score');
@@ -347,6 +348,7 @@ canvas.addEventListener('pointerdown', (event) => {
 });
 
 const keyState = new Set();
+const cameraForward = new THREE.Vector3();
 window.addEventListener('keydown', (event) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); keyState.add(event.key); }
 });
@@ -354,10 +356,18 @@ window.addEventListener('keyup', (event) => keyState.delete(event.key));
 
 function updateInput(dt) {
   const speed = 10 * dt;
-  if (keyState.has('ArrowLeft')) moveTarget.x -= speed;
-  if (keyState.has('ArrowRight')) moveTarget.x += speed;
-  if (keyState.has('ArrowUp')) moveTarget.z -= speed;
-  if (keyState.has('ArrowDown')) moveTarget.z += speed;
+  camera.getWorldDirection(cameraForward);
+  cameraForward.y = 0;
+  cameraForward.normalize();
+  const movement = cameraRelativeMovement({
+    forwardX: cameraForward.x,
+    forwardZ: cameraForward.z,
+    horizontal: Number(keyState.has('ArrowRight')) - Number(keyState.has('ArrowLeft')),
+    vertical: Number(keyState.has('ArrowUp')) - Number(keyState.has('ArrowDown')),
+    speed,
+  });
+  moveTarget.x += movement.x;
+  moveTarget.z += movement.z;
   moveTarget.x = THREE.MathUtils.clamp(moveTarget.x, -worldBounds.x, worldBounds.x);
   moveTarget.z = THREE.MathUtils.clamp(moveTarget.z, -worldBounds.z, worldBounds.z);
   holePosition.lerp(moveTarget, 1 - Math.exp(-8 * dt));
