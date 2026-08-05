@@ -79,19 +79,12 @@ scene.add(groundMesh);
 const hole = new THREE.Group();
 scene.add(hole);
 const shadowRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.70, 1.48, 64),
-  new THREE.MeshBasicMaterial({ color: '#26323b', transparent: true, opacity: 0.28, side: THREE.DoubleSide }),
+  new THREE.RingGeometry(0.68, 1.48, 64),
+  new THREE.MeshBasicMaterial({ color: '#526a67', transparent: true, opacity: 0.46, side: THREE.DoubleSide }),
 );
 shadowRing.rotation.x = -Math.PI / 2;
 shadowRing.position.y = 0.024;
 hole.add(shadowRing);
-const rim = new THREE.Mesh(
-  new THREE.RingGeometry(0.68, 1.08, 64),
-  new THREE.MeshStandardMaterial({ color: '#121c28', roughness: 0.43, metalness: 0.15, side: THREE.DoubleSide }),
-);
-rim.rotation.x = -Math.PI / 2;
-rim.position.y = 0.032;
-hole.add(rim);
 const voidDisk = new THREE.Mesh(
   new THREE.CircleGeometry(0.681, 64),
   new THREE.MeshBasicMaterial({ color: '#070b13', side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
