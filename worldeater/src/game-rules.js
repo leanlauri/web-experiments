@@ -5,9 +5,13 @@ export function canSwallow({ footprintRadius, openingRadius, distance, height, b
 }
 
 export function grownHoleRadius(currentRadius, objectSize) {
-  return currentRadius + 0.055 + objectSize * 0.16;
+  return currentRadius + 0.012 + objectSize * 0.035;
 }
 
 export function canCancelSinking({ bodyY, distance, cancelRadius }) {
   return bodyY >= -0.04 && distance > cancelRadius;
+}
+
+export function shouldConsumeAtDepth({ bodyY, consumeDepth }) {
+  return bodyY <= consumeDepth;
 }

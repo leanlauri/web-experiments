@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCancelSinking, canSwallow, grownHoleRadius } from '../src/game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, shouldConsumeAtDepth } from '../src/game-rules.js';
 
 describe('World Eater game rules', () => {
   it('only swallows an object that fits and is centred over the aperture', () => {
@@ -15,5 +15,10 @@ describe('World Eater game rules', () => {
   it('only cancels a fall before the object has crossed the surface', () => {
     expect(canCancelSinking({ bodyY: 0.2, distance: 1.2, cancelRadius: 1 })).toBe(true);
     expect(canCancelSinking({ bodyY: -0.2, distance: 1.2, cancelRadius: 1 })).toBe(false);
+  });
+
+  it('consumes only objects that have fallen below the configured depth', () => {
+    expect(shouldConsumeAtDepth({ bodyY: -4.4, consumeDepth: -4.3 })).toBe(true);
+    expect(shouldConsumeAtDepth({ bodyY: -4.2, consumeDepth: -4.3 })).toBe(false);
   });
 });

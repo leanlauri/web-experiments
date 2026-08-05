@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
-import { canCancelSinking, canSwallow, grownHoleRadius } from './game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, shouldConsumeAtDepth } from './game-rules.js';
 import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
-import { cameraRelativeMovement } from './camera-input.js';
+import { cameraRelativeMovement, moveTowardsTarget } from './camera-input.js';
 
 const canvas = document.querySelector('#game');
 const scoreEl = document.querySelector('#score');
@@ -112,13 +112,6 @@ let total = 0;
 let won = false;
 
 const bucketBodies = [];
-const bucketRadius = 1;
-const bucketBottom = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC });
-bucketBottom.addShape(new CANNON.Box(new CANNON.Vec3(1, 0.14, 1)));
-bucketBottom.collisionFilterGroup = GROUP_BUCKET;
-bucketBottom.collisionFilterMask = GROUP_SINKING;
-world.addBody(bucketBottom);
-bucketBodies.push(bucketBottom);
 for (let i = 0; i < 18; i += 1) {
   const angle = (i / 18) * Math.PI * 2;
   const wall = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC });
@@ -132,10 +125,7 @@ for (let i = 0; i < 18; i += 1) {
 
 function resizeBucket() {
   const openingRadius = holeRadius * OPENING_RATIO;
-  bucketBottom.shapes[0].halfExtents.set(openingRadius * 0.78, 0.14, openingRadius * 0.78);
-  bucketBottom.shapes[0].updateConvexPolyhedronRepresentation();
-  bucketBottom.updateBoundingRadius();
-  for (const wall of bucketBodies.slice(1)) {
+  for (const wall of bucketBodies) {
     wall.shapes[0].halfExtents.z = Math.max(0.42, openingRadius * Math.PI / 18 + 0.06);
     wall.shapes[0].updateConvexPolyhedronRepresentation();
     wall.updateBoundingRadius();
@@ -143,10 +133,7 @@ function resizeBucket() {
 }
 
 function updateBucket() {
-  bucketBottom.position.set(holePosition.x, -HOLE_DEPTH - 0.45, holePosition.z);
-  bucketBottom.aabbNeedsUpdate = true;
-  bucketBottom.updateAABB();
-  for (const wall of bucketBodies.slice(1)) {
+  for (const wall of bucketBodies) {
     const radius = holeRadius * OPENING_RATIO + WALL_HALF_THICKNESS;
     wall.position.set(
       holePosition.x + Math.cos(wall.userData.angle) * radius,
@@ -408,7 +395,7 @@ function updateObjects(dt) {
         cancelSinking(item);
         continue;
       }
-      if (body.position.y < CONSUME_DEPTH || (item.sinkAge > 2 && body.position.y < -1.2)) {
+      if (shouldConsumeAtDepth({ bodyY: body.position.y, consumeDepth: CONSUME_DEPTH })) {
         world.removeBody(body);
         scene.remove(item.mesh);
         objects.splice(i, 1);
@@ -480,13 +467,27 @@ function updateStreaming() {
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
-canvas.addEventListener('pointerdown', (event) => {
+const pointerTarget = new THREE.Vector3();
+let hasPointerTarget = false;
+
+function updatePointerTarget(event) {
   const rect = canvas.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObject(groundMesh)[0];
-  if (hit) moveTarget.set(THREE.MathUtils.clamp(hit.point.x, -worldBounds.x, worldBounds.x), 0, THREE.MathUtils.clamp(hit.point.z, -worldBounds.z, worldBounds.z));
+  if (!hit) return;
+  pointerTarget.set(
+    THREE.MathUtils.clamp(hit.point.x, -worldBounds.x, worldBounds.x),
+    0,
+    THREE.MathUtils.clamp(hit.point.z, -worldBounds.z, worldBounds.z),
+  );
+  hasPointerTarget = true;
+}
+
+canvas.addEventListener('pointerdown', updatePointerTarget);
+canvas.addEventListener('pointermove', (event) => {
+  if (event.buttons !== 0 || event.pointerType === 'touch') updatePointerTarget(event);
 });
 
 const keyState = new Set();
@@ -501,15 +502,23 @@ function updateInput(dt) {
   camera.getWorldDirection(cameraForward);
   cameraForward.y = 0;
   cameraForward.normalize();
+  const horizontal = Number(keyState.has('ArrowRight')) - Number(keyState.has('ArrowLeft'));
+  const vertical = Number(keyState.has('ArrowUp')) - Number(keyState.has('ArrowDown'));
   const movement = cameraRelativeMovement({
     forwardX: cameraForward.x,
     forwardZ: cameraForward.z,
-    horizontal: Number(keyState.has('ArrowRight')) - Number(keyState.has('ArrowLeft')),
-    vertical: Number(keyState.has('ArrowUp')) - Number(keyState.has('ArrowDown')),
+    horizontal,
+    vertical,
     speed,
   });
-  moveTarget.x += movement.x;
-  moveTarget.z += movement.z;
+  if (horizontal !== 0 || vertical !== 0) {
+    moveTarget.x += movement.x;
+    moveTarget.z += movement.z;
+    hasPointerTarget = false;
+  } else if (hasPointerTarget) {
+    const next = moveTowardsTarget({ x: moveTarget.x, z: moveTarget.z, targetX: pointerTarget.x, targetZ: pointerTarget.z, speed });
+    moveTarget.set(next.x, 0, next.z);
+  }
   moveTarget.x = THREE.MathUtils.clamp(moveTarget.x, -worldBounds.x, worldBounds.x);
   moveTarget.z = THREE.MathUtils.clamp(moveTarget.z, -worldBounds.z, worldBounds.z);
   holePosition.lerp(moveTarget, 1 - Math.exp(-8 * dt));
