@@ -92,12 +92,13 @@ const rim = new THREE.Mesh(
 rim.rotation.x = -Math.PI / 2;
 rim.position.y = 0.032;
 hole.add(rim);
-const well = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.79, 0.62, 12, 48, 1, true),
-  new THREE.MeshStandardMaterial({ color: '#0d1521', roughness: 0.74, metalness: 0.04, side: THREE.BackSide }),
+const voidDisk = new THREE.Mesh(
+  new THREE.CircleGeometry(0.681, 64),
+  new THREE.MeshBasicMaterial({ color: '#070b13', side: THREE.DoubleSide }),
 );
-well.position.y = -6.08;
-hole.add(well);
+voidDisk.rotation.x = -Math.PI / 2;
+voidDisk.position.y = -0.82;
+hole.add(voidDisk);
 
 const holePosition = new THREE.Vector3(0, 0, 0);
 const moveTarget = new THREE.Vector3(0, 0, 0);
@@ -105,8 +106,8 @@ let holeRadius = 1.35;
 const OPENING_RATIO = 0.68;
 const WALL_HALF_THICKNESS = 0.16;
 const RIM_SEGMENTS = 32;
-const HOLE_DEPTH = 12;
-const CONSUME_DEPTH = -4.3;
+const RIM_DEPTH = 0.78;
+const CONSUME_DEPTH = -0.82;
 let lastTime = performance.now();
 let score = 0;
 let total = 0;
@@ -116,7 +117,7 @@ const bucketBodies = [];
 for (let i = 0; i < RIM_SEGMENTS; i += 1) {
   const angle = (i / RIM_SEGMENTS) * Math.PI * 2;
   const wall = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC });
-  wall.addShape(new CANNON.Box(new CANNON.Vec3(0.16, HOLE_DEPTH / 2, 0.42)));
+  wall.addShape(new CANNON.Box(new CANNON.Vec3(0.16, RIM_DEPTH / 2, 0.42)));
   wall.collisionFilterGroup = GROUP_BUCKET;
   wall.collisionFilterMask = GROUP_SINKING;
   wall.userData = { angle };
@@ -138,7 +139,7 @@ function updateBucket() {
     const radius = holeRadius * OPENING_RATIO + WALL_HALF_THICKNESS;
     wall.position.set(
       holePosition.x + Math.cos(wall.userData.angle) * radius,
-      -HOLE_DEPTH / 2 - 0.1,
+      -RIM_DEPTH / 2,
       holePosition.z + Math.sin(wall.userData.angle) * radius,
     );
     wall.quaternion.setFromEuler(0, -wall.userData.angle, 0);
@@ -372,7 +373,7 @@ function deactivateItem(item) {
 
 function containSwallowedBody(item) {
   const { body } = item;
-  if (body.position.y >= -0.04) return;
+  if (body.position.y >= -0.04 || body.position.y <= -RIM_DEPTH) return;
   const correction = shaftContainment({
     offsetX: body.position.x - holePosition.x,
     offsetZ: body.position.z - holePosition.z,
@@ -380,7 +381,7 @@ function containSwallowedBody(item) {
     footprintRadius: item.footprint,
   });
   if (correction.x === 0 && correction.z === 0) return;
-  // Kinematic rim movement is resolved immediately, so the rendered shaft and collision boundary stay aligned.
+  // The shallow kinematic collar resolves rim movement before the body drops into the void.
   body.position.x += correction.x;
   body.position.z += correction.z;
   body.velocity.x += correction.x * 8;
