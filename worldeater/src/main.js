@@ -80,7 +80,7 @@ const hole = new THREE.Group();
 scene.add(hole);
 const shadowRing = new THREE.Mesh(
   new THREE.RingGeometry(0.68, 1.48, 64),
-  new THREE.MeshBasicMaterial({ color: '#526a67', transparent: true, opacity: 0.46, side: THREE.DoubleSide }),
+  new THREE.MeshBasicMaterial({ color: '#708681', side: THREE.DoubleSide }),
 );
 shadowRing.rotation.x = -Math.PI / 2;
 shadowRing.position.y = 0.024;
