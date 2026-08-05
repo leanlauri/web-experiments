@@ -499,10 +499,20 @@ function updatePointerTarget(event) {
   hasPointerTarget = true;
 }
 
-canvas.addEventListener('pointerdown', updatePointerTarget);
-canvas.addEventListener('pointermove', (event) => {
-  if (event.buttons !== 0 || event.pointerType === 'touch') updatePointerTarget(event);
+canvas.addEventListener('pointerdown', (event) => {
+  canvas.setPointerCapture(event.pointerId);
+  updatePointerTarget(event);
 });
+canvas.addEventListener('pointermove', (event) => {
+  if (hasPointerTarget) updatePointerTarget(event);
+});
+function stopPointerMovement(event) {
+  hasPointerTarget = false;
+  if (event && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+}
+canvas.addEventListener('pointerup', stopPointerMovement);
+canvas.addEventListener('pointercancel', stopPointerMovement);
+canvas.addEventListener('lostpointercapture', () => { hasPointerTarget = false; });
 
 const keyState = new Set();
 const cameraForward = new THREE.Vector3();
