@@ -8,8 +8,8 @@ export function grownHoleRadius(currentRadius, objectSize) {
   return currentRadius + 0.012 + objectSize * 0.035;
 }
 
-export function canCancelSinking({ bodyY, distance, cancelRadius }) {
-  return bodyY >= -0.04 && distance > cancelRadius;
+export function canCancelSinking({ bodyY, distance, cancelRadius, recoverHeight = 0 }) {
+  return bodyY >= Math.max(-0.04, recoverHeight) && distance > cancelRadius;
 }
 
 export function shouldConsumeAtDepth({ bodyY, consumeDepth }) {

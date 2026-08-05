@@ -79,14 +79,14 @@ scene.add(groundMesh);
 const hole = new THREE.Group();
 scene.add(hole);
 const shadowRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.84, 1.24, 64),
-  new THREE.MeshBasicMaterial({ color: '#26323b', transparent: true, opacity: 0.38, side: THREE.DoubleSide }),
+  new THREE.RingGeometry(0.70, 1.48, 64),
+  new THREE.MeshBasicMaterial({ color: '#26323b', transparent: true, opacity: 0.28, side: THREE.DoubleSide }),
 );
 shadowRing.rotation.x = -Math.PI / 2;
 shadowRing.position.y = 0.024;
 hole.add(shadowRing);
 const rim = new THREE.Mesh(
-  new THREE.RingGeometry(0.80, 0.94, 64),
+  new THREE.RingGeometry(0.68, 1.08, 64),
   new THREE.MeshStandardMaterial({ color: '#121c28', roughness: 0.43, metalness: 0.15, side: THREE.DoubleSide }),
 );
 rim.rotation.x = -Math.PI / 2;
@@ -334,8 +334,7 @@ function cancelSinking(item) {
   const { body } = item;
   body.collisionFilterGroup = GROUP_OBJECT;
   body.collisionFilterMask = GROUP_GROUND | GROUP_OBJECT | GROUP_SINKING;
-  body.position.y = Math.max(body.position.y, item.height + 0.04);
-  body.velocity.set(0, 0, 0);
+  body.velocity.y = Math.max(0, body.velocity.y);
   body.angularVelocity.set(0, 0, 0);
   item.state = 'ground';
   item.sinkAge = 0;
@@ -403,14 +402,14 @@ function updateObjects(dt) {
     if (item.state === 'teeter' && canSwallow({
       footprintRadius: item.footprint, openingRadius: holeRadius * OPENING_RATIO, distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
-    if (item.state === 'teeter' && canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.82 })) {
+    if (item.state === 'teeter' && canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.82, recoverHeight: item.height * 0.6 })) {
       cancelSinking(item);
       continue;
     }
     if (item.state === 'sinking') {
       item.sinkAge += dt;
       // Once ground contact is removed, normal gravity and remaining body contacts do the work.
-      if (canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.78 })) {
+      if (canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.78, recoverHeight: item.height * 0.6 })) {
         cancelSinking(item);
         continue;
       }

@@ -15,6 +15,7 @@ describe('World Eater game rules', () => {
   it('only cancels a fall before the object has crossed the surface', () => {
     expect(canCancelSinking({ bodyY: 0.2, distance: 1.2, cancelRadius: 1 })).toBe(true);
     expect(canCancelSinking({ bodyY: -0.2, distance: 1.2, cancelRadius: 1 })).toBe(false);
+    expect(canCancelSinking({ bodyY: 0.2, distance: 1.2, cancelRadius: 1, recoverHeight: 0.3 })).toBe(false);
   });
 
   it('consumes only objects that have fallen below the configured depth', () => {
