@@ -16,6 +16,12 @@ export function shouldConsumeAtDepth({ bodyY, consumeDepth }) {
   return bodyY <= consumeDepth;
 }
 
+// The rim is the only physical part of the hole. Once an object clears it,
+// it enters the visual void and must not collide with other swallowed props.
+export function shouldReleaseIntoVoid({ bodyY, rimDepth }) {
+  return bodyY <= -rimDepth;
+}
+
 export function shaftContainment({ offsetX, offsetZ, openingRadius, footprintRadius }) {
   const distance = Math.hypot(offsetX, offsetZ);
   const maximumDistance = Math.max(0, openingRadius - footprintRadius * 1.05);

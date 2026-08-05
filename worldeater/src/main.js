@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
-import { canCancelSinking, canSwallow, grownHoleRadius, shaftContainment, shouldConsumeAtDepth } from './game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from './game-rules.js';
 import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 import { cameraRelativeMovement, moveTowardsTarget } from './camera-input.js';
 
@@ -100,7 +100,7 @@ let holeRadius = 1.35;
 const OPENING_RATIO = 0.68;
 const WALL_HALF_THICKNESS = 0.16;
 const RIM_SEGMENTS = 32;
-const RIM_DEPTH = 0.78;
+const RIM_DEPTH = 0.42;
 const CONSUME_DEPTH = -10;
 let lastTime = performance.now();
 let score = 0;
@@ -322,13 +322,26 @@ function startSinking(item) {
   item.state = 'sinking';
   item.body.collisionFilterGroup = GROUP_SINKING;
   item.body.collisionFilterMask = GROUP_OBJECT | GROUP_SINKING | GROUP_BUCKET;
+  item.body.collisionResponse = true;
   item.body.wakeUp();
+}
+
+function releaseIntoVoid(item) {
+  const { body } = item;
+  item.state = 'void';
+  // No shaft or catch basin exists below the collar: from here the object is
+  // free-falling and cannot build up, tumble, or rest on hidden geometry.
+  body.collisionFilterGroup = 0;
+  body.collisionFilterMask = 0;
+  body.collisionResponse = false;
+  body.wakeUp();
 }
 
 function cancelSinking(item) {
   const { body } = item;
   body.collisionFilterGroup = GROUP_OBJECT;
   body.collisionFilterMask = GROUP_GROUND | GROUP_OBJECT | GROUP_SINKING;
+  body.collisionResponse = true;
   body.velocity.y = Math.max(0, body.velocity.y);
   body.angularVelocity.set(0, 0, 0);
   item.state = 'ground';
@@ -409,6 +422,9 @@ function updateObjects(dt) {
         continue;
       }
       containSwallowedBody(item);
+      if (shouldReleaseIntoVoid({ bodyY: body.position.y, rimDepth: RIM_DEPTH })) releaseIntoVoid(item);
+    }
+    if (item.state === 'void') {
       if (shouldConsumeAtDepth({ bodyY: body.position.y, consumeDepth: CONSUME_DEPTH })) {
         world.removeBody(body);
         scene.remove(item.mesh);
