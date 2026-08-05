@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCancelSinking, canSwallow, grownHoleRadius, shouldConsumeAtDepth } from '../src/game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, shaftContainment, shouldConsumeAtDepth } from '../src/game-rules.js';
 
 describe('World Eater game rules', () => {
   it('only swallows an object that fits and is centred over the aperture', () => {
@@ -20,5 +20,10 @@ describe('World Eater game rules', () => {
   it('consumes only objects that have fallen below the configured depth', () => {
     expect(shouldConsumeAtDepth({ bodyY: -4.4, consumeDepth: -4.3 })).toBe(true);
     expect(shouldConsumeAtDepth({ bodyY: -4.2, consumeDepth: -4.3 })).toBe(false);
+  });
+
+  it('returns a swallowed body to the shaft interior when the rim moves across it', () => {
+    expect(shaftContainment({ offsetX: 1, offsetZ: 0, openingRadius: 0.8, footprintRadius: 0.4 })).toEqual({ x: -0.62, z: 0 });
+    expect(shaftContainment({ offsetX: 0.2, offsetZ: 0, openingRadius: 0.8, footprintRadius: 0.4 })).toEqual({ x: 0, z: 0 });
   });
 });

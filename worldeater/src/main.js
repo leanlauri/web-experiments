@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
-import { canCancelSinking, canSwallow, grownHoleRadius, shouldConsumeAtDepth } from './game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, shaftContainment, shouldConsumeAtDepth } from './game-rules.js';
 import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 import { cameraRelativeMovement, moveTowardsTarget } from './camera-input.js';
 
@@ -104,6 +104,7 @@ const moveTarget = new THREE.Vector3(0, 0, 0);
 let holeRadius = 1.35;
 const OPENING_RATIO = 0.68;
 const WALL_HALF_THICKNESS = 0.16;
+const RIM_SEGMENTS = 32;
 const HOLE_DEPTH = 12;
 const CONSUME_DEPTH = -4.3;
 let lastTime = performance.now();
@@ -112,8 +113,8 @@ let total = 0;
 let won = false;
 
 const bucketBodies = [];
-for (let i = 0; i < 18; i += 1) {
-  const angle = (i / 18) * Math.PI * 2;
+for (let i = 0; i < RIM_SEGMENTS; i += 1) {
+  const angle = (i / RIM_SEGMENTS) * Math.PI * 2;
   const wall = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC });
   wall.addShape(new CANNON.Box(new CANNON.Vec3(0.16, HOLE_DEPTH / 2, 0.42)));
   wall.collisionFilterGroup = GROUP_BUCKET;
@@ -126,7 +127,7 @@ for (let i = 0; i < 18; i += 1) {
 function resizeBucket() {
   const openingRadius = holeRadius * OPENING_RATIO;
   for (const wall of bucketBodies) {
-    wall.shapes[0].halfExtents.z = Math.max(0.42, openingRadius * Math.PI / 18 + 0.06);
+    wall.shapes[0].halfExtents.z = Math.max(0.28, openingRadius * Math.PI / RIM_SEGMENTS + 0.045);
     wall.shapes[0].updateConvexPolyhedronRepresentation();
     wall.updateBoundingRadius();
   }
@@ -370,6 +371,24 @@ function deactivateItem(item) {
   writeStaticTransform(item, item.visible);
 }
 
+function containSwallowedBody(item) {
+  const { body } = item;
+  if (body.position.y >= -0.04) return;
+  const correction = shaftContainment({
+    offsetX: body.position.x - holePosition.x,
+    offsetZ: body.position.z - holePosition.z,
+    openingRadius: holeRadius * OPENING_RATIO,
+    footprintRadius: item.footprint,
+  });
+  if (correction.x === 0 && correction.z === 0) return;
+  // Kinematic rim movement is resolved immediately, so the rendered shaft and collision boundary stay aligned.
+  body.position.x += correction.x;
+  body.position.z += correction.z;
+  body.velocity.x += correction.x * 8;
+  body.velocity.z += correction.z * 8;
+  body.aabbNeedsUpdate = true;
+}
+
 function updateObjects(dt) {
   for (let i = objects.length - 1; i >= 0; i -= 1) {
     const item = objects[i];
@@ -395,6 +414,7 @@ function updateObjects(dt) {
         cancelSinking(item);
         continue;
       }
+      containSwallowedBody(item);
       if (shouldConsumeAtDepth({ bodyY: body.position.y, consumeDepth: CONSUME_DEPTH })) {
         world.removeBody(body);
         scene.remove(item.mesh);
