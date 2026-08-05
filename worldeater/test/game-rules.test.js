@@ -21,6 +21,8 @@ describe('World Eater game rules', () => {
   it('consumes only objects that have fallen below the configured depth', () => {
     expect(shouldConsumeAtDepth({ bodyY: -4.4, consumeDepth: -4.3 })).toBe(true);
     expect(shouldConsumeAtDepth({ bodyY: -4.2, consumeDepth: -4.3 })).toBe(false);
+    expect(shouldConsumeAtDepth({ bodyY: -9.99, consumeDepth: -10 })).toBe(false);
+    expect(shouldConsumeAtDepth({ bodyY: -10, consumeDepth: -10 })).toBe(true);
   });
 
   it('returns a swallowed body to the shaft interior when the rim moves across it', () => {

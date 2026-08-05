@@ -94,10 +94,11 @@ rim.position.y = 0.032;
 hole.add(rim);
 const voidDisk = new THREE.Mesh(
   new THREE.CircleGeometry(0.681, 64),
-  new THREE.MeshBasicMaterial({ color: '#070b13', side: THREE.DoubleSide }),
+  new THREE.MeshBasicMaterial({ color: '#070b13', side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
 );
 voidDisk.rotation.x = -Math.PI / 2;
-voidDisk.position.y = -0.82;
+voidDisk.position.y = 0.015;
+voidDisk.renderOrder = -2;
 hole.add(voidDisk);
 
 const holePosition = new THREE.Vector3(0, 0, 0);
@@ -107,7 +108,7 @@ const OPENING_RATIO = 0.68;
 const WALL_HALF_THICKNESS = 0.16;
 const RIM_SEGMENTS = 32;
 const RIM_DEPTH = 0.78;
-const CONSUME_DEPTH = -0.82;
+const CONSUME_DEPTH = -10;
 let lastTime = performance.now();
 let score = 0;
 let total = 0;
