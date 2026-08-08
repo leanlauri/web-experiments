@@ -1,3 +1,9 @@
+export const HOLE_OPENING_RATIO = 0.68;
+
+export function holeOpeningRadius(holeRadius) {
+  return holeRadius * HOLE_OPENING_RATIO;
+}
+
 export function canSwallow({ footprintRadius, openingRadius, distance, height, bodyY }) {
   return footprintRadius <= openingRadius * 0.92
     && distance < openingRadius - footprintRadius * 0.35

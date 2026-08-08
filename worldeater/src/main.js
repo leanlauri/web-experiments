@@ -1,15 +1,17 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
-import { canCancelSinking, canSwallow, grownHoleRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from './game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, holeOpeningRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from './game-rules.js';
 import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 import { cameraRelativeMovement, moveTowardsTarget } from './camera-input.js';
+import { PhysicsDebugView } from './physics-debug.js';
 
 const canvas = document.querySelector('#game');
 const scoreEl = document.querySelector('#score');
 const apertureEl = document.querySelector('#aperture');
 const endCard = document.querySelector('#end-card');
 const restartButton = document.querySelector('#restart');
+const physicsDebugToggle = document.querySelector('#physics-debug');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -49,6 +51,11 @@ const GROUP_GROUND = 1;
 const GROUP_OBJECT = 2;
 const GROUP_SINKING = 4;
 const GROUP_BUCKET = 8;
+const INITIAL_HOLE_RADIUS = 1.35;
+const WALL_HALF_THICKNESS = 0.16;
+const RIM_SEGMENTS = 32;
+const RIM_DEPTH = 0.42;
+const CONSUME_DEPTH = -10;
 
 const ground = new CANNON.Body({ mass: 0, material: new CANNON.Material('ground') });
 ground.addShape(new CANNON.Plane());
@@ -79,14 +86,14 @@ scene.add(groundMesh);
 const hole = new THREE.Group();
 scene.add(hole);
 const shadowRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.68, 1.48, 64),
+  new THREE.RingGeometry(holeOpeningRadius(INITIAL_HOLE_RADIUS), 1.48, 64),
   new THREE.MeshBasicMaterial({ color: '#708681', side: THREE.DoubleSide }),
 );
 shadowRing.rotation.x = -Math.PI / 2;
 shadowRing.position.y = 0.024;
 hole.add(shadowRing);
 const voidDisk = new THREE.Mesh(
-  new THREE.CircleGeometry(0.681, 64),
+  new THREE.CircleGeometry(holeOpeningRadius(INITIAL_HOLE_RADIUS) + 0.002, 64),
   new THREE.MeshBasicMaterial({ color: '#070b13', side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
 );
 voidDisk.rotation.x = -Math.PI / 2;
@@ -96,12 +103,7 @@ hole.add(voidDisk);
 
 const holePosition = new THREE.Vector3(0, 0, 0);
 const moveTarget = new THREE.Vector3(0, 0, 0);
-let holeRadius = 1.35;
-const OPENING_RATIO = 0.68;
-const WALL_HALF_THICKNESS = 0.16;
-const RIM_SEGMENTS = 32;
-const RIM_DEPTH = 0.42;
-const CONSUME_DEPTH = -10;
+let holeRadius = INITIAL_HOLE_RADIUS;
 let lastTime = performance.now();
 let score = 0;
 let total = 0;
@@ -120,7 +122,7 @@ for (let i = 0; i < RIM_SEGMENTS; i += 1) {
 }
 
 function resizeBucket() {
-  const openingRadius = holeRadius * OPENING_RATIO;
+  const openingRadius = holeOpeningRadius(holeRadius);
   for (const wall of bucketBodies) {
     wall.shapes[0].halfExtents.z = Math.max(0.28, openingRadius * Math.PI / RIM_SEGMENTS + 0.045);
     wall.shapes[0].updateConvexPolyhedronRepresentation();
@@ -130,7 +132,7 @@ function resizeBucket() {
 
 function updateBucket() {
   for (const wall of bucketBodies) {
-    const radius = holeRadius * OPENING_RATIO + WALL_HALF_THICKNESS;
+    const radius = holeOpeningRadius(holeRadius) + WALL_HALF_THICKNESS;
     wall.position.set(
       holePosition.x + Math.cos(wall.userData.angle) * radius,
       -RIM_DEPTH / 2,
@@ -310,10 +312,10 @@ function populate() {
 
 function syncHoleVisual() {
   hole.position.copy(holePosition);
-  const visualScale = holeRadius / 1.35;
+  const visualScale = holeRadius / INITIAL_HOLE_RADIUS;
   hole.scale.set(visualScale, 1, visualScale);
   holeMask.center.set(holePosition.x, holePosition.z);
-  holeMask.radius.value = holeRadius * OPENING_RATIO;
+  holeMask.radius.value = holeOpeningRadius(holeRadius);
   apertureEl.textContent = `${holeRadius.toFixed(2)}m`;
   resizeBucket();
 }
@@ -350,7 +352,7 @@ function cancelSinking(item) {
 }
 
 function canTeeter(item, distance) {
-  const openingRadius = holeRadius * OPENING_RATIO;
+  const openingRadius = holeOpeningRadius(holeRadius);
   return (item.type === 'cube' || item.type === 'block')
     && item.footprint > openingRadius * 0.92
     && item.footprint <= openingRadius * 1.7
@@ -384,7 +386,7 @@ function containSwallowedBody(item) {
   const correction = shaftContainment({
     offsetX: body.position.x - holePosition.x,
     offsetZ: body.position.z - holePosition.z,
-    openingRadius: holeRadius * OPENING_RATIO,
+    openingRadius: holeOpeningRadius(holeRadius),
     footprintRadius: item.footprint,
   });
   if (correction.x === 0 && correction.z === 0) return;
@@ -405,10 +407,10 @@ function updateObjects(dt) {
     const dz = holePosition.z - body.position.z;
     const distance = Math.hypot(dx, dz);
     if (item.state === 'ground' && canSwallow({
-      footprintRadius: item.footprint, openingRadius: holeRadius * OPENING_RATIO, distance, height: item.height, bodyY: body.position.y,
+      footprintRadius: item.footprint, openingRadius: holeOpeningRadius(holeRadius), distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
     if (item.state === 'teeter' && canSwallow({
-      footprintRadius: item.footprint, openingRadius: holeRadius * OPENING_RATIO, distance, height: item.height, bodyY: body.position.y,
+      footprintRadius: item.footprint, openingRadius: holeOpeningRadius(holeRadius), distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
     if (item.state === 'teeter' && canCancelSinking({ bodyY: body.position.y, distance, cancelRadius: holeRadius * 0.82, recoverHeight: item.height * 0.6 })) {
       cancelSinking(item);
@@ -465,7 +467,7 @@ function updateStreaming() {
         item.state = 'idle';
         startTeetering(item);
         activations += 1;
-      } else if (item.footprint < holeRadius * OPENING_RATIO * 0.92) {
+      } else if (item.footprint < holeOpeningRadius(holeRadius) * 0.92) {
         world.removeBody(item.body);
         item.body = null;
         item.state = 'idle';
@@ -482,13 +484,13 @@ function updateStreaming() {
     }
     // Distant props stay as culled instances. Nearby oversized pieces add only a static support collider.
     if (shouldShow && distance < 15) {
-      if (item.footprint < holeRadius * OPENING_RATIO * 0.92 && activations < 12) {
+      if (item.footprint < holeOpeningRadius(holeRadius) * 0.92 && activations < 12) {
         activateItem(item);
         activations += 1;
       } else if (canTeeter(item, distance) && activations < 12) {
         startTeetering(item);
         activations += 1;
-      } else if (item.footprint >= holeRadius * OPENING_RATIO * 0.92) {
+      } else if (item.footprint >= holeOpeningRadius(holeRadius) * 0.92) {
         addStaticCollider(item);
       }
     }
@@ -564,6 +566,17 @@ function updateInput(dt) {
   holePosition.lerp(moveTarget, 1 - Math.exp(-8 * dt));
 }
 
+const physicsDebugView = new PhysicsDebugView(scene, world, (body) => {
+  if (body.collisionFilterGroup === GROUP_BUCKET) return '#ff4fd8';
+  if (body.collisionFilterGroup === GROUP_SINKING) return '#ff8a3d';
+  if (body.collisionFilterGroup === GROUP_OBJECT) return '#ffe45c';
+  if (body.collisionFilterGroup === GROUP_GROUND) return '#39e7ff';
+  return '#9aa7b4';
+});
+physicsDebugToggle.addEventListener('change', () => {
+  physicsDebugView.setEnabled(physicsDebugToggle.checked);
+});
+
 function render(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
@@ -573,6 +586,7 @@ function render(now) {
   updateBucket();
   world.step(1 / 60, dt, 3);
   updateObjects(dt);
+  physicsDebugView.update();
   camera.position.lerp(new THREE.Vector3(holePosition.x + 15, 19, holePosition.z + 18), 1 - Math.exp(-1.8 * dt));
   camera.lookAt(holePosition.x, 0, holePosition.z - 0.3);
   renderer.render(scene, camera);

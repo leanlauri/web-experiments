@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { canCancelSinking, canSwallow, grownHoleRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from '../src/game-rules.js';
+import { canCancelSinking, canSwallow, grownHoleRadius, holeOpeningRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from '../src/game-rules.js';
 
 describe('World Eater game rules', () => {
+  it('derives the visual and physical aperture from one shared ratio', () => {
+    expect(holeOpeningRadius(1.35)).toBeCloseTo(0.918);
+    expect(holeOpeningRadius(2.7)).toBeCloseTo(1.836);
+  });
+
   it('only swallows an object that fits and is centred over the aperture', () => {
     expect(canSwallow({ footprintRadius: 0.6, openingRadius: 1.0, distance: 0.4, height: 0.5, bodyY: 0.5 })).toBe(true);
     expect(canSwallow({ footprintRadius: 1.0, openingRadius: 1.0, distance: 0.2, height: 0.5, bodyY: 0.5 })).toBe(false);
