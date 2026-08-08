@@ -3,11 +3,11 @@ import * as THREE from 'three';
 const flatColor = new THREE.Color('#b9b18f');
 
 export class FlatTerrain {
-  constructor({ scene = null, material = null, visuals = true } = {}) {
+  constructor({ scene = null, material = null, visuals = true, roadNetwork = null } = {}) {
     this.scene = scene;
     this.material = material;
     this.seed = 0;
-    this.track = null;
+    this.track = roadNetwork;
     this.chunks = new Map();
     this.lodChunks = new Map();
     this.lodTransitionSkirt = null;

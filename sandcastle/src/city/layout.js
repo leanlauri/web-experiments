@@ -1,4 +1,10 @@
 const TAU = Math.PI * 2;
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (edge0, edge1, value) => {
+  const t = clamp((value - edge0) / Math.max(.0001, edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 export const CITY_SIZE_PRESETS = {
   small: { boroughs: 2, neighborhoodsPerBorough: 2, agentsPerNeighborhood: 5 },
@@ -48,18 +54,6 @@ function addRoad(roads, start, end, kind = 'local') {
   roads.push({ start: { ...start }, end: { ...end }, kind });
 }
 
-function routeFromRoads(roads, count, rng) {
-  const points = [];
-  const start = roads[Math.floor(rng() * roads.length)] ?? { start: { x: 0, z: 0 }, end: { x: 0, z: 0 } };
-  points.push({ ...start.start }, { ...start.end });
-  for (let i = 0; i < count; i++) {
-    const road = roads[Math.floor(rng() * roads.length)] ?? start;
-    const point = rng() < .5 ? road.start : road.end;
-    points.push({ ...point });
-  }
-  return points;
-}
-
 function buildingTypeFor(index, neighborhoodIndex, rng) {
   const services = ['police-station', 'fire-department', 'hospital', 'taxi-station', 'pizzeria', 'supermarket'];
   if (index === 0) return services[neighborhoodIndex % services.length];
@@ -84,6 +78,13 @@ function createNeighborhood({ id, boroughId, center, index, rng }) {
   addRoad(roads, { x: center.x - half, z: center.z - half }, { x: center.x - half, z: center.z + half });
   addRoad(roads, { x: center.x + half, z: center.z - half }, { x: center.x + half, z: center.z + half });
 
+  const perimeterRoute = [
+    { x: center.x - half, z: center.z - half },
+    { x: center.x + half, z: center.z - half },
+    { x: center.x + half, z: center.z + half },
+    { x: center.x - half, z: center.z + half },
+  ];
+
   const lots = [
     [-half + inset, -half + inset], [0, -half + inset], [half - inset, -half + inset],
     [-half + inset, half - inset], [0, half - inset], [half - inset, half - inset],
@@ -103,7 +104,58 @@ function createNeighborhood({ id, boroughId, center, index, rng }) {
       stories: type === 'hospital' ? 3 : type === 'office' ? 3 + Math.floor(rng() * 2) : type === 'apartment' ? 2 + Math.floor(rng() * 2) : 1 + Math.floor(rng() * 2),
     };
   });
-  return { id, boroughId, center, roads, buildings };
+  return { id, boroughId, center, roads, routes: [perimeterRoute], buildings };
+}
+
+function closestSegment(segments, x, z) {
+  let nearest = null;
+  for (const segment of segments) {
+    const dx = segment.end.x - segment.start.x;
+    const dz = segment.end.z - segment.start.z;
+    const lengthSq = dx * dx + dz * dz;
+    const t = lengthSq < .0001 ? 0 : clamp(((x - segment.start.x) * dx + (z - segment.start.z) * dz) / lengthSq, 0, 1);
+    const px = segment.start.x + dx * t;
+    const pz = segment.start.z + dz * t;
+    const distanceSq = (x - px) ** 2 + (z - pz) ** 2;
+    if (!nearest || distanceSq < nearest.distanceSq) nearest = { segment, t, x: px, z: pz, distanceSq };
+  }
+  return nearest;
+}
+
+// Matches the race-track contract so the voxel terrain can paint and smooth city
+// streets directly into its height and color fields.
+export function createCityRoadNetwork(plan, { baseHeight = () => 0, width = 7, shoulderWidth = 3 } = {}) {
+  const halfWidth = width * .5;
+  const segments = plan.roads.map((road) => ({
+    ...road,
+    startHeight: baseHeight(road.start.x, road.start.z),
+    endHeight: baseHeight(road.end.x, road.end.z),
+  }));
+  const reach = halfWidth + shoulderWidth;
+  return {
+    roads: segments,
+    sample(x, z) {
+      const nearest = closestSegment(segments, x, z);
+      if (!nearest || nearest.distanceSq > reach * reach) return null;
+      const distance = Math.sqrt(nearest.distanceSq);
+      const roadMask = 1 - smoothstep(halfWidth, reach, distance);
+      return { ...nearest, distance, roadMask };
+    },
+    heightAt(x, z, fallbackHeight = baseHeight(x, z)) {
+      const sample = this.sample(x, z);
+      if (!sample) return fallbackHeight;
+      const roadHeight = lerp(sample.segment.startHeight, sample.segment.endHeight, sample.t);
+      return lerp(fallbackHeight, roadHeight, sample.roadMask);
+    },
+    colorAt(x, z) {
+      const sample = this.sample(x, z);
+      if (!sample) return null;
+      return {
+        roadMask: sample.roadMask,
+        shoulderMask: sample.distance > halfWidth ? sample.roadMask : 0,
+      };
+    },
+  };
 }
 
 export function createCityPlan({ seed = 8, size = 'medium' } = {}) {
@@ -153,8 +205,10 @@ export function createCityPlan({ seed = 8, size = 'medium' } = {}) {
       id: `${neighborhood.id}:agent:${index}`,
       neighborhoodId: neighborhood.id,
       kind: index % 5 === 0 ? 'animal' : index % 3 === 0 ? 'vehicle' : 'person',
-      route: routeFromRoads(neighborhood.roads, 4 + Math.floor(rng() * 3), rng),
-      speed: index % 3 === 0 ? 6 + rng() * 4 : index % 5 === 0 ? 1 + rng() * .6 : 1.4 + rng() * .8,
+      route: neighborhood.routes[0].map((point) => ({ ...point })),
+      // Keep the animals deliberately unhurried: they share streets with cars,
+      // but should read as pedestrians rather than another fast-moving vehicle.
+      speed: index % 3 === 0 ? 6 + rng() * 4 : index % 5 === 0 ? .65 + rng() * .3 : 1.4 + rng() * .8,
       phase: rng() * TAU,
       palette: neighborhoodIndex + index,
     }));

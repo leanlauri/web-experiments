@@ -64,6 +64,10 @@ exploded debris, and the controlled buggy remain in an explicit always-active se
 - Terrain, buildings, props, debris, and the buggy are explicitly culled by the
   camera frustum and distance budget. Shadow casting is retained only near the
   camera.
+- Buildings, city agents, and legacy props now switch to low-detail silhouettes
+  at 140 world units (with a 116-unit return threshold), then distance cull at
+  180 world units. This keeps full detail through the mid-ground while allowing
+  gentle pop-in within the fog rather than rendering far content at full detail.
 - Actor animation and particle vertex updates pause when their visual is outside
   the camera budget; effect lifetime and cleanup continue normally.
 - Terrain edits are coalesced and rebuilt under a two-high-detail/one-LOD

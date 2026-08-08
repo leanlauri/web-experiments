@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CELL_SIZE, terrainColor } from './terrain.js';
+import { CELL_SIZE, naturalTerrainHeight, terrainColor } from './terrain.js';
+import { createCityPlan, createCityRoadNetwork } from './city/layout.js';
 import { createBuggyFeature, createTerrainFeature, readWorldFeatures } from './worldFeatures.js';
 import { ChunkRegistry } from './chunkRegistry.js';
 import { CameraCuller } from './cameraCulling.js';
+import { OBJECT_CULL_DISTANCE, updateObjectLod } from './objectLod.js';
+import { PhysicsColliderDebug } from './physicsDebug.js';
 import { PerformanceMonitor } from './performance.js';
 import { ECSWorld } from './ecs/world.js';
 import { COMPONENTS, createPhysicsComponent, createVisualComponent } from './ecs/components.js';
@@ -41,6 +44,18 @@ const terrainMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, rou
 const urlParams = new URLSearchParams(location.search);
 const features = readWorldFeatures(urlParams);
 let seed = Math.random() * 100;
+const usesProceduralCity = features.cityPlugin === 'procedural';
+function createCityRoads(currentSeed) {
+  if (!usesProceduralCity) return { plan: null, roadNetwork: null };
+  const plan = createCityPlan({ seed: currentSeed, size: features.citySize });
+  return {
+    plan,
+    roadNetwork: createCityRoadNetwork(plan, {
+      baseHeight: (x, z) => naturalTerrainHeight(x, z, currentSeed),
+    }),
+  };
+}
+let { plan: cityPlan, roadNetwork: cityRoadNetwork } = createCityRoads(seed);
 let terrain = createTerrainFeature({
   enabled: features.terrain,
   plugin: features.terrainPlugin,
@@ -49,13 +64,15 @@ let terrain = createTerrainFeature({
   material: terrainMaterial,
   seed,
   trackEnabled: features.track,
+  roadNetwork: cityRoadNetwork,
 });
 
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) }); world.allowSleep = true;
 world.defaultContactMaterial.friction = .78; world.defaultContactMaterial.restitution = .1;
 const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floorBody);
+const physicsColliderDebug = new PhysicsColliderDebug(scene);
 const simulationChunks = new ChunkRegistry({ world, chunkSize: CELL_SIZE * 10, activeRadius: 2, releaseRadius: 3 });
-const cameraCuller = new CameraCuller({ maxDistance: 573.75, shadowDistance: 68 });
+const cameraCuller = new CameraCuller({ maxDistance: OBJECT_CULL_DISTANCE, shadowDistance: 68 });
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const projectiles = []; const debris = []; const props = []; const buildings = []; const buildingParts = []; const pendingBuildingImpacts = []; const effects = [];
 const performanceMonitor = new PerformanceMonitor();
 const chunksElement = document.querySelector('#chunks');
@@ -111,11 +128,15 @@ const MAX_DEBRIS_BODIES = 110;
 const MAX_MERGEABLE_DEBRIS_PER_BLAST = 36;
 const MAX_VISUAL_CHIPS = 30;
 const MAX_BUILDING_SHARDS = 44;
+const ADDITIVE_BLOCK_RADIUS = 2.15;
+const ADDITIVE_BLOCK_HEIGHT = 5;
+const ADDITIVE_BLOCK_CELLS = Math.round(Math.PI * ADDITIVE_BLOCK_RADIUS ** 2 * ADDITIVE_BLOCK_HEIGHT / CELL_SIZE ** 3);
 // Vehicle impacts should crumble a wall in its footprint, not turn it into a radial blast.
 // The impact direction is supplied per collision below; these values only provide a little
 // breakup variation around that direction.
 const CRUMBLE_SHARD_OPTIONS = { impulseScale: .1, scatterScale: .08, spawnScatterScale: .08, upwardBias: .01, upwardRange: .04, baseSpeed: .3, verticalBase: .18, spinScale: .16, panelScatterScale: .15, directionBias: .92, collisionGraceMs: 180 };
 const MIN_FRAGMENT_CELLS = 2;
+const EXPLOSION_IMPULSE_SCALE = 1.65;
 const BOULDER_ROLLING_RESISTANCE = .88;
 const CHIP_ROLLING_RESISTANCE = .42;
 const BOULDER_STATIC_FRICTION_SPEED = .68;
@@ -178,10 +199,14 @@ const cityBuildingProfiles = {
   warehouse: { palette: buildingPalettes.industrial, floorHeight: 3.35, roomsX: 3, roomsZ: 2, roof: 'saw', industrial: 2, stacks: 1 },
 };
 let sillyMode = false;
+let additiveMode = false;
 const vehicleModeButton = document.querySelector('#vehicle-mode');
+const additiveModeButton = document.querySelector('#additive-mode');
+const collidersButton = document.querySelector('#colliders');
 const soundButton = document.querySelector('#sound');
 const firstPersonButton = document.querySelector('#first-person');
 const reticleElement = document.querySelector('.reticle');
+const primaryActionLabel = document.querySelector('#primary-action-label');
 const firstPersonRotation = new THREE.Euler(0, 0, 0, 'YXZ');
 let firstPersonMode = localStorage.getItem('sandcastle-camera') === 'first-person';
 const soundState = {
@@ -215,6 +240,7 @@ const buggyCamera = buggyEntity?.get(COMPONENTS.camera) ?? null;
 const buggyDamage = buggyEntity?.get(COMPONENTS.damage) ?? null;
 
 updateSoundButton();
+updateCollidersButton();
 
 function createSoftParticleTexture() {
   const textureCanvas = document.createElement('canvas');
@@ -251,6 +277,23 @@ function updateVehicleModeButton() {
   reticleElement.classList.toggle('hidden', carMode);
 }
 
+function updateCollidersButton() {
+  collidersButton.setAttribute('aria-pressed', String(physicsColliderDebug.enabled));
+  collidersButton.querySelector('span').textContent = physicsColliderDebug.enabled ? '●' : '○';
+}
+
+function updateAdditiveModeButton() {
+  additiveModeButton.setAttribute('aria-pressed', String(additiveMode));
+  additiveModeButton.querySelector('span').textContent = additiveMode ? '●' : '○';
+  additiveModeButton.disabled = controlMode === 'car';
+  primaryActionLabel.textContent = additiveMode ? 'DROP TERRAIN BLOCK' : 'LAUNCH CHARGE';
+}
+
+function setAdditiveMode(enabled) {
+  additiveMode = enabled;
+  updateAdditiveModeButton();
+}
+
 function applyCameraControlsState() {
   controls.enabled = controlMode === 'bomber' && !firstPersonMode;
 }
@@ -283,6 +326,7 @@ function setControlMode(mode, persist = true) {
   applyCameraControlsState();
   if (persist) localStorage.setItem('sandcastle-control-mode', controlMode);
   updateVehicleModeButton();
+  updateAdditiveModeButton();
   updateFirstPersonButton();
 }
 
@@ -470,6 +514,94 @@ function throwBomb(clientX, clientY) {
   const projectile = registerSimulationItem({ mesh, body, born: performance.now(), exploded: false, pendingExplosion: false }, { alwaysActive: true }); projectiles.push(projectile);
 }
 
+function terrainTargetFromScreen(clientX, clientY) {
+  pointer.set(clientX / innerWidth * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const terrainMeshes = [
+    ...terrain.chunks.values(),
+    ...terrain.lodChunks.values(),
+    terrain.lodTransitionSkirt,
+    terrain.lodOuterSkirt,
+    terrain.horizonMesh,
+  ].filter(Boolean);
+  const targetSurfaces = [
+    ...terrainMeshes,
+    ...buildings.map((building) => building.group),
+    ...props.map((prop) => prop.group),
+  ];
+  const hit = raycaster.intersectObjects(targetSurfaces, true)[0];
+  if (hit) return hit.point;
+
+  // The fallback keeps the tool usable while streamed terrain is still loading
+  // or when the cursor is aimed beyond the rendered terrain horizon.
+  const fallback = new THREE.Vector3();
+  const groundY = terrain.surfaceY(controls.target.x, controls.target.z);
+  if (!raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY), fallback)) {
+    fallback.copy(controls.target);
+  }
+  fallback.y = terrain.surfaceY(fallback.x, fallback.z);
+  return fallback;
+}
+
+function dropAdditiveBlock(clientX, clientY) {
+  if (debris.length >= MAX_DEBRIS_BODIES) return;
+  ensureAudio();
+  const target = terrainTargetFromScreen(clientX, clientY);
+  const geometry = new THREE.CylinderGeometry(ADDITIVE_BLOCK_RADIUS, ADDITIVE_BLOCK_RADIUS * 1.04, ADDITIVE_BLOCK_HEIGHT, 12, 1);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  const color = terrainColor(
+    terrain.worldToGrid(target.x),
+    terrain.worldToGrid(target.z),
+    target.y,
+    terrain.seed,
+  );
+  const material = new THREE.MeshStandardMaterial({ color, roughness: .96, flatShading: true });
+  const mesh = new THREE.Mesh(geometry, material);
+  const terrainRadius = Math.hypot(ADDITIVE_BLOCK_RADIUS, ADDITIVE_BLOCK_HEIGHT * .5);
+  const spawnY = Math.max(target.y + 26, camera.position.y + 10);
+  mesh.position.set(target.x, spawnY, target.z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.userData.radius = terrainRadius;
+  mesh.userData.terrainCollisionRadius = ADDITIVE_BLOCK_HEIGHT * .5;
+  mesh.userData.terrainShape = { type: 'cylinder', radius: ADDITIVE_BLOCK_RADIUS, height: ADDITIVE_BLOCK_HEIGHT };
+  mesh.userData.bottomOffset = ADDITIVE_BLOCK_HEIGHT * .5;
+  mesh.userData.disposableMaterial = true;
+  scene.add(mesh);
+
+  const body = new CANNON.Body({
+    mass: ADDITIVE_BLOCK_CELLS * 1.65,
+    linearDamping: .035,
+    angularDamping: .7,
+    allowSleep: true,
+    sleepSpeedLimit: .32,
+    sleepTimeLimit: .7,
+  });
+  const shapeOrientation = new CANNON.Quaternion();
+  shapeOrientation.setFromEuler(Math.PI / 2, 0, 0);
+  body.addShape(new CANNON.Cylinder(ADDITIVE_BLOCK_RADIUS, ADDITIVE_BLOCK_RADIUS * 1.04, ADDITIVE_BLOCK_HEIGHT, 12), new CANNON.Vec3(), shapeOrientation);
+  body.position.set(target.x, spawnY, target.z);
+  body.velocity.set(0, -2.5, 0);
+  body.userData = { kind: 'debris', additive: true };
+  world.addBody(body);
+  debris.push(registerSimulationItem({
+    mesh,
+    body,
+    stillSince: null,
+    mergeToTerrain: true,
+    voxelCells: ADDITIVE_BLOCK_CELLS,
+    lastImpactAt: 0,
+    rollingResistance: 1,
+    additive: true,
+  }, { alwaysActive: true }));
+}
+
+function useActiveTool(clientX, clientY) {
+  if (additiveMode) dropAdditiveBlock(clientX, clientY);
+  else throwBomb(clientX, clientY);
+}
+
 function explode(projectile) {
   if (projectile.exploded) return; projectile.exploded = true;
   const center = new THREE.Vector3().copy(projectile.body.position); removePhysics(projectile);
@@ -482,6 +614,7 @@ function explode(projectile) {
   spawnExplosionParticles(center, removed);
   triggerScreenShake(.72, .42);
   explodeProps(center, 5.2);
+  city?.explode(center, 5.2);
   buggyDamage?.explosion(center, 5.2);
   const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .72, 32), new THREE.MeshBasicMaterial({ color: '#fff0ad', transparent: true, side: THREE.DoubleSide }));
   ring.position.copy(center); ring.lookAt(camera.position); scene.add(ring); effects.push(registerVisualItem({ type: 'ring', mesh: ring, age: 0, lifetime: .42 }));
@@ -667,9 +800,9 @@ function spawnDebris(position, center, voxelCells = 1, color = null) {
   const body = new CANNON.Body({ mass: Math.max(.7, voxelCells * .18), shape: new CANNON.Sphere(collisionRadius), linearDamping: .12, angularDamping: .52, allowSleep: true, sleepSpeedLimit: .45, sleepTimeLimit: .55 });
   body.userData = { kind: 'debris' };
   body.position.copy(position); const out = position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random()-.5)*.5, .55 + Math.random()*.55, (Math.random()-.5)*.5)).normalize();
-  const impulse = 7 + Math.random() * 8;
+  const impulse = (7 + Math.random() * 8) * EXPLOSION_IMPULSE_SCALE;
   body.velocity.set(out.x * impulse, out.y * impulse, out.z * impulse);
-  body.angularVelocity.set(Math.random()*7, Math.random()*7, Math.random()*7); world.addBody(body); debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: true, voxelCells, lastImpactAt: 0, rollingResistance: BOULDER_ROLLING_RESISTANCE }));
+  body.angularVelocity.set(Math.random() * 12, Math.random() * 12, Math.random() * 12); world.addBody(body); debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: true, voxelCells, lastImpactAt: 0, rollingResistance: BOULDER_ROLLING_RESISTANCE }));
 }
 
 function spawnRockChips(center, removed) {
@@ -698,8 +831,8 @@ function spawnRockChips(center, removed) {
     body.userData = { kind: 'debris' };
     body.position.copy(mesh.position);
     const out = mesh.position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random() - .5) * .7, .75 + Math.random() * .75, (Math.random() - .5) * .7)).normalize();
-    body.velocity.set(out.x * (8 + Math.random() * 12), out.y * (7 + Math.random() * 11), out.z * (8 + Math.random() * 12));
-    body.angularVelocity.set(Math.random() * 12, Math.random() * 12, Math.random() * 12);
+    body.velocity.set(out.x * (8 + Math.random() * 12) * EXPLOSION_IMPULSE_SCALE, out.y * (7 + Math.random() * 11) * EXPLOSION_IMPULSE_SCALE, out.z * (8 + Math.random() * 12) * EXPLOSION_IMPULSE_SCALE);
+    body.angularVelocity.set(Math.random() * 18, Math.random() * 18, Math.random() * 18);
     world.addBody(body);
     debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
   }
@@ -766,8 +899,8 @@ function spawnBlastChips(position, center, color, count = 4) {
     body.userData = { kind: 'debris' };
     body.position.copy(mesh.position);
     const out = mesh.position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random() - .5) * .7, .6 + Math.random() * .75, (Math.random() - .5) * .7)).normalize();
-    body.velocity.set(out.x * (7 + Math.random() * 9), out.y * (6 + Math.random() * 9), out.z * (7 + Math.random() * 9));
-    body.angularVelocity.set(Math.random() * 10, Math.random() * 10, Math.random() * 10);
+    body.velocity.set(out.x * (7 + Math.random() * 9) * EXPLOSION_IMPULSE_SCALE, out.y * (6 + Math.random() * 9) * EXPLOSION_IMPULSE_SCALE, out.z * (7 + Math.random() * 9) * EXPLOSION_IMPULSE_SCALE);
+    body.angularVelocity.set(Math.random() * 16, Math.random() * 16, Math.random() * 16);
     world.addBody(body);
     debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
   }
@@ -1374,6 +1507,10 @@ function disposeBuilding(building) {
     if (block.body) world.removeBody(block.body);
     block.mesh?.geometry.dispose();
   }
+  if (building.lodGroup) {
+    building.lodGroup.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
+    building.lodGroup.removeFromParent();
+  }
   building.group.removeFromParent();
   unregisterVisualItem(building);
   const index = buildings.indexOf(building);
@@ -1422,13 +1559,35 @@ function createBuilding(blueprint) {
   group.position.set(blueprint.x, terrain.surfaceY(blueprint.x, blueprint.z) + .08, blueprint.z);
   group.rotation.y = blueprint.rotation;
   scene.add(group);
-  const building = registerVisualItem({ name: blueprint.name, group, parts: [], foundation: [], cullingRadius: Math.hypot(blueprint.width, blueprint.depth) * .62 + 4 }, 'building');
+  const lodGroup = createBuildingLod(blueprint, group.position.y);
+  const building = registerVisualItem({ name: blueprint.name, group, lodGroup, parts: [], foundation: [], cullingRadius: Math.hypot(blueprint.width, blueprint.depth) * .62 + 4, usingLod: false }, 'building');
   building.entity.add('building', { blueprint });
   createBuildingFoundation(building, blueprint);
   const specs = createRectBuildingSpecs(blueprint);
   for (const spec of specs) createBuildingPart(building, spec);
   buildings.push(building);
   return building;
+}
+
+function createBuildingLod(blueprint, surfaceY) {
+  const group = new THREE.Group();
+  group.name = `${blueprint.name}:lod`;
+  group.position.set(blueprint.x, surfaceY, blueprint.z);
+  group.rotation.y = blueprint.rotation;
+  const height = blueprint.stories * (blueprint.floorHeight ?? 2.4);
+  const palette = blueprint.palette ?? buildingPalettes.house;
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(blueprint.width, height, blueprint.depth), palette.wall);
+  walls.position.y = height * .5;
+  walls.castShadow = false;
+  walls.receiveShadow = true;
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(blueprint.width + .28, .24, blueprint.depth + .28), palette.roof);
+  roof.position.y = height + .12;
+  roof.castShadow = false;
+  roof.receiveShadow = true;
+  group.add(walls, roof);
+  group.visible = false;
+  scene.add(group);
+  return group;
 }
 
 function createCityBuilding(blueprint) {
@@ -1554,10 +1713,25 @@ function populateBuildings() {
     ecs,
     scene,
     terrain,
+    world,
     seed,
     size: features.citySize,
+    plan: cityPlan,
     createBuilding: createCityBuilding,
     disposeBuilding,
+    obstacleAt: (point, radius) => {
+      const blockedBy = (item, itemRadius) => {
+        if (!item?.simulationActive || !item.body || item.destroyed) return false;
+        const dx = item.body.position.x - point.x;
+        const dz = item.body.position.z - point.z;
+        return dx * dx + dz * dz < (radius + itemRadius) ** 2;
+      };
+      if (buggyPhysics?.alive && blockedBy({ simulationActive: true, body: buggyPhysics.body }, 1.4)) return true;
+      if (buildingParts.some((item) => blockedBy(item, Math.hypot(item.size.x, item.size.z) * .5))) return true;
+      if (debris.some((item) => blockedBy(item, item.mesh?.userData.radius ?? .45))) return true;
+      if (props.some((item) => blockedBy(item, item.group?.userData.radius ?? 1))) return true;
+      return false;
+    },
     createSettlements,
   }).api;
 }
@@ -1665,7 +1839,7 @@ function carryVehicleThroughBreak(body, direction, impactSpeed) {
   body.applyImpulse(new CANNON.Vec3(direction.x * impulse, direction.y * impulse, direction.z * impulse));
 }
 
-function detachBuildingPart(part, center, strength = 8) {
+function detachBuildingPart(part, center, strength = 8, { explosive = false } = {}) {
   if (part.destroyed || part.detached) return;
   const worldPosition = new THREE.Vector3();
   const worldQuaternion = new THREE.Quaternion();
@@ -1681,13 +1855,14 @@ function detachBuildingPart(part, center, strength = 8) {
   part.body.quaternion.set(worldQuaternion.x, worldQuaternion.y, worldQuaternion.z, worldQuaternion.w);
   const out = worldPosition.clone().sub(center).normalize();
   if (out.lengthSq() < .001) out.set((Math.random() - .5), .35 + Math.random() * .5, (Math.random() - .5)).normalize();
-  out.y += .2 + Math.random() * .26;
+  out.y += explosive ? .7 + Math.random() * .65 : .2 + Math.random() * .26;
   out.normalize();
-  const impulse = Math.max(2.4, strength * (.32 + Math.random() * .22));
+  const impulse = Math.max(2.4, strength * (.32 + Math.random() * .22)) * (explosive ? EXPLOSION_IMPULSE_SCALE : 1);
   part.body.velocity.x += out.x * impulse;
   part.body.velocity.y += out.y * impulse;
   part.body.velocity.z += out.z * impulse;
-  part.body.angularVelocity.set((Math.random() - .5) * strength * .28, (Math.random() - .5) * strength * .34, (Math.random() - .5) * strength * .28);
+  const spin = explosive ? .62 : .28;
+  part.body.angularVelocity.set((Math.random() - .5) * strength * spin, (Math.random() - .5) * strength * spin * 1.2, (Math.random() - .5) * strength * spin);
 }
 
 function damageBuildingAtPoint(center, strength, sourceBuilding = null, primaryPart = null, options = {}) {
@@ -1719,7 +1894,7 @@ function damageBuildingAtPoint(center, strength, sourceBuilding = null, primaryP
       continue;
     }
     if (!part.detached && roll > part.strength * (.82 + Math.random() * .45)) {
-      detachBuildingPart(part, center, strength * falloff);
+      detachBuildingPart(part, center, strength * falloff, { explosive: options.explosive });
       if (options.explosive) markExplosiveMomentum(part.body);
     }
     if ((part.detached || part.brittle) && roll > part.strength * 1.35 && Math.random() < .55) fractureBuildingPart(part, center, strength * falloff, options.explosive ? { explosive: true } : {});
@@ -1739,13 +1914,13 @@ function damageBuildings(center, radius) {
   candidates.sort((a, b) => a.distance - b.distance);
   for (const { part, distance, partRadius } of candidates.slice(0, 28)) {
     const falloff = THREE.MathUtils.clamp(1 - distance / Math.max(radius + partRadius, .001), .08, 1);
-    const strength = 4 + falloff * 13;
+    const strength = 6 + falloff * 18;
     if (part.detached) {
       markExplosiveMomentum(part.body);
       const out = new THREE.Vector3().copy(part.body.position).sub(blastCenter).normalize();
-      part.body.velocity.x += out.x * strength;
-      part.body.velocity.y += Math.max(.6, out.y + .35) * strength;
-      part.body.velocity.z += out.z * strength;
+      part.body.velocity.x += out.x * strength * EXPLOSION_IMPULSE_SCALE;
+      part.body.velocity.y += Math.max(.9, out.y + .65) * strength * EXPLOSION_IMPULSE_SCALE;
+      part.body.velocity.z += out.z * strength * EXPLOSION_IMPULSE_SCALE;
       if (falloff > .48 || part.brittle) fractureBuildingPart(part, blastCenter, strength, { explosive: true });
     } else if (strength > part.strength * (.72 + Math.random() * .38)) {
       if (part.type === 'roof' || part.type === 'floor') {
@@ -1753,7 +1928,7 @@ function damageBuildings(center, radius) {
         damageBuildingAtPoint(part.body.position, strength * .3, part.building, part, { explosive: true });
         continue;
       }
-      detachBuildingPart(part, blastCenter, strength);
+      detachBuildingPart(part, blastCenter, strength, { explosive: true });
       markExplosiveMomentum(part.body);
       if (falloff > .62 || (part.brittle && falloff > .32)) fractureBuildingPart(part, blastCenter, strength, { explosive: true });
       damageBuildingAtPoint(part.body.position, strength * .42, part.building, part, { explosive: true });
@@ -1808,9 +1983,10 @@ function spawnBuildingShard(position, center, material, sourceSize, strength = 8
   const baseDirection = impactDirection?.lengthSq() ? impactDirection.normalize().lerp(radial, 1 - (options.directionBias ?? 0)) : radial;
   const out = baseDirection.add(new THREE.Vector3((Math.random() - .5) * .55 * scatterScale, upwardBias + Math.random() * upwardRange, (Math.random() - .5) * .55 * scatterScale)).normalize();
   const impulseScale = options.impulseScale ?? 1;
-  body.velocity.set(out.x * ((options.baseSpeed ?? 5) + strength * .52) * impulseScale, out.y * ((options.verticalBase ?? 4) + strength * .58) * impulseScale, out.z * ((options.baseSpeed ?? 5) + strength * .52) * impulseScale);
+  const explosionScale = options.explosive ? EXPLOSION_IMPULSE_SCALE : 1;
+  body.velocity.set(out.x * ((options.baseSpeed ?? 5) + strength * .52) * impulseScale * explosionScale, out.y * ((options.verticalBase ?? 4) + strength * .58) * impulseScale * explosionScale, out.z * ((options.baseSpeed ?? 5) + strength * .52) * impulseScale * explosionScale);
   const spinScale = options.spinScale ?? 1;
-  body.angularVelocity.set(Math.random() * 10 * spinScale, Math.random() * 10 * spinScale, Math.random() * 10 * spinScale);
+  body.angularVelocity.set(Math.random() * 10 * spinScale * explosionScale, Math.random() * 10 * spinScale * explosionScale, Math.random() * 10 * spinScale * explosionScale);
   if (options.ignoreBody?.userData?.kind === 'car' && options.collisionGraceMs) {
     // Fresh fragments start inside the collision footprint of the wall.  Let them
     // leave it before they become solid so they cannot kick the buggy backward.
@@ -2171,6 +2347,10 @@ function createProp(type, x, z, rotation = 0, variant = 0) {
     halfExtents = new CANNON.Vec3(.35, .8, .3); bodyOffsetY = .78; blastRadius = 1.2;
   }
   scene.add(group);
+  const lodGroup = createPropLod(type, variant);
+  lodGroup.position.copy(group.position);
+  lodGroup.quaternion.copy(group.quaternion);
+  scene.add(lodGroup);
   const isActor = type === 'person' || type === 'camel';
   const isDynamicProp = type === 'car';
   const body = new CANNON.Body({
@@ -2187,9 +2367,46 @@ function createProp(type, x, z, rotation = 0, variant = 0) {
   body.userData = { kind: isActor ? 'actor' : isDynamicProp ? 'dynamicProp' : 'prop', type };
   world.addBody(body);
   group.userData.radius = Math.max(halfExtents.x, halfExtents.y, halfExtents.z);
-  const prop = registerSimulationItem({ type, group, mesh: group, body, blastRadius, bodyOffsetY, dynamic: isDynamicProp, dynamicRadius: isDynamicProp ? .78 : group.userData.radius, lastImpactAt: 0, lastVoiceAt: 0 });
+  const prop = registerSimulationItem({ type, group, lodGroup, mesh: group, body, blastRadius, bodyOffsetY, dynamic: isDynamicProp, dynamicRadius: isDynamicProp ? .78 : group.userData.radius, lastImpactAt: 0, lastVoiceAt: 0, usingLod: false });
   if (isActor) prop.actor = createActorState(type, x, z, rotation, variant, actorParts, bodyOffsetY, group.userData.radius);
   props.push(prop);
+}
+
+function createPropLod(type, variant) {
+  const group = new THREE.Group();
+  let geometry;
+  let material;
+  let position;
+  if (type === 'rainbow') {
+    geometry = new THREE.TorusGeometry(1.6, .14, 5, 12, Math.PI);
+    material = propMaterials.rainbow[variant % propMaterials.rainbow.length];
+    position = [0, .2, 0];
+    group.scale.z = .55;
+  } else if (type === 'palm') {
+    geometry = new THREE.ConeGeometry(.72, 3.8, 5);
+    material = propMaterials.palmLeaf;
+    position = [0, 1.9, 0];
+  } else if (type === 'car') {
+    geometry = new THREE.BoxGeometry(2.2, .72, 1.12);
+    material = propMaterials.car[variant % propMaterials.car.length];
+    position = [0, .48, 0];
+  } else if (type === 'camel') {
+    geometry = new THREE.DodecahedronGeometry(.72, 0);
+    material = propMaterials.camel;
+    position = [0, 1.02, 0];
+    group.scale.set(1.45, .9, .8);
+  } else {
+    geometry = new THREE.ConeGeometry(.25, 1.45, 5);
+    material = propMaterials.personCloth[variant % propMaterials.personCloth.length];
+    position = [0, .72, 0];
+  }
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(...position);
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  group.visible = false;
+  return group;
 }
 
 function populateProps() {
@@ -2219,8 +2436,8 @@ function spawnPropShard(position, center, material, scale = 1) {
   body.userData = { kind: 'debris' };
   body.position.copy(position);
   const out = position.clone().sub(center).normalize().add(new THREE.Vector3((Math.random()-.5)*.6, .6 + Math.random()*.6, (Math.random()-.5)*.6)).normalize();
-  body.velocity.set(out.x * (5 + Math.random()*7), out.y * (5 + Math.random()*8), out.z * (5 + Math.random()*7));
-  body.angularVelocity.set(Math.random()*8, Math.random()*8, Math.random()*8);
+  body.velocity.set(out.x * (5 + Math.random() * 7) * EXPLOSION_IMPULSE_SCALE, out.y * (5 + Math.random() * 8) * EXPLOSION_IMPULSE_SCALE, out.z * (5 + Math.random() * 7) * EXPLOSION_IMPULSE_SCALE);
+  body.angularVelocity.set(Math.random() * 14, Math.random() * 14, Math.random() * 14);
   world.addBody(body);
   debris.push(registerSimulationItem({ mesh, body, stillSince: null, mergeToTerrain: false, lastImpactAt: 0, rollingResistance: CHIP_ROLLING_RESISTANCE }));
 }
@@ -2237,7 +2454,9 @@ function explodeProp(prop, center) {
     spawnPropShard(position, center, material, prop.type === 'rainbow' || prop.type === 'palm' ? .85 : 1);
   }
   scene.remove(prop.group);
+  scene.remove(prop.lodGroup);
   prop.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
+  prop.lodGroup.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
   unregisterSimulationItem(prop);
   world.removeBody(prop.body);
 }
@@ -2262,6 +2481,11 @@ function syncDynamicPropVisual(prop) {
     prop.body.position.z + offset.z,
   );
   prop.group.quaternion.copy(prop.body.quaternion);
+}
+
+function syncPropLodVisual(prop) {
+  prop.lodGroup.position.copy(prop.group.position);
+  prop.lodGroup.quaternion.copy(prop.group.quaternion);
 }
 
 function updateDynamicProps(now) {
@@ -2301,7 +2525,11 @@ function updatePhysics(delta, now) {
   updateActorsPreStep(delta, now);
   buggyInput?.update(delta, now, controlMode === 'car');
   if (buggyPhysics?.alive) buggyPhysics.body.userData.impactVelocity = buggyPhysics.body.velocity.clone();
+  for (const item of debris) {
+    if (item.additive && item.simulationActive) item.body.userData.impactVelocity = item.body.velocity.clone();
+  }
   world.step(1 / 60, delta, 3);
+  city?.afterPhysics(delta, now);
   processBuildingImpacts();
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const item = projectiles[i]; if (item.exploded) { projectiles.splice(i, 1); continue; }
@@ -2326,7 +2554,8 @@ function updatePhysics(delta, now) {
       delete item.body.userData.activateCollisionAt;
     }
     const radius = item.mesh.userData.radius ?? item.mesh.geometry.boundingSphere?.radius ?? .5;
-    const collision = terrain.sphereCollision(item.body.position, radius);
+    const terrainCollisionRadius = item.mesh.userData.terrainCollisionRadius ?? radius;
+    const collision = terrain.sphereCollision(item.body.position, terrainCollisionRadius);
     if (collision) applyTerrainContact(item, collision, now);
     item.mesh.position.copy(item.body.position); item.mesh.quaternion.copy(item.body.quaternion);
     const grounded = !!collision && collision.normal.y > .45;
@@ -2482,7 +2711,15 @@ function updateSceneCulling() {
   city?.update(0, terrainStreamAnchor(), cameraCuller);
 
   for (const building of buildings) {
-    cameraCuller.updateObject(building.group, building.cullingRadius);
+    const distance = cameraCuller.cameraPosition.distanceTo(building.group.position);
+    building.usingLod = updateObjectLod({
+      full: building.group,
+      low: building.lodGroup,
+      distance,
+      usingLod: building.usingLod,
+      radius: building.cullingRadius,
+      culler: cameraCuller,
+    });
     if (building.group.visible) cameraCuller.updateShadowCasting(building.group);
   }
   for (const cluster of settlementClusters) {
@@ -2490,7 +2727,16 @@ function updateSceneCulling() {
     for (const building of cluster.lodGroup.children) cameraCuller.updateObject(building, building.userData.cullingRadius ?? 12);
   }
   for (const prop of props) {
-    cameraCuller.updateObject(prop.group, prop.group.userData.radius ?? prop.blastRadius);
+    syncPropLodVisual(prop);
+    const distance = cameraCuller.cameraPosition.distanceTo(prop.group.position);
+    prop.usingLod = updateObjectLod({
+      full: prop.group,
+      low: prop.lodGroup,
+      distance,
+      usingLod: prop.usingLod,
+      radius: prop.group.userData.radius ?? prop.blastRadius,
+      culler: cameraCuller,
+    });
     if (prop.group.visible) cameraCuller.updateShadowCasting(prop.group);
   }
   for (const item of [...projectiles, ...debris]) {
@@ -2530,8 +2776,8 @@ function renderScene(delta) {
   camera.quaternion.copy(baseQuaternion);
 }
 
-function throwCenterBomb() {
-  throwBomb(innerWidth / 2, innerHeight / 2);
+function useCenterTool() {
+  useActiveTool(innerWidth / 2, innerHeight / 2);
 }
 
 let down = null;
@@ -2552,7 +2798,7 @@ canvas.addEventListener('pointermove', (event) => {
 });
 canvas.addEventListener('pointerup', (event) => {
   if (firstPersonMode && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-  if (controlMode === 'bomber' && down && !down.moved && Math.hypot(event.clientX-down.x, event.clientY-down.y) < 7) throwBomb(event.clientX, event.clientY);
+  if (controlMode === 'bomber' && down && !down.moved && Math.hypot(event.clientX-down.x, event.clientY-down.y) < 7) useActiveTool(event.clientX, event.clientY);
   down = null;
 });
 addEventListener('keydown', (event) => {
@@ -2562,7 +2808,7 @@ addEventListener('keydown', (event) => {
       keys.add(event.code);
       return;
     }
-    if (!event.repeat) throwCenterBomb();
+    if (!event.repeat) useCenterTool();
     return;
   }
   if (controlMode === 'car' && (event.code.startsWith('Arrow') || ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code))) event.preventDefault();
@@ -2571,6 +2817,11 @@ addEventListener('keydown', (event) => {
 addEventListener('keyup', (event) => keys.delete(event.code));
 vehicleModeButton.addEventListener('click', () => setControlMode(controlMode === 'car' ? 'bomber' : 'car'));
 vehicleModeButton.disabled = !features.buggy;
+additiveModeButton.addEventListener('click', () => setAdditiveMode(!additiveMode));
+collidersButton.addEventListener('click', () => {
+  physicsColliderDebug.enabled = !physicsColliderDebug.enabled;
+  updateCollidersButton();
+});
 document.querySelector('#silly').addEventListener('click', (event) => {
   sillyMode = !sillyMode;
   event.currentTarget.setAttribute('aria-pressed', String(sillyMode));
@@ -2592,12 +2843,24 @@ document.querySelector('#reset').addEventListener('click', () => {
   simulationChunks.clear();
   for (const prop of props) {
     scene.remove(prop.group);
+    scene.remove(prop.lodGroup);
     prop.group.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
+    prop.lodGroup.traverse((child) => { if (child.isMesh) child.geometry.dispose(); });
     world.removeBody(prop.body);
   }
   plugins.deactivate('city');
   city = null;
-  projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0; screenShake.age = screenShake.duration; seed = Math.random() * 100; terrain.seed = seed; terrain.generate(); populateProps(); populateBuildings(); buggyPhysics?.spawn();
+  projectiles.length = debris.length = props.length = pendingBuildingImpacts.length = effects.length = 0;
+  screenShake.age = screenShake.duration;
+  seed = Math.random() * 100;
+  ({ plan: cityPlan, roadNetwork: cityRoadNetwork } = createCityRoads(seed));
+  terrain.seed = seed;
+  terrain.roadNetwork = cityRoadNetwork;
+  terrain.track = cityRoadNetwork;
+  terrain.generate();
+  populateProps();
+  populateBuildings();
+  buggyPhysics?.spawn();
   if (controlMode === 'car') buggyCamera?.update(1 / 60, true, true);
 });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
@@ -2627,6 +2890,7 @@ function animate(now) {
     updateSceneCulling();
   });
   performanceMonitor.measure('effects', () => updateEffects(delta));
+  physicsColliderDebug.update(world);
   performanceMonitor.measure('render', () => renderScene(delta));
   performanceMonitor.endFrame();
 
@@ -2664,6 +2928,7 @@ return {
   },
   dispose() {
     running = false;
+    physicsColliderDebug.dispose();
     plugins.dispose();
     ecs.dispose();
   },

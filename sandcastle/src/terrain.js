@@ -82,6 +82,18 @@ const TETRAHEDRA = [
   [0, 4, 5, 6],
 ];
 
+function visualEditDistance(edit, x, y, z) {
+  const dx = x - edit.center.x;
+  const dy = y - edit.center.y;
+  const dz = z - edit.center.z;
+  if (edit.shape?.type === 'cylinder') {
+    const radial = Math.hypot(dx, dz) - edit.shape.radius;
+    const vertical = Math.abs(dy) - edit.shape.height * .5;
+    return Math.min(Math.max(radial, vertical), 0) + Math.hypot(Math.max(radial, 0), Math.max(vertical, 0));
+  }
+  return Math.hypot(dx, dy, dz) - edit.radius;
+}
+
 const averagePoints = (points, indices) => {
   const point = new THREE.Vector3();
   for (const index of indices) point.add(points[index]);
@@ -99,6 +111,7 @@ export class VoxelTerrain {
     this.material = material;
     this.seed = seed;
     this.trackEnabled = options.trackEnabled ?? true;
+    this.roadNetwork = options.roadNetwork ?? null;
     this.addedVoxels = new Set();
     this.removedVoxels = new Set();
     this.voxels = this.addedVoxels;
@@ -131,7 +144,7 @@ export class VoxelTerrain {
 
   generate() {
     this.dispose();
-    this.track = this.trackEnabled ? createRaceTrack(this.seed, { baseHeight: (x, z) => naturalTerrainHeight(x, z, this.seed) }) : null;
+    this.track = this.roadNetwork ?? (this.trackEnabled ? createRaceTrack(this.seed, { baseHeight: (x, z) => naturalTerrainHeight(x, z, this.seed) }) : null);
     this.visualEdits = [];
     this.sdfChunks.clear();
     this.addedVoxels.clear();
@@ -219,12 +232,9 @@ export class VoxelTerrain {
   applyVisualEdits(baseDistance, x, y, z, edits) {
     let distance = baseDistance;
     for (const edit of edits) {
-      const dx = x - edit.center.x;
-      const dy = y - edit.center.y;
-      const dz = z - edit.center.z;
-      const sphereDistance = Math.hypot(dx, dy, dz) - edit.radius;
-      if (edit.type === 'carve') distance = Math.max(distance, -sphereDistance);
-      else distance = Math.min(distance, sphereDistance);
+      const shapeDistance = visualEditDistance(edit, x, y, z);
+      if (edit.type === 'carve') distance = Math.max(distance, -shapeDistance);
+      else distance = Math.min(distance, shapeDistance);
     }
     return distance;
   }
@@ -302,6 +312,7 @@ export class VoxelTerrain {
     const inverse = mesh.matrixWorld.clone().invert();
     const worldBox = new THREE.Box3().setFromObject(mesh);
     const budget = targetCells == null ? null : Math.max(1, Math.round(targetCells));
+    const terrainShape = mesh.userData.terrainShape;
     const equivalentRadius = budget == null ? radius : CELL_SIZE * Math.cbrt((3 * budget) / (4 * Math.PI));
     const padding = Math.max(CELL_SIZE, equivalentRadius * 1.2);
     const minX = this.worldToGrid(worldBox.min.x - padding), maxX = this.worldToGrid(worldBox.max.x + padding);
@@ -323,12 +334,21 @@ export class VoxelTerrain {
       if (this.has(x, y, z)) continue;
       worldPosition.copy(this.cellCenter(x, y, z));
       local.copy(worldPosition).applyMatrix4(inverse).sub(center);
-      const nx = local.x / Math.max(size.x, 0.001);
-      const ny = local.y / Math.max(size.y, 0.001);
-      const nz = local.z / Math.max(size.z, 0.001);
       const wobble = 0.9 + hash(x + y, z - y, this.seed) * 0.34;
-      const score = nx * nx + ny * ny + nz * nz;
-      const nearShape = score <= wobble || (budget != null && score <= wobble * 1.65);
+      let score;
+      let nearShape;
+      if (terrainShape?.type === 'cylinder') {
+        const radial = Math.hypot(local.x, local.z) / Math.max(terrainShape.radius, 0.001);
+        const vertical = Math.abs(local.y) / Math.max(terrainShape.height * .5, 0.001);
+        score = radial * radial;
+        nearShape = radial <= wobble && vertical <= 1;
+      } else {
+        const nx = local.x / Math.max(size.x, 0.001);
+        const ny = local.y / Math.max(size.y, 0.001);
+        const nz = local.z / Math.max(size.z, 0.001);
+        score = nx * nx + ny * ny + nz * nz;
+        nearShape = score <= wobble || (budget != null && score <= wobble * 1.65);
+      }
       if (nearShape) candidates.push({ x, y, z, id, score: score + hash(x - y, z + y, this.seed) * 0.18 });
     }
     candidates.sort((a, b) => a.score - b.score);
@@ -341,30 +361,33 @@ export class VoxelTerrain {
     }
     if (limit > 0) {
       const centerWorld = worldBox.getCenter(new THREE.Vector3());
-      this.addVisualEdit('add', centerWorld, equivalentRadius, dirty);
+      this.addVisualEdit('add', centerWorld, equivalentRadius, dirty, terrainShape);
     }
     if (limit > 0) this.refreshDirtyChunks(dirty);
     return limit;
   }
 
-  addVisualEdit(type, center, radius, dirty = new Set()) {
-    const meshRadius = radius + SDF_CELL_SIZE * 2.5;
-    const skipRadius = radius + SDF_CELL_SIZE * 1.5;
+  addVisualEdit(type, center, radius, dirty = new Set(), shape = null) {
+    const horizontalRadius = shape?.radius ?? radius;
+    const verticalRadius = shape?.height ? shape.height * .5 : radius;
+    const meshRadius = Math.hypot(horizontalRadius, verticalRadius) + SDF_CELL_SIZE * 2.5;
+    const skipRadius = Math.hypot(horizontalRadius, verticalRadius) + SDF_CELL_SIZE * 1.5;
     this.visualEdits.push({
       type,
       center: center.clone(),
       radius,
+      shape: shape ? { ...shape } : null,
       meshRadius,
       meshRadiusSq: meshRadius * meshRadius,
       skipRadiusSq: skipRadius * skipRadius,
-      minX: center.x - meshRadius,
-      maxX: center.x + meshRadius,
-      minY: Math.max(0, center.y - meshRadius),
-      maxY: Math.min(GRID_HEIGHT * CELL_SIZE, center.y + meshRadius),
-      minZ: center.z - meshRadius,
-      maxZ: center.z + meshRadius,
+      minX: center.x - horizontalRadius - SDF_CELL_SIZE * 2.5,
+      maxX: center.x + horizontalRadius + SDF_CELL_SIZE * 2.5,
+      minY: Math.max(0, center.y - verticalRadius - SDF_CELL_SIZE * 2.5),
+      maxY: Math.min(GRID_HEIGHT * CELL_SIZE, center.y + verticalRadius + SDF_CELL_SIZE * 2.5),
+      minZ: center.z - horizontalRadius - SDF_CELL_SIZE * 2.5,
+      maxZ: center.z + horizontalRadius + SDF_CELL_SIZE * 2.5,
     });
-    const padding = radius + SDF_CELL_SIZE * 2;
+    const padding = horizontalRadius + SDF_CELL_SIZE * 2;
     const minX = this.worldToGrid(center.x - padding), maxX = this.worldToGrid(center.x + padding);
     const minZ = this.worldToGrid(center.z - padding), maxZ = this.worldToGrid(center.z + padding);
     const minCx = Math.floor(minX / CHUNK_SIZE), maxCx = Math.floor(maxX / CHUNK_SIZE);
@@ -831,10 +854,15 @@ export class VoxelTerrain {
   shouldSkipHeightfieldQuad(minX, minZ, maxX, maxZ, edits) {
     return edits.some((edit) => {
       for (const [x, z] of [[minX, minZ], [maxX, minZ], [minX, maxZ], [maxX, maxZ]]) {
-        const dx = x - edit.center.x;
-        const dy = this.baseSurfaceY(x, z) - edit.center.y;
-        const dz = z - edit.center.z;
-        if (dx * dx + dy * dy + dz * dz > edit.skipRadiusSq) return false;
+        const y = this.baseSurfaceY(x, z);
+        if (edit.shape?.type === 'cylinder') {
+          if (visualEditDistance(edit, x, y, z) > SDF_CELL_SIZE * 1.5) return false;
+        } else {
+          const dx = x - edit.center.x;
+          const dy = y - edit.center.y;
+          const dz = z - edit.center.z;
+          if (dx * dx + dy * dy + dz * dz > edit.skipRadiusSq) return false;
+        }
       }
       return true;
     });
@@ -842,6 +870,7 @@ export class VoxelTerrain {
 
   isNearVisualEditAt(x, y, z, edits) {
     return edits.some((edit) => {
+      if (edit.shape?.type === 'cylinder') return visualEditDistance(edit, x, y, z) <= SDF_CELL_SIZE * 2.5;
       const dx = x - edit.center.x;
       const dy = y - edit.center.y;
       const dz = z - edit.center.z;

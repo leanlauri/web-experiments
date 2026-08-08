@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCityPlan } from '../src/city/layout.js';
+import { createCityPlan, createCityRoadNetwork } from '../src/city/layout.js';
 
 describe('city layout', () => {
   it('is deterministic and connects neighborhoods through borough and city roads', () => {
@@ -31,5 +31,17 @@ describe('city layout', () => {
     for (const type of ['police-station', 'fire-department', 'hospital', 'taxi-station', 'pizzeria', 'supermarket']) {
       expect(types.has(type)).toBe(true);
     }
+  });
+
+  it('exposes terrain-ready road color and height masks for city streets', () => {
+    const city = createCityPlan({ seed: 13, size: 'small' });
+    const roads = createCityRoadNetwork(city, { baseHeight: (x, z) => 5 + x * .02 + z * .01 });
+    const sampleRoad = city.roads[0];
+    const x = (sampleRoad.start.x + sampleRoad.end.x) * .5;
+    const z = (sampleRoad.start.z + sampleRoad.end.z) * .5;
+
+    expect(roads.colorAt(x, z)?.roadMask).toBe(1);
+    expect(roads.heightAt(x, z, -20)).toBeGreaterThan(0);
+    expect(roads.colorAt(x + 1000, z + 1000)).toBeNull();
   });
 });

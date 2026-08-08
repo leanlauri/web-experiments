@@ -337,6 +337,23 @@ describe('procedural terrain', () => {
     terrain.dispose();
   });
 
+  it('preserves a cylindrical mesh shape in the smooth terrain edit', () => {
+    const scene = { add() {}, remove() {} };
+    const material = new THREE.MeshBasicMaterial();
+    const terrain = new VoxelTerrain(scene, material, 37);
+    const radius = 2;
+    const height = 4.5;
+    const surface = terrain.surfaceY(0, 0);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 12), material);
+    mesh.position.set(0, surface + height * .5, 0);
+    mesh.userData.terrainShape = { type: 'cylinder', radius, height };
+
+    expect(terrain.addMeshShape(mesh, radius, 18)).toBeGreaterThan(0);
+    expect(terrain.sampleSignedDistance(new THREE.Vector3(0, surface + height * .5, 0))).toBeLessThan(0);
+    expect(terrain.sampleSignedDistance(new THREE.Vector3(radius + .25, surface + height * .5, 0))).toBeGreaterThan(0);
+    terrain.dispose();
+  });
+
   it('keeps untouched chunks on the lightweight heightfield mesh', () => {
     const scene = { add() {}, remove() {} };
     const material = new THREE.MeshBasicMaterial();

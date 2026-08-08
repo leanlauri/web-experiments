@@ -74,6 +74,11 @@ visible sand debris and treat the rest as blast wastage; each piece carries that
 voxel budget until it merges, keeping crater volume, flying rock volume, and
 re-added terrain volume in the same rough balance.
 
+Additive Mode switches the click/tap and spacebar tool from a charge launcher to
+a terrain dropper. It releases a heavy cylindrical sand-and-rock block above the
+selected point, so its fall can crush building parts before it comes to rest and
+is sampled back into the same voxel terrain volume as ordinary boulders.
+
 The scene also seeds destructible low-poly props across the dunes: rainbow arches,
 palm trees, cars, camels, and small mannequin-like people. They are static physics
 bodies while intact, so direct hits detonate charges, and nearby blasts break them
