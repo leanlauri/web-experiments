@@ -14,6 +14,7 @@ const buildId = (() => {
 })();
 
 export default defineConfig({
+  base: './',
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
   },
