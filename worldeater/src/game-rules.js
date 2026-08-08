@@ -4,6 +4,15 @@ export function holeOpeningRadius(holeRadius) {
   return holeRadius * HOLE_OPENING_RATIO;
 }
 
+export function stackActivationRadius({ openingRadius, maxFootprint, settleMargin = 1.25 }) {
+  return openingRadius + maxFootprint + settleMargin;
+}
+
+export function compareStackLevels(a, b) {
+  return Number(a.type === 'cone') - Number(b.type === 'cone')
+    || b.footprint - a.footprint;
+}
+
 export function canSwallow({ footprintRadius, openingRadius, distance, height, bodyY }) {
   return footprintRadius <= openingRadius * 0.92
     && distance < openingRadius - footprintRadius * 0.35

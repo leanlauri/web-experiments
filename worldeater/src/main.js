@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import './style.css';
-import { canCancelSinking, canSwallow, grownHoleRadius, holeOpeningRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from './game-rules.js';
-import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
+import { canCancelSinking, canSwallow, compareStackLevels, grownHoleRadius, holeOpeningRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid, stackActivationRadius } from './game-rules.js';
+import { INDIVIDUALS_PER_TILE, OBJECTS_PER_STACK, scatteredPoint, scatteredPoints, STACKS_PER_TILE, WORLD_GRID_COLUMNS, WORLD_GRID_ROWS } from './world-layout.js';
 import { cameraRelativeMovement, moveTowardsTarget } from './camera-input.js';
 import { PhysicsDebugView } from './physics-debug.js';
+import { layoutStackLevels } from './stack-layout.js';
 
 const canvas = document.querySelector('#game');
 const scoreEl = document.querySelector('#score');
@@ -56,6 +57,9 @@ const WALL_HALF_THICKNESS = 0.16;
 const RIM_SEGMENTS = 32;
 const RIM_DEPTH = 0.42;
 const CONSUME_DEPTH = -10;
+const MAX_STREAMING_ACTIVATIONS = 12;
+const STACK_GROUND_MARGIN = 0.04;
+const STACK_LEVEL_MARGIN = 0;
 
 const ground = new CANNON.Body({ mass: 0, material: new CANNON.Material('ground') });
 ground.addShape(new CANNON.Plane());
@@ -146,6 +150,7 @@ function updateBucket() {
 
 const palette = ['#e85d4a', '#f2b544', '#2d9d94', '#497ac8', '#b85fa6', '#e77f9f', '#e8e0bf'];
 const objects = [];
+const stacks = [];
 const batches = new Map();
 const instanceDummy = new THREE.Object3D();
 const worldBounds = { x: 121, z: 102 };
@@ -163,7 +168,7 @@ function collisionFor(type, scale) {
   let footprint;
   if (type === 'ball') { shape = new CANNON.Sphere(0.55 * scale); height = 0.55 * scale; footprint = 0.55 * scale; }
   else if (type === 'tower') { shape = new CANNON.Cylinder(0.45 * scale, 0.45 * scale, 1.6 * scale, 6); height = 0.8 * scale; footprint = 0.45 * scale; }
-  else if (type === 'cone') { shape = new CANNON.Cylinder(0.56 * scale, 0.09 * scale, 1.15 * scale, 5); height = 0.575 * scale; footprint = 0.56 * scale; }
+  else if (type === 'cone') { shape = new CANNON.Cylinder(0.09 * scale, 0.56 * scale, 1.15 * scale, 5); height = 0.575 * scale; footprint = 0.56 * scale; }
   else if (type === 'block') { shape = new CANNON.Box(new CANNON.Vec3(0.725 * scale, 0.325 * scale, 0.45 * scale)); height = 0.325 * scale; footprint = Math.hypot(0.725, 0.45) * scale; }
   else { shape = new CANNON.Box(new CANNON.Vec3(0.5 * scale, 0.5 * scale, 0.5 * scale)); height = 0.5 * scale; footprint = Math.SQRT1_2 * scale; }
   return { shape, height, footprint };
@@ -242,9 +247,11 @@ function buildBatches() {
   }
 }
 
-function queueObject(type, x, z, size, color, y = null) {
+function queueObject(type, x, z, size, color, y = null, stack = null) {
   const { height, footprint } = collisionFor(type, size);
-  objects.push({ type, x, y: y ?? height + 0.04, z, size, footprint, color, rotation: new THREE.Quaternion(), body: null, mesh: null, state: 'idle', sinkAge: 0, visible: true });
+  const item = { type, x, y: y ?? height + 0.04, z, size, footprint, color, rotation: new THREE.Quaternion(), body: null, mesh: null, state: 'idle', sinkAge: 0, visible: true, stack };
+  objects.push(item);
+  return item;
 }
 
 function seededRandom(seed) {
@@ -262,26 +269,13 @@ function choose(random, values) {
   return values[Math.floor(random() * values.length)];
 }
 
-function scatteredPoint(random, occupied) {
-  for (let attempt = 0; attempt < 32; attempt += 1) {
-    const point = { x: (random() - 0.5) * 19, z: (random() - 0.5) * 16 };
-    if (occupied.every((other) => Math.hypot(point.x - other.x, point.z - other.z) > 2.5)) {
-      occupied.push(point);
-      return point;
-    }
-  }
-  return { x: (random() - 0.5) * 18, z: (random() - 0.5) * 15 };
-}
-
 function populate() {
   for (let row = 0; row < WORLD_GRID_ROWS; row += 1) {
     for (let column = 0; column < WORLD_GRID_COLUMNS; column += 1) {
       const offsetX = (column - 4.5) * 25;
       const offsetZ = (row - 4.5) * 22;
       const random = seededRandom(1009 + row * 97 + column * 7919);
-      const stackCenters = [];
-      stackCenters.push(scatteredPoint(random, stackCenters));
-      stackCenters.push(scatteredPoint(random, stackCenters));
+      const stackCenters = scatteredPoints(random, STACKS_PER_TILE);
       const occupied = [...stackCenters];
 
       for (let index = 0; index < INDIVIDUALS_PER_TILE; index += 1) {
@@ -294,15 +288,27 @@ function populate() {
       for (let stackIndex = 0; stackIndex < STACKS_PER_TILE; stackIndex += 1) {
         const center = stackCenters[stackIndex];
         const baseSize = 1.05 + random() * 1.75;
-        let nextY = 0;
-        for (let level = 0; level < OBJECTS_PER_STACK; level += 1) {
+        const stack = { items: [], activated: false, released: false, maxFootprint: 0 };
+        const levels = Array.from({ length: OBJECTS_PER_STACK }, () => {
           const type = choose(random, ['cube', 'block', 'tower', 'cone']);
           const size = baseSize * (0.9 + random() * 0.16);
-          const { height } = collisionFor(type, size);
-          nextY += height + 0.04;
-          queueObject(type, center.x + offsetX, center.z + offsetZ, size, choose(random, palette), nextY);
-          nextY += height + 0.06;
+          const { height, footprint } = collisionFor(type, size);
+          return { type, size, color: choose(random, palette), halfHeight: height, footprint };
+        });
+        // Cones cap stacks; the remaining levels are widest-first so every body
+        // has a broad, flat support when the stack changes over to live physics.
+        levels.sort(compareStackLevels);
+
+        const placements = layoutStackLevels(levels, {
+          groundMargin: STACK_GROUND_MARGIN,
+          levelMargin: STACK_LEVEL_MARGIN,
+        });
+        for (const level of placements) {
+          const item = queueObject(level.type, center.x + offsetX, center.z + offsetZ, level.size, level.color, level.y, stack);
+          stack.items.push(item);
+          stack.maxFootprint = Math.max(stack.maxFootprint, level.footprint);
         }
+        stacks.push(stack);
       }
     }
   }
@@ -320,7 +326,14 @@ function syncHoleVisual() {
   resizeBucket();
 }
 
+function releaseStack(stack) {
+  if (!stack || stack.released) return;
+  stack.released = true;
+  for (const item of stack.items) item.body?.wakeUp();
+}
+
 function startSinking(item) {
+  releaseStack(item.stack);
   item.state = 'sinking';
   item.body.collisionFilterGroup = GROUP_SINKING;
   item.body.collisionFilterMask = GROUP_OBJECT | GROUP_SINKING | GROUP_BUCKET;
@@ -409,6 +422,10 @@ function updateObjects(dt) {
     if (item.state === 'ground' && canSwallow({
       footprintRadius: item.footprint, openingRadius: holeOpeningRadius(holeRadius), distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
+    if (item.state === 'ground' && item.stack && !item.stack.released && canTeeter(item, distance)) {
+      releaseStack(item.stack);
+      startTeetering(item);
+    }
     if (item.state === 'teeter' && canSwallow({
       footprintRadius: item.footprint, openingRadius: holeOpeningRadius(holeRadius), distance, height: item.height, bodyY: body.position.y,
     })) startSinking(item);
@@ -454,14 +471,80 @@ function updateObjects(dt) {
 
 function updateStreaming() {
   let activations = 0;
+  const openingRadius = holeOpeningRadius(holeRadius);
+
+  // A stack stays entirely static until the hole is close enough to interact
+  // with it, then all of its bodies transition together from bottom to top.
+  // This avoids dynamic bodies spawning against still-static stack neighbors.
+  for (const stack of stacks) {
+    if (stack.activated) {
+      if (!stack.released) {
+        const anchor = stack.items[0];
+        const distance = Math.hypot(anchor.x - holePosition.x, anchor.z - holePosition.z);
+        if (distance > 18) {
+          for (const item of stack.items) {
+            if (item.body) deactivateItem(item);
+          }
+          stack.activated = false;
+        }
+      }
+      continue;
+    }
+    if (stack.items.some((item) => item.state !== 'idle' && item.state !== 'static')) {
+      stack.activated = true;
+      continue;
+    }
+
+    const anchor = stack.items[0];
+    const distance = Math.hypot(anchor.x - holePosition.x, anchor.z - holePosition.z);
+    const shouldShow = distance < 48;
+    for (const item of stack.items) {
+      if (shouldShow !== item.visible) {
+        item.visible = shouldShow;
+        writeStaticTransform(item, shouldShow);
+      }
+    }
+
+    if (distance > 18) {
+      for (const item of stack.items) {
+        if (item.state !== 'static') continue;
+        world.removeBody(item.body);
+        item.body = null;
+        item.state = 'idle';
+      }
+      continue;
+    }
+
+    const activationRadius = stackActivationRadius({ openingRadius, maxFootprint: stack.maxFootprint });
+    if (distance < activationRadius && activations + stack.items.length <= MAX_STREAMING_ACTIVATIONS) {
+      for (const item of stack.items) {
+        if (item.state === 'static') {
+          world.removeBody(item.body);
+          item.body = null;
+          item.state = 'idle';
+        }
+        activateItem(item);
+        activations += 1;
+      }
+      stack.activated = true;
+      stack.released = false;
+      // Bodies are ready for contact without reacting to tiny spawn-time gaps.
+      // The first swallowed or teetering piece wakes the complete stack.
+      for (const item of stack.items) item.body.sleep();
+    } else if (shouldShow && distance < 15) {
+      for (const item of stack.items) addStaticCollider(item);
+    }
+  }
+
   for (const item of objects) {
+    if (item.stack && !item.stack.activated) continue;
     if (item.state === 'static') {
       const distance = Math.hypot(item.x - holePosition.x, item.z - holePosition.z);
       if (distance > 18) {
         world.removeBody(item.body);
         item.body = null;
         item.state = 'idle';
-      } else if (canTeeter(item, distance) && activations < 12) {
+      } else if (canTeeter(item, distance) && activations < MAX_STREAMING_ACTIVATIONS) {
         world.removeBody(item.body);
         item.body = null;
         item.state = 'idle';
@@ -484,13 +567,13 @@ function updateStreaming() {
     }
     // Distant props stay as culled instances. Nearby oversized pieces add only a static support collider.
     if (shouldShow && distance < 15) {
-      if (item.footprint < holeOpeningRadius(holeRadius) * 0.92 && activations < 12) {
+      if (item.footprint < openingRadius * 0.92 && activations < MAX_STREAMING_ACTIVATIONS) {
         activateItem(item);
         activations += 1;
-      } else if (canTeeter(item, distance) && activations < 12) {
+      } else if (canTeeter(item, distance) && activations < MAX_STREAMING_ACTIVATIONS) {
         startTeetering(item);
         activations += 1;
-      } else if (item.footprint >= holeOpeningRadius(holeRadius) * 0.92) {
+      } else if (item.footprint >= openingRadius * 0.92) {
         addStaticCollider(item);
       }
     }
@@ -517,20 +600,34 @@ function updatePointerTarget(event) {
   hasPointerTarget = true;
 }
 
+let activePointerId = null;
+
 canvas.addEventListener('pointerdown', (event) => {
+  if (activePointerId !== null) return;
+  event.preventDefault();
+  activePointerId = event.pointerId;
   canvas.setPointerCapture(event.pointerId);
   updatePointerTarget(event);
 });
 canvas.addEventListener('pointermove', (event) => {
-  if (hasPointerTarget) updatePointerTarget(event);
+  if (event.pointerId !== activePointerId || !hasPointerTarget) return;
+  event.preventDefault();
+  updatePointerTarget(event);
 });
 function stopPointerMovement(event) {
+  if (event && event.pointerId !== activePointerId) return;
+  if (event) event.preventDefault();
   hasPointerTarget = false;
   if (event && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  activePointerId = null;
 }
 canvas.addEventListener('pointerup', stopPointerMovement);
 canvas.addEventListener('pointercancel', stopPointerMovement);
-canvas.addEventListener('lostpointercapture', () => { hasPointerTarget = false; });
+canvas.addEventListener('lostpointercapture', (event) => {
+  if (event.pointerId !== activePointerId) return;
+  hasPointerTarget = false;
+  activePointerId = null;
+});
 
 const keyState = new Set();
 const cameraForward = new THREE.Vector3();

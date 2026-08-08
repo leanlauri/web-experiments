@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { canCancelSinking, canSwallow, grownHoleRadius, holeOpeningRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid } from '../src/game-rules.js';
+import { canCancelSinking, canSwallow, compareStackLevels, grownHoleRadius, holeOpeningRadius, shaftContainment, shouldConsumeAtDepth, shouldReleaseIntoVoid, stackActivationRadius } from '../src/game-rules.js';
 
 describe('World Eater game rules', () => {
   it('derives the visual and physical aperture from one shared ratio', () => {
     expect(holeOpeningRadius(1.35)).toBeCloseTo(0.918);
     expect(holeOpeningRadius(2.7)).toBeCloseTo(1.836);
+  });
+
+  it('pre-activates a stack with room for its bodies to settle before contact', () => {
+    expect(stackActivationRadius({ openingRadius: 1, maxFootprint: 0.8 })).toBe(3.05);
+  });
+
+  it('orders stack levels with broad supports below cones and narrower pieces', () => {
+    const levels = [
+      { type: 'cone', footprint: 2 },
+      { type: 'cube', footprint: 0.6 },
+      { type: 'block', footprint: 1.1 },
+      { type: 'tower', footprint: 0.8 },
+    ];
+    expect(levels.sort(compareStackLevels).map((level) => level.type)).toEqual(['block', 'tower', 'cube', 'cone']);
   });
 
   it('only swallows an object that fits and is centred over the aperture', () => {
