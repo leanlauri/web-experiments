@@ -71,6 +71,9 @@ jobs:
               fi
               mkdir -p "$destination"
               cp -R "$project/dist/." "$destination/"
+            elif [[ -f "$project/public/index.html" ]]; then
+              mkdir -p "$destination"
+              cp -R "$project/public/." "$destination/"
             elif [[ -f "$project/index.html" ]]; then
               mkdir -p "$destination"
               cp -R "$project/." "$destination/"
