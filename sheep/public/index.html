@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheep · A little pastoral adventure</title><link rel="stylesheet" href="style.css"></head>
+<body><canvas id="world" aria-label="A 3D pasture. Move with WASD or arrow keys, jump with Space."></canvas>
+<header><div class="brand">❋ &nbsp; LITTLE PASTURES <span>A quiet day in the countryside</span></div><button id="reset">Start afresh ↻</button></header>
+<aside><div class="eyebrow">MAKE A FEW WOOLLY FRIENDS</div><h1>Greener together.</h1><p>Wander the meadow. Get close to a sheep<br>and it will happily tag along.</p><div class="counter"><b id="count">0</b><span>/ 12<br><small>sheep following</small></span></div><div id="message" role="status">Your flock is waiting to meet you.</div></aside>
+<footer><span><kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> wander &nbsp; <kbd>SPACE</kbd> jump &nbsp; <kbd>SHIFT</kbd> run</span><span>NO HURRY. JUST YOU & THE HERD. ☀</span></footer>
+<div id="touch"><div id="thumbstick" aria-label="Movement thumbstick: drag to wander"><span id="stick-knob"></span></div><button class="jump" data-key="Space">Jump</button></div>
+<div id="error" hidden>We couldn’t start the 3D meadow. Please use a browser with WebGL enabled.</div><script type="module" src="game.js"></script></body></html>

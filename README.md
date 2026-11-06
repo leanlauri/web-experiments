@@ -1,6 +1,6 @@
 # Web Experiments
 
-Ten client-side experiments, linked from `index.html`. Projects with a
+Eleven client-side experiments, linked from `index.html`. Projects with a
 `package.json` are built with Vite; the others are served as static HTML.
 
 ## Local server deployment

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#173d34">
+<title>Little Axolotl · Mosswood Meadow</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header><div class="brand"><span class="mark">✿</span><div><p class="eyebrow">A LITTLE ADVENTURE</p><h1>Little Axolotl</h1></div></div><div class="location"><span></span> Mosswood Meadow</div></header>
+  <section class="game" aria-label="Axolotl platform game">
+    <canvas id="game" aria-label="Move your baby axolotl through the meadow, collect bones, jump over cracks and logs, and spin to free your friends’ souls from poisonous snakes. Bring your friends to Mum’s cave for supper."></canvas>
+    <div class="hud"><div class="seed"><span>🦴</span> <b id="seeds">0</b><small>/ 12 bones</small><small id="snakes">0/4 snakes home</small><span id="health" aria-label="Health" role="status">♥♥♥</span></div><button id="restart" aria-label="Restart adventure">↻ <span>Restart</span></button></div>
+    <div class="friends" id="friends" role="status">0/4 friends freed</div>
+    <div class="intro" id="message"><span class="chapter">01 / MOSSWOOD MEADOW</span><h2>Brave little explorer.<br>Mum is waiting.</h2><p>Collect bones. Jump over cracks and fallen logs.<br>Spin to free your friends’ souls from red snakes.<br>They’ll follow your moves. Meet everyone’s mums for supper and a cave play date.</p></div>
+    <div class="touch"><div class="pad"><button data-control="left" aria-label="Move left">←</button><button data-control="right" aria-label="Move right">→</button></div><div class="pad actions"><button data-control="spin" aria-label="Spin attack"><span>✺</span><small>SPIN</small></button><button data-control="jump" aria-label="Jump"><span>↑</span><small>JUMP</small></button></div></div>
+    <div class="toast" id="toast" role="status"></div>
+  </section>
+  <footer><span><i></i> Take your time. There’s a whole meadow to explore.</span><div><kbd>A</kbd><kbd>D</kbd> move <kbd>Space</kbd> jump <kbd>X</kbd> spin</div></footer>
+</main>
+<script src="game.js"></script>
+</body>
+</html>

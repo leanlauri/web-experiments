@@ -12,6 +12,9 @@ for project_path in */; do
     npm run build --prefix "$project"
     mkdir "$staging/$project"
     cp -R "$project/dist/." "$staging/$project/"
+  elif [[ -f "$project/public/index.html" ]]; then
+    mkdir "$staging/$project"
+    cp -R "$project/public/." "$staging/$project/"
   elif [[ -f "$project/index.html" ]]; then
     mkdir "$staging/$project"
     cp -R "$project/." "$staging/$project/"

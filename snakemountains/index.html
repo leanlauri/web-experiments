@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#bec9bb" />
+  <title>Snake Mountains · Rainforest trails</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; background: #bec9bb; color: #293b34; font-family: system-ui, sans-serif; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    #scene { position: fixed; inset: 0; }
+    header { position: absolute; top: 36px; left: 40px; pointer-events: none; }
+    #finish-dialog { border: 0; border-radius: 22px; padding: 24px; width: min(90vw, 370px); background: #eef6e7; color: #293b34; }
+    #finish-dialog::backdrop { background: #122c2355; }
+    #finish-dialog h2 { margin-top: 0; }
+    #finish-dialog button { display: block; width: 100%; margin-top: 10px; background: #d7e8ce; }
+    #choose-level { position: absolute; top: 24px; left: 24px; background: #eef6e7; }
+    [hidden] { display: none !important; }
+    #close-title { position: absolute; right: 8px; top: 6px; padding: 2px 10px; font-size: 24px; pointer-events: auto; }
+    header .eyebrow { padding-right: 30px; }
+    .eyebrow { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .23em; }
+    h1 { font-family: Georgia, serif; font-size: clamp(32px, 5vw, 54px); font-weight: 400; letter-spacing: -.04em; margin: 12px 0; }
+    header p { margin: 0; font-size: 13px; opacity: .65; }
+    .level-picker { pointer-events: auto; margin-top: 12px; max-width: 330px; }
+    .level-picker label { display: block; font-size: 11px; font-weight: 650; margin-bottom: 6px; }
+    .level-picker select { width: 100%; padding: 9px; border: 1px solid #526f59; border-radius: 10px; background: #eef4e9ed; color: #293b34; }
+    #level-description, #weather-status { font-size: 11px; opacity: 1; margin-top: 6px; }
+    header { padding: 12px; border-radius: 16px; background: #e7f0e2d9; }
+    @media(max-width:600px) { h1 { font-size: 26px; margin: 6px 0; } header p { font-size: 11px; } header { max-width: 330px; } }
+    #climb-status { margin-top: 12px; opacity: 1; font-weight: 600; }
+    footer { position: absolute; bottom: 28px; left: 40px; right: 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: 11px; }
+    .controls { display: flex; align-items: center; gap: 20px; }
+    a { color: inherit; text-decoration: none; border-bottom: 1px solid #293b3455; padding-bottom: 3px; }
+    button { cursor: pointer; color: inherit; border: 1px solid #293b3433; border-radius: 30px; background: #ffffff33; padding: 10px 16px; font: inherit; backdrop-filter: blur(10px); }
+    button:hover { background: #ffffff66; }
+    :focus-visible { outline: 2px solid #293b34; outline-offset: 5px; }
+    .thumbstick { display: none; position: absolute; bottom: 105px; left: 32px; width: 128px; height: 128px; border: 2px solid #ecf5e2a6; border-radius: 50%; background: #274d3c55; box-shadow: inset 0 0 24px #183b3433; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .thumbstick::before { content: ''; position: absolute; inset: 25px; border: 1px solid #ffffff44; border-radius: 50%; pointer-events: none; }
+    .stick-knob { position: absolute; width: 48px; height: 48px; left: 38px; top: 38px; border: 2px solid #ffffffe0; border-radius: 50%; background: #e0efdc; box-shadow: 0 3px 12px #17372a55; pointer-events: none; }
+    .thumbstick.active .stick-knob { background: #ffb4cc; }
+    @media (any-pointer: coarse) { .thumbstick { display: block; } }
+    header p { max-width: 310px; line-height: 1.6; }
+    .water-panel { position: absolute; right: 24px; bottom: 105px; width: 160px; padding: 14px; border-radius: 18px; background: #f4f7eedf; font-size: 12px; }
+    .water-panel label { font-weight: 650; }
+    .water-panel progress { display: block; width: 100%; height: 10px; accent-color: #087fbd; margin: 10px 0; }
+    .water-panel p { min-height: 32px; margin: 8px 0; line-height: 1.4; }
+    .water-panel button { width: 100%; background: #087fbd; color: white; }
+    #trail-status { font-size: 11px; font-weight: 600; min-height: 0; }
+    #trail-status.off-trail { color: #a23728; }
+    #boost { margin-top: 8px; background: #ba326c; }
+    #sound-toggle { margin-top: 8px; background: #355f45; }
+    #drink { margin-top: 8px; }
+    #find-lake { margin-top: 8px; background: #e3f1f6; color: #075974; }
+    .water-panel button:disabled { background: #697a79; opacity: .55; cursor: default; }
+    .status-bars { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 16px; z-index: 20; width: 280px; padding: 12px 16px; background: #f4f9effa; border: 2px solid #ffffff; border-radius: 16px; box-shadow: 0 3px 18px #17372a44; font-size: 12px; font-weight: 700; pointer-events: none; }
+    .status-bars label { display: block; }
+    .status-bars progress { appearance: none; display: block; width: 100%; height: 16px; border: 1px solid #a9bfcd; border-radius: 20px; overflow: hidden; background: #d5e3ec; margin: 5px 0 10px; }
+    .status-bars progress:last-child { margin-bottom: 0; height: 10px; }
+    .status-bars progress::-webkit-progress-bar { background: #d5e3ec; }
+    .status-bars progress::-webkit-progress-value { background: #087dff; border-radius: 20px; }
+    .status-bars progress::-moz-progress-bar { background: #087dff; border-radius: 20px; }
+    #hydration::-webkit-progress-value { background: #29996a; }
+    #hydration::-moz-progress-bar { background: #29996a; }
+    #thirst.low::-webkit-progress-value { background: #d74737; }
+    #thirst.low::-moz-progress-bar { background: #d74737; }
+    header { z-index: 10; max-height: calc(100dvh - 160px); overflow-y: auto; pointer-events: auto; }
+    .water-panel { max-height: calc(100dvh - 210px); overflow-y: auto; }
+    @media (max-width: 600px) { .status-bars { left: 16px; right: 16px; width: auto; } #title-panel { top: 172px; max-height: calc(100dvh - 220px); } #choose-level { top: 172px; } }
+    @media (max-height: 500px) { .status-bars { left: auto; width: 230px; padding: 8px 12px; } #title-panel { top: 12px; max-width: 42vw; max-height: calc(100dvh - 90px); } .water-panel { bottom: 70px; max-height: calc(100dvh - 190px); } }
+    #apple-status { margin: 8px 0 0; font-size: 11px; color: #355f45; }
+    #hazard-status { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); z-index: 9; max-width: calc(100% - 32px); width: max-content; padding: 8px 14px; margin: 0; border-radius: 14px; color: #fff7d5; background: #604422ed; font-size: 12px; text-align: center; pointer-events: none; }
+    #error { position: absolute; top: 45%; left: 10%; right: 10%; text-align: center; }
+    @media (max-width: 600px) { header { top: 25px; left: 24px; } .thumbstick { left: 24px; } footer { left: 24px; right: 24px; bottom: 22px; } .controls { gap: 10px; } .hint { display: none; } }
+  </style>
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head>
+<body>
+  <main id="scene" aria-label="Interactive mountain adventure with a controllable pink and red snake"></main>
+  <header id="title-panel"><button id="close-title" type="button" aria-label="Close title and level panel">×</button><div class="eyebrow">Snake Mountains / 001</div><h1>Rainforest trails.</h1><p>Use the thumbstick on touch screens or WASD / arrow keys on laptops. Drink with R at the shore. Enter pools with E to soak. Off-track locks pools; completely dry skin breaks and restarts the level.</p><div class="level-picker"><label for="level-select">Levels · easiest → hardest</label><select id="level-select">
+      <option value="0">1. Fern Foothills — Easy</option><option value="1">2. Emerald Mountain — Medium</option><option value="2">3. Stormspire — Hard</option>
+    </select><p id="level-description">Easy · wide trail and gentle slopes</p><p id="weather-status">Rainforest · clear skies</p></div><p id="climb-status" role="status">Climb to the pink flag · 0% elevation</p><p id="lake-status">Lakes discovered · 0 / 17</p></header>
+  <aside class="status-bars" aria-label="Drinking water and skin moisture">
+    <label id="thirst-label" for="thirst">Drinking water · 100%</label>
+    <progress id="thirst" max="100" value="100">100%</progress>
+    <label id="hydration-label" for="hydration">Skin moisture · 100%</label>
+    <progress id="hydration" max="100" value="100">100%</progress>
+    <p id="apple-status" aria-label="Apples, growth, speed and moisture protection">🍎 0 · Size 1.00× · Speed +0% · Drying −0%</p>
+  </aside>
+  <footer><a href="../">← All experiments</a><div class="controls"><span class="hint">Drag to orbit · Scroll to zoom</span><button id="pause" type="button" aria-pressed="false">Pause snake</button><button id="reset" type="button">Reset view ↗</button></div></footer>
+  <div id="thumbstick" class="thumbstick" role="group" aria-label="Touch thumbstick: drag to steer, release to stop"><span class="stick-knob"></span></div>
+  <aside class="water-panel" aria-label="Snake skin moisture">
+    <p id="trail-status" role="status">On trail · normal water use</p>
+    <p id="water-hint">Find a lake to drink.</p>
+    <button id="drink-water" type="button" disabled>Drink · R</button>
+    <button id="drink" type="button" disabled>Enter pool · E</button>
+    <button id="boost" type="button">Turbo boost · Space</button>
+    <button id="sound-toggle" type="button" aria-pressed="true">Sound on ♫</button>
+    <button id="find-lake" type="button">Show nearest lake</button>
+  </aside>
+  <button id="choose-level" type="button" hidden>Choose next level</button>
+  <dialog id="finish-dialog" aria-labelledby="finish-title">
+    <h2 id="finish-title">Mountain complete!</h2><p>Choose your next level · easiest to hardest</p>
+    <button type="button" data-next-level="0">1. Fern Foothills — Easy</button>
+    <button type="button" data-next-level="1">2. Emerald Mountain — Medium</button>
+    <button type="button" data-next-level="2">3. Stormspire — Hard</button>
+    <button id="keep-soaking" type="button">Keep soaking in the pool</button>
+  </dialog>
+  <p id="hazard-status" role="status" hidden></p>
+  <p id="error" role="alert" hidden></p>
+  <script type="module" src="./scene.js?v=apple-moisture-v18"></script>
+</body>
+</html>
