@@ -1,6 +1,6 @@
 # Tappy’s Supermarket
 
-A cozy static canvas game starring a smiling tap. Collect eight groceries, dodge shopping carts, splash to stun nearby carts, and bring the full basket to checkout. Three hearts, no time limit, and a fresh run whenever you want.
+A cozy static canvas game starring a smiling tap. Collect eight groceries, dodge shopping carts, splash to stun nearby carts, and bring the full basket to checkout. Customers push trolleys and pause to browse. Splashing customers or splashing in the shopkeeper’s sight raises suspicion. Shelves block sight; suspicion cools after four quiet seconds. At 60% suspicion the shopkeeper walks faster and catches you if you get too close. Three hearts, no time limit, and a fresh run whenever you want.
 
 Play at http://localhost/web-experiments/tapgame/.
 
