@@ -45,3 +45,15 @@ run('begin()');assert.equal(run('suspicion'),0,'Restart clears suspicion');
 run('keeper.x=120;keeper.y=300;player.x=375;player.y=300');
 assert.equal(run('canSeeKeeper()'),false,'Shelves block shopkeeper sight');
 run('draw()');console.log('PASS customers, witnessed splashes, suspicion cooling, shopkeeper catch, reset and blocked sight');
+// A 116px stick centred on (58,58), matching the visible control.
+element('thumbstick').getBoundingClientRect=()=>({left:0,top:0,width:116,height:116});
+run('begin();stick.pointer=7;moveStick(58,58)');
+assert.equal(run('stick.x'),0,'Stick centre is neutral');
+run('moveStick(59,59)');assert.equal(run('stick.x'),0,'Small thumb movement stays in dead zone');
+run('moveStick(1000,58)');assert.equal(run('stick.x'),1,'Long drags clamp to full speed');
+run('moveStick(1000,1000)');assert.ok(Math.abs(run('Math.hypot(stick.x,stick.y)')-1)<.0001,'Diagonal speed is capped');
+run('moveStick(76,58);const beforeStickX=player.x;update(.1)');
+assert.ok(run('player.x-beforeStickX')>0&&run('player.x-beforeStickX')<18.5,'Partial drag gives slower movement');
+run('releaseStick()');assert.equal(run('stick.pointer'),null);assert.equal(run('stick.x'),0);
+run('stick.pointer=8;moveStick(90,58);pause()');assert.equal(run('stick.x'),0,'Pausing clears held input');
+console.log('PASS thumbstick centre, dead zone, clamping, diagonal speed, analog walking, release and pause');

@@ -4,7 +4,7 @@ A cozy static canvas game starring a smiling tap. Collect eight groceries, dodge
 
 Play at http://localhost/web-experiments/tapgame/.
 
-Use arrow keys or WASD to move, Space to splash, and P or Escape to pause. Touch devices have direction and splash buttons. The game pauses when the window loses focus.
+Use arrow keys or WASD to move, Space to splash, and P or Escape to pause. Drag the thumbstick to move in any direction; drag farther to walk faster. Release it to stop. The splash button works alongside the stick. The game pauses when the window loses focus.
 
 Browser files live in `public/`; no build step or runtime dependencies are needed. Google Fonts are optional, with local font fallbacks.
 
