@@ -1,45 +1,59 @@
-# R-rated Sheep — independent Sheep game copy
+# Little Pastures — The Great Moon Heist
 
-A self-contained Three.js meadow with twelve grazing sheep. Approach within 2.65 units to recruit a sheep. Followers combine attraction to the shepherd with separation, alignment, and cohesion; they use low hops for small logs, route through fence gates and steer around buildings, trunks and other animals. The shepherd can jump over logs and fences, or land on them. The countryside extends beyond the meadow with no invisible perimeter walls; ground follows the player as they explore. Barn walls and every tree trunk have solid colliders.
+An independent, child-friendly 3D farm-heist adventure. Open **http://localhost/web-experiments/rratedsheepgame/** after deployment. It is a static Three.js project with no build step, CDN, or runtime network dependencies. The original `sheep/` project is separate.
 
-WASD / arrow keys move relative to the camera, Space jumps, Shift runs. Walking and running are 40% faster than the initial version (5.18 and 8.4 units/second). Touch devices have an analog thumbstick (drag farther to walk faster) and a jump button. Start afresh resets the flock.
+## Adventure
 
-Public files are in `public/`, including Three.js 0.170.0 and its MIT license. No CDN or build step is needed at runtime.
+Begin in Clover Meadow with twelve sheep. Walk close to recruit them and lead them north into the gold circle at your little home farm. Once all twelve arrive, the backyard rocket workshop opens, with $25 and a free seven-seat van (six seats available for animals).
 
-After every change, run `bash rratedsheepgame/deploy.sh` from the repository root. This synchronizes only public game assets and verifies nginx serves the same HTML. Future coding agents must follow `AGENTS.md`, matching Linusgame's deployment convention.
+The 920 × 920 m region has a central town and six large faction farms connected by roads. Six rivers divide the outer farms; the town ring road bridges the rivers. Farm gates face town. Sunflower Union raises sheep, Rosewood Riders pigs, Bluebell Dairy cows, Copper Carrot Co. rabbits, Mint Meadow goats, and Violet Valley alpacas. Each has its own colors, guard temperament and weapon preference.
 
-Published at http://localhost/web-experiments/rratedsheepgame/ (replace localhost with this host's address for other devices). The repository-wide local deployment script also includes this project.
+Recruit one species per trip. A vehicle reserves one seat for the driver and one for each animal. Nearby conscious followers board automatically; overflow follows on foot. Traffic continually runs on the six main roads, and its vehicles can be hijacked. Your own van is free to use without committing a vehicle crime.
 
-Collision and jump checks: `node rratedsheepgame/tests/physics.cjs`.
+Animal theft, vehicle theft and weapon use raise wanted stars. Police pursue on foot and fire foam projectiles. Keep more than 33 m from every conscious police officer for 12 uninterrupted seconds to lose one star; repeat until clear. Home prevents hostile shots and restores hearts, but does not erase a police search.
 
-Browser smoke check: `node rratedsheepgame/tests/smoke.cjs` (uses the Playwright installation at `/home/lauri/node_modules/playwright-core`).
+Stay at home for four seconds to settle a trip. Conscious animals inside the home area or riding in your vehicle earn $8 each and permanent rocket credit. Every other animal from a big farm, including lost and unconscious animals, resets to its original location. Successful trips increase guard numbers, armor, pursuit speed and firing frequency; later upgrades narrow gates and add fence rails. Difficulty caps at eight defense tiers.
 
-## The evening journey
+All combat is nonlethal. Guards and police wake after twelve seconds. Animals knocked out by traffic or projectiles need wake-up snacks (R nearby) or reset when you return home. Snacks cost $15 per three; the opening journey replenishes a minimum of three at home to prevent getting stuck. Start with three hearts and buy upgrades to six. A knockout costs one heart and briefly stuns the player. At zero, spend five seconds in jail, lose the current herd, then return home healed.
 
-Start in Clover Meadow, recruit twelve sheep by approaching them, and follow the sandy path north to Evening Farm, about 400 metres away. The map shows the flock, your position and the destination; the compass points toward the open farmhouse doorway. Approach the farmhouse and wait while the flock enters. Each sheep must actually cross the doorway to count as sheltered. Bringing all twelve inside completes the journey and brings on night. There is no time-limit failure; you can explore and collect stragglers at your own pace.
+Buy a cushion club, foam bat, bubble wand, foam blaster and pillow launcher. Melee attacks target the nearest opponent in reach; projectiles auto-aim at the nearest opponent in range and can hit animals along their path. Buildings stop projectiles. Five rocket parts unlock at 12, 20, 30, 42 and 56 cumulative animal deliveries. These credits are not consumed. Install each part at home, then launch to see the rocket orbiting the Moon as the credits roll.
 
-`landscape.js` defines a seeded, reproducible land-use plan: connected roads, a starting pasture, two forests, a pond, crop and flower fields, an orchard farm, a village, a residential lane, a livestock pasture and the destination farm. `countryside.js` decorates those parcels according to their use, reserving the main footpath, keeping trees off roads and leaving gaps in field fences. Static scenery uses instanced meshes to keep rendering affordable. Buildings and trunks remain solid; the pond has a blocked shoreline.
+## Controls
 
-Residents stroll around farms and homes; cows, pigs, deer and rabbits wander their habitats. Cars run in separate opposing lanes. Traffic can knock the shepherd and sheep into recoverable cartoon tumbles. Ambient animals have moving collision bodies and avoid scenery and one another. Clouds drift and weather cycles over three minutes through sunshine, cloud, rain and clearing; the light gradually approaches evening, with night after success. Faraway sheep follow the shepherd's recorded trail instead of cutting directly across parcels.
+- WASD / arrows: camera-relative movement. Shift: run. Space: jump.
+- E: enter the nearest vehicle within 6 m, or exit with passengers.
+- F: use equipped weapon; Q: cycle owned weapons.
+- R: revive an animal within 7 m; B: home workshop.
+- M: region map and faction guide. Escape: close a panel. Mouse wheel: zoom.
+- Touch: analog joystick and Jump, Ride, Bonk, Revive, Shop and Weapon buttons.
 
-`node rratedsheepgame/tests/journey.cjs` checks world populations, recruitment, the entire route with actual flock simulation, entry of all twelve sheep, victory, weather and reset. It accelerates simulation through a test-only browser route; no gameplay cheats are published.
+The help and region-map panels pause the simulation. The workshop stops player movement; the home area protects the player. Local progress is saved at home and after purchases. Reload resumes from the last home checkpoint. Trips in progress are not saved. New adventure replaces the local save after confirmation.
 
+## Implementation and performance
 
-The expanded region is 525 × 535 metres, with 29 non-overlapping land-use parcels and eight connected road segments. The western hamlet, eastern village and cottages connect to orchards, livestock farms, several lakes and larger woodland stands. Road/path reservations cut gates into all four sides of field fences. Roofs use closed gable prisms whose eaves meet the wall tops exactly. Ground colors, streets, paths and farm drives are tessellated into a single surface, eliminating competing coplanar overlays; collision queries use spatial buckets for the larger world.
+`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `simulation.mjs` owns gameplay state independently of rendering. `region.mjs` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
 
-`node rratedsheepgame/tests/layout.cjs` checks map size, parcel separation, roof heights and road surface precedence. The browser journey test also checks every generated fence against roads and completes the longer trip with all twelve sheep.
+The renderer maintains at most 49 nearby 64 m scenery chunks. Trees use instanced meshes; departing chunks are removed and their instance resources disposed. Actors beyond 150 m are hidden, distant ambient animals and guards skip AI movement, and static geometry uses frustum culling. Actor meshes and geometry/materials are reused; no remote assets are streamed. The map remains lightweight simulation data. The view is fog-limited with adjustable zoom and capped pixel density. Buildings, farm fences, water and region boundaries block movement; decorative trees and crops do not.
 
+The previous countryside implementation and its standalone physics tests remain in the project as reference modules; they are not loaded by this new entry point. Old journey/layout browser assertions describe the former map. The active adventure checks below cover the replacement game. Published diagnostics expose read-only state, with no gameplay teleport or progression cheats.
 
-Terrain now uses a continuous, low-frequency height field in `public/terrain.js`, with smooth normals and a finely sampled mesh. The same height function drives shepherd/sheep ground contact, jumping and landings, elevated obstacle colliders, scenery, residents, vehicles, and camera tracking. Foundation pads and pond surfaces remain level with soft transitions back into the hills; gardens, fields and roads follow the landscape. No giant standalone hill objects are used. `node rratedsheepgame/tests/terrain.cjs` checks height variation, grade bounds, level foundations/water, ground-following movement and jump landings on slopes.
+## Verification and deployment
 
+Run from the repository root:
 
-Every sheep, cow, pig, deer, rabbit and duck has a live circular collision body shared with the shepherd and residents. Cows alternate grazing with slow ambling; pigs root and explore; deer graze and flee nearby players; rabbits make short hopping runs; ducks swim within their pond. Individuals use independent phases and destinations, and distant animals continue at a reduced update frequency. Sheep hops are restricted to low logs (up to 0.65 m), with an impulse below fence height. Fences remain solid to sheep even during a log hop. A local path search finds gates or routes around barriers when the shepherd crosses a fence. `node rratedsheepgame/tests/animals.cjs` checks profiles, moving-body collisions, log-only hops and gate routes; the browser journey test additionally exercises a sheep going through a real meadow gate without jumping.
+```sh
+node rratedsheepgame/tests/adventure.mjs
+node rratedsheepgame/tests/adventure-browser.cjs
+```
 
+The first checks the six roads and bridges, opening journey, one-species rule, capacity, theft, revival, payouts, resetting lost animals, wanted decay, jail, upgrades, defense scaling, save/load, collisions, friendly fire and the rocket ending. It walks actual flock simulations through all six farm gates and town to home.
 
-Sheep avoidance commits to a passing side instead of choosing left/right afresh each frame. Active paths keep their waypoints until the destination changes substantially or movement stalls; narrow routes reduce competing flock forces. Resting-distance hysteresis prevents repeated starts and stops near the shepherd. Facing and leg animation follow actual collision-resolved movement, with bounded turning speed. `node rratedsheepgame/tests/steering.cjs` checks progress and direction stability at a meadow gate, a tree, a slightly moving animal and flock arrival.
+The browser check uses `/home/lauri/node_modules/playwright-core` and intercepts requests to serve source files directly, without launching a server. It checks rendering, keyboard movement/jump, the atlas, checkpoint restoration, workshop purchases, launch, credits, restart, desktop/mobile layouts and console errors. Screenshots go to `/tmp/rratedsheepgame-*.png`.
 
+Finish changes from this project directory with:
 
-Cars have moving rectangular collision bodies. Swept relative-motion checks catch contacts with the shepherd and unsheltered sheep; traffic wrapping at road ends never creates a collision sweep across the map. Impacts apply an airborne impulse and angular spin, with floppy limb animation, terrain/scenery collision, small landing bounces and ground drag. After stopping briefly, the character rights itself, resumes normal control or flock following, and keeps circling confusion stars for two seconds. A short recovery immunity prevents repeated launches. Reset clears tumbles and stars, and sheltered sheep are excluded from traffic. `node rratedsheepgame/tests/impacts.cjs` checks body collision, swept contacts and misses, impacts in both traffic directions, recovery, confusion expiry, flock membership and reset.
+```sh
+bash ./finish.sh "Describe the change"
+```
 
-
-This project is an independent copy of the current Sheep game. Finish changes with `bash ./finish.sh "Describe the change"` from this directory to verify deployment and commit this project alone.
+This deploys `public/` to `/var/www/html/web-experiments/rratedsheepgame/`, verifies nginx serves the source HTML, and commits only this project. No push is performed.

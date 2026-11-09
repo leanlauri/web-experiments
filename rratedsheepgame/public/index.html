@@ -1,8 +1,199 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheep · A little pastoral adventure</title><link rel="stylesheet" href="style.css"></head>
-<body><canvas id="world" aria-label="A 3D pasture. Move with WASD or arrow keys, jump with Space."></canvas>
-<header><div class="brand">❋ &nbsp; LITTLE PASTURES <span>A quiet day in the countryside</span></div><button id="reset">Start afresh ↻</button></header>
-<aside><div class="eyebrow">BRING THE FLOCK HOME</div><h1>Home before nightfall.</h1><p>Gather all twelve sheep, then follow the sandy path<br>north to Evening Farm. Lead them through the open door.</p><div class="counter"><b id="count">0</b><span>/ 12<br><small>sheep following</small></span></div><div id="message" role="status">Your flock is waiting to meet you.</div></aside>
-<div id="navigation"><canvas id="map" width="150" height="170" aria-label="Countryside map: blue is you, gold is home"></canvas><div><span id="direction">↑</span> EVENING FARM</div><p id="journey" role="status"></p></div><div id="victory" hidden><h2>Everyone home. Goodnight.</h2><p>All twelve sheep are safe inside Evening Farm.</p><p>Keep exploring, or choose Start afresh for another journey.</p></div><footer><span><kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> wander &nbsp; <kbd>SPACE</kbd> jump &nbsp; <kbd>SHIFT</kbd> run</span><span>NO HURRY. JUST YOU & THE HERD. ☀</span></footer>
-<div id="touch"><div id="thumbstick" aria-label="Movement thumbstick: drag to wander"><span id="stick-knob"></span></div><button class="jump" data-key="Space">Jump</button></div>
-<div id="error" hidden>We couldn’t start the 3D meadow. Please use a browser with WebGL enabled.</div><script type="module" src="game.js"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1"
+    />
+    <meta name="theme-color" content="#192c28" />
+    <title>Little Pastures · The Great Moon Heist</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <canvas
+      id="world"
+      aria-label="Three-dimensional farm adventure. Move with WASD, recruit nearby animals and lead them home."
+    ></canvas>
+    <header>
+      <div class="brand">
+        <b>Little Pastures<span>THE GREAT MOON HEIST</span></b>
+      </div>
+      <div class="header-actions">
+        <button id="help-button" aria-label="Show controls">?</button
+        ><button id="reset">New adventure</button>
+      </div>
+    </header>
+    <section id="status" aria-label="Player status">
+      <div>
+        <span id="hearts" aria-label="Hearts">♥ ♥ ♥</span><b id="cash">$0</b>
+      </div>
+      <div id="wanted" aria-label="Wanted level">☆ ☆ ☆ ☆ ☆</div>
+      <small id="escape">No trouble. Yet.</small>
+    </section>
+    <aside id="mission">
+      <div class="eyebrow" id="chapter">01 / THE EVENING JOURNEY</div>
+      <h1 id="objective">Bring the flock home.</h1>
+      <p id="description">
+        Meet your twelve sheep in Clover Meadow. Lead them north to the little
+        gold farm.
+      </p>
+      <div class="mission-bottom">
+        <b id="count">0 / 12</b><span id="cargo">sheep following</span>
+      </div>
+      <div id="rocket-progress">
+        <span id="rocket-count">ROCKET 0 / 5</span>
+        <div><i id="rocket-fill"></i></div>
+      </div>
+    </aside>
+    <section id="navigation">
+      <canvas
+        id="map"
+        width="240"
+        height="240"
+        aria-label="Region map. Gold: home, white: player, colored circles: farms, red: police."
+      ></canvas>
+      <div id="location">CLOVER MEADOW</div>
+      <small id="distance">Home · 55 m north</small
+      ><button id="map-button">Map & factions [M]</button>
+    </section>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="loadout">
+      <span id="weapon">Cushion club</span
+      ><span id="snacks">3 wake-up snacks</span><span id="vehicle"></span>
+    </div>
+    <footer>
+      <span
+        ><kbd>WASD</kbd> move <kbd>SHIFT</kbd> run <kbd>SPACE</kbd> jump</span
+      ><span
+        ><kbd>E</kbd> vehicle <kbd>F</kbd> use weapon <kbd>Q</kbd> switch
+        <kbd>R</kbd> revive <kbd>B</kbd> home shop</span
+      >
+    </footer>
+    <div id="touch">
+      <div id="thumbstick" aria-label="Movement joystick">
+        <span id="stick-knob"></span>
+      </div>
+      <div class="touch-actions">
+        <button data-action="jump">Jump</button
+        ><button data-action="interact">Ride</button
+        ><button data-action="attack">Bonk</button
+        ><button data-action="revive">Revive</button
+        ><button data-action="shop">Shop</button
+        ><button data-action="cycle">Weapon</button>
+      </div>
+    </div>
+    <div id="shop" class="overlay" hidden>
+      <section class="panel">
+        <button class="close" id="shop-close" aria-label="Close shop">×</button>
+        <div class="eyebrow">HOME SWEET SPACEPORT</div>
+        <h2>The backyard workshop.</h2>
+        <p id="shop-summary"></p>
+        <div id="shop-items"></div>
+        <button id="launch" class="primary" hidden>
+          Launch to the Moon ↗
+        </button>
+        <p class="fine">
+          Every animal delivered earns $8 and permanent rocket credit. No
+          animals are used as rocket fuel. All weapons cause temporary cartoon
+          sleep.
+        </p>
+      </section>
+    </div>
+    <div id="help" class="overlay" hidden>
+      <section class="panel">
+        <button class="close" id="help-close" aria-label="Close help">×</button>
+        <div class="eyebrow">A LITTLE MISCHIEF. A VERY BIG DREAM.</div>
+        <h2>Your guide to the Moon.</h2>
+        <p>
+          Walk near animals to invite them along. First bring all twelve of your
+          sheep home. Then recruit animals from the six colorful farms. You can
+          lead only one species per trip.
+        </p>
+        <p>
+          <b>WASD / arrows</b> move relative to the camera; <b>Shift</b> runs;
+          <b>Space</b> jumps. <b>E</b> boards a nearby vehicle or gets out. The
+          driver takes one seat; each animal takes another. Get close to your
+          herd before boarding. Extra animals follow on foot.
+        </p>
+        <p>
+          <b>F</b> uses your weapon, aiming at the nearest opponent in range;
+          <b>Q</b> changes weapons. Watch for friendly fire! <b>R</b> gives a
+          nearby unconscious animal a wake-up snack. <b>B</b> opens your home
+          shop. <b>M</b> opens the map. Scroll to zoom.
+        </p>
+        <p>
+          Road bridges cross rivers. Farm gates face town. Borrowing animals or
+          vehicles alerts police. Stay more than 33 m from all awake police for
+          12 seconds to lose one wanted star. Repeat until clear. Home prevents
+          attacks, but you must still escape the police search.
+        </p>
+        <p>
+          Pause at home for four seconds to settle a trip. Animals inside the
+          home circle or awake in your vehicle count. All other animals return
+          to their original farm. Every successful trip makes guards stronger
+          and more numerous, and later narrows farm gates.
+        </p>
+        <p>
+          Start with three hearts. A knockout costs one; losing all means five
+          seconds in jail, then a ride home without your herd. Home refills
+          hearts. Buy five rocket parts with cumulative animal credit, then
+          launch! Progress saves locally at home.
+        </p>
+        <button id="help-done" class="primary">Let’s go</button>
+      </section>
+    </div>
+    <div id="atlas" class="overlay" hidden>
+      <section class="panel">
+        <button class="close" id="atlas-close" aria-label="Close map">×</button>
+        <div class="eyebrow">THE SIX RIVER COUNTIES</div>
+        <h2>A whole lot of pasture.</h2>
+        <canvas
+          id="atlas-map"
+          width="620"
+          height="500"
+          aria-label="Full regional map"
+        ></canvas>
+        <div id="factions"></div>
+        <p class="fine">
+          White: you · Gold: home · Red: police · Dark lines: roads · Blue:
+          rivers. All farms connect through town. Cross rivers on the town ring
+          bridges.
+        </p>
+      </section>
+    </div>
+    <div id="jail" class="overlay" hidden>
+      <section class="panel centered">
+        <div class="eyebrow">TOWN SHERIFF’S TIME-OUT ROOM</div>
+        <h2>A short pause for thought.</h2>
+        <p id="jail-time"></p>
+        <p>Your animals are heading back to their farms.</p>
+      </section>
+    </div>
+    <div id="credits" hidden>
+      <div class="credits-roll">
+        <div class="eyebrow">LITTLE PASTURES</div>
+        <h2>One small step for ewe.</h2>
+        <p>
+          You built a rocket.<br />You made a little trouble.<br />You brought
+          your friends home.
+        </p>
+        <h3>THE GREAT MOON HEIST</h3>
+        <p>
+          Captain · You<br />Ground crew · The Clover Meadow flock<br />Engineering
+          · The backyard workshop<br />Special thanks · Six very patient farms
+        </p>
+        <p>
+          No animals were harmed in the making of this moon trip.<br />Every
+          sleepy friend woke up back home.
+        </p>
+        <h2>Thanks for playing.</h2>
+      </div>
+      <button id="play-again">A new adventure ↻</button>
+    </div>
+    <div id="error" hidden>
+      We couldn’t start the 3D world. Please enable WebGL and reload.
+    </div>
+    <script type="module" src="adventure.js"></script>
+  </body>
+</html>
