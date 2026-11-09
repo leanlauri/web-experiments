@@ -1,5 +1,5 @@
-import { Game } from "./simulation.mjs";
-import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.mjs";
+import { Game } from "./simulation.js";
+import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.js";
 import { createWorld } from "./world.js";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";

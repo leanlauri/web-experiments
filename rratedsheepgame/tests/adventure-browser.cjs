@@ -2,6 +2,7 @@ const { chromium } = require("/home/lauri/node_modules/playwright-core");
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const sourceMode = process.argv.includes("--source");
 const serveSource = async (route) => {
   const name =
     new URL(route.request().url()).pathname.split("/rratedsheepgame/")[1] ||
@@ -30,11 +31,29 @@ const serveSource = async (route) => {
         viewport: { width: 1440, height: 900 },
       }),
       errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.route(
-      "http://localhost/web-experiments/rratedsheepgame/**",
-      serveSource,
-    );
+    function checkPage(target) {
+      target.on("pageerror", (e) => errors.push(e.message));
+      target.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+      target.on("response", (response) => {
+        // A 304 reuses the previously validated cached module and may omit MIME headers.
+        if (response.status() === 304) return;
+        if (/\.(?:m?js)(?:\?|$)/.test(response.url())) {
+          const mime = response.headers()["content-type"] || "";
+          if (!response.ok() || !/(?:java|ecma)script/.test(mime))
+            errors.push(
+              `Module failed: ${response.status()} ${mime} ${response.url()}`,
+            );
+        }
+      });
+    }
+    checkPage(page);
+    if (sourceMode)
+      await page.route(
+        "http://localhost/web-experiments/rratedsheepgame/**",
+        serveSource,
+      );
     await page.goto("http://localhost/web-experiments/rratedsheepgame/");
     await page.waitForFunction(() => window.sheepGame);
     assert.equal(
@@ -96,11 +115,12 @@ const serveSource = async (route) => {
       isMobile: true,
       hasTouch: true,
     });
-    mobile.on("pageerror", (e) => errors.push(e.message));
-    await mobile.route(
-      "http://localhost/web-experiments/rratedsheepgame/**",
-      serveSource,
-    );
+    checkPage(mobile);
+    if (sourceMode)
+      await mobile.route(
+        "http://localhost/web-experiments/rratedsheepgame/**",
+        serveSource,
+      );
     await mobile.goto("http://localhost/web-experiments/rratedsheepgame/");
     await mobile.waitForFunction(() => window.sheepGame);
     assert(await mobile.locator("#touch").isVisible());
@@ -127,7 +147,8 @@ const serveSource = async (route) => {
     assert(stats.chunks <= 49);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: browser rendering, movement, jump, map, saved progress, shop purchases, launch, credits, restart, mobile layout; no console errors.",
+      (sourceMode ? "SOURCE" : "DEPLOYED") +
+        " PASS: browser rendering, movement, jump, map, saved progress, shop purchases, launch, credits, restart, mobile layout; no console errors.",
       stats,
     );
   } finally {

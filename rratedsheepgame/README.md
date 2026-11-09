@@ -31,7 +31,7 @@ The help and region-map panels pause the simulation. The workshop stops player m
 
 ## Implementation and performance
 
-`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `simulation.mjs` owns gameplay state independently of rendering. `region.mjs` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
+`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
 
 The renderer maintains at most 49 nearby 64 m scenery chunks. Trees use instanced meshes; departing chunks are removed and their instance resources disposed. Actors beyond 150 m are hidden, distant ambient animals and guards skip AI movement, and static geometry uses frustum culling. Actor meshes and geometry/materials are reused; no remote assets are streamed. The map remains lightweight simulation data. The view is fog-limited with adjustable zoom and capped pixel density. Buildings, farm fences, water and region boundaries block movement; decorative trees and crops do not.
 
@@ -48,7 +48,7 @@ node rratedsheepgame/tests/adventure-browser.cjs
 
 The first checks the six roads and bridges, opening journey, one-species rule, capacity, theft, revival, payouts, resetting lost animals, wanted decay, jail, upgrades, defense scaling, save/load, collisions, friendly fire and the rocket ending. It walks actual flock simulations through all six farm gates and town to home.
 
-The browser check uses `/home/lauri/node_modules/playwright-core` and intercepts requests to serve source files directly, without launching a server. It checks rendering, keyboard movement/jump, the atlas, checkpoint restoration, workshop purchases, launch, credits, restart, desktop/mobile layouts and console errors. Screenshots go to `/tmp/rratedsheepgame-*.png`.
+The browser check uses `/home/lauri/node_modules/playwright-core` and loads the deployed nginx site directly, including checks for JavaScript module response types. Deploy before running it. Pass `--source` to test unpublished source with intercepted requests instead. It checks rendering, keyboard movement/jump, the atlas, checkpoint restoration, workshop purchases, launch, credits, restart, desktop/mobile layouts and console errors. Screenshots go to `/tmp/rratedsheepgame-*.png`.
 
 Finish changes from this project directory with:
 

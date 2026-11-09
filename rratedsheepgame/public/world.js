@@ -1,5 +1,5 @@
 import * as T from "./vendor/three.module.js";
-import { SIZE, HOME, FARMS, OBSTACLES, road, water, dist } from "./region.mjs";
+import { SIZE, HOME, FARMS, OBSTACLES, road, water, dist } from "./region.js";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))

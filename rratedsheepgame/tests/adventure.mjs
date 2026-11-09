@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Game } from "../public/simulation.mjs";
+import { Game } from "../public/simulation.js";
 import {
   HOME,
   FARMS,
@@ -10,7 +10,7 @@ import {
   blocked,
   dist,
   farmGate,
-} from "../public/region.mjs";
+} from "../public/region.js";
 const tick = (g, seconds, input = {}) => {
   for (let i = 0; i < seconds * 60; i++) g.update(1 / 60, input);
 };

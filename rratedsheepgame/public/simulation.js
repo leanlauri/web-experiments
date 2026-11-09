@@ -9,7 +9,7 @@ import {
   road,
   routeTarget,
   OBSTACLES,
-} from "./region.mjs";
+} from "./region.js";
 export class Game {
   constructor(save = null) {
     this.reset(save);
