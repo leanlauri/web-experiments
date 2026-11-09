@@ -1,10 +1,26 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tap Game</title>
-  <style>html,body{margin:0;min-height:100%;background:#f4f6ef}body{min-height:100dvh}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eff3e8">
+<title>Tappy’s Supermarket</title>
+<link rel="stylesheet" href="style.css">
 </head>
-<body></body>
+<body>
+<main>
+<header><a class="brand" href="./" aria-label="Tappy’s Supermarket home"><span class="brand-icon">✳</span> LITTLE EVERYDAY ADVENTURES</a><span class="edition">No. 01 · The grocery run</span></header>
+<section class="intro"><div><p class="eyebrow">A LITTLE TAP. A BIG SHOP.</p><h1>Tappy’s <span>Supermarket</span></h1><p class="subtitle">Aisles of smiles, a basket of goodies, and a little splash of mischief.</p></div><div class="shop-stamp">100%<br><span>fresh fun</span><i>✦</i></div></section>
+<section class="game-shell" aria-label="Supermarket game">
+<div class="game-bar"><div class="mission"><span class="live-dot"></span><span id="mission">Your shopping adventure awaits</span></div><div class="stats"><span id="basket">BASKET <b>0 / 8</b></span><span id="hearts" aria-label="3 hearts">♥ ♥ ♥</span><button id="pause" aria-label="Pause game" disabled>Ⅱ</button></div></div>
+<div class="stage"><canvas id="game" width="1000" height="620" aria-label="Guide Tappy around supermarket shelves, collect eight groceries, then reach the checkout."></canvas>
+<div class="overlay" id="overlay"><div class="welcome"><span class="pill" id="pill">WELCOME TO THE NEIGHBOURHOOD</span><h2 id="overlay-title">Meet your new<br>shopping buddy.</h2><p id="overlay-copy">You’re Tappy, a cheerful little tap on a grocery run.<br>Pick up all 8 goodies, dodge the carts, and head to checkout!</p><button class="primary" id="start">Let’s go shopping <span>→</span></button><p class="small" id="overlay-hint">Take your time. The only rush is the shopping carts.</p></div></div>
+<div class="toast" id="toast" aria-live="polite"></div></div>
+<div class="game-footer"><span><b>YOUR LIST</b> <span id="list">🍎 🥕 🥦 🍞 🧀 🥛 🍓 🍪</span></span><span class="splash-status" id="splash-status">✦ Splash ready</span></div>
+</section>
+<div class="below"><div class="instructions"><span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W A S D</kbd> to wander</span><span><kbd>SPACE</kbd> splash carts</span><span><kbd>P</kbd> pause</span></div><span class="note">Small tap. Big personality. <span>♡</span></span></div>
+<div class="touch-controls" aria-label="Touch game controls"><div class="dpad"><button data-key="ArrowUp" aria-label="Move up">↑</button><button data-key="ArrowLeft" aria-label="Move left">←</button><button data-key="ArrowDown" aria-label="Move down">↓</button><button data-key="ArrowRight" aria-label="Move right">→</button></div><button id="splash" class="primary">Splash! 💧</button></div>
+</main>
+<script src="game.js"></script>
+</body>
 </html>
