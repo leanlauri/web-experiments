@@ -1,85 +1,36 @@
-'use strict';
-const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
-const ui=Object.fromEntries(['overlay','start','pause','mission','basket','hearts','list','toast','splash-status','overlay-title','overlay-copy','overlay-hint','pill'].map(id=>[id,document.getElementById(id)]));
-const W=1000,H=620,keys=new Set();
-const stick={x:0,y:0,pointer:null};
-const shelves=[{x:190,y:170,w:135,h:280,name:'PANTRY',color:'#e9bb76'},{x:435,y:170,w:135,h:280,name:'FRESH PICKS',color:'#8cb67d'},{x:680,y:170,w:135,h:280,name:'DAIRY',color:'#9ebdc4'}];
-const groceries=[['🍎','Apple',120,200],['🥕','Carrot',375,185],['🥦','Broccoli',620,195],['🍞','Bread',130,420],['🧀','Cheese',870,220],['🥛','Milk',870,425],['🍓','Strawberries',375,425],['🍪','Cookies',620,425]];
-let keeper,suspicion=0,lastMischief=-10,player,carts,items,particles,splashRing,state='intro',elapsed=0,last=0,cooldown=0,toastTime=0,steps=0;
-function reset(){suspicion=0;lastMischief=-10;keeper={x:880,y:520,waypoint:0};player={x:95,y:535,hearts:3,invincible:0,face:1};carts=[{x:375,y:310,v:42,min:125,max:475,axis:"y",stun:0},{x:700,y:495,v:-52,min:120,max:885,stun:0},{x:600,y:115,v:38,min:115,max:890,stun:0}];carts.forEach((c,i)=>{c.browse=0;c.color=["#9b6e60","#6885a0","#a68b58"][i];c.skin=["#bd8966","#e3b895","#956747"][i]});items=groceries.map(([emoji,name,x,y])=>({emoji,name,x,y,collected:false}));particles=[];splashRing=0;cooldown=0;elapsed=0;steps=0;keys.clear();releaseStick();updateUI()}
-function round(x,y,w,h,r,fill,stroke){ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke()}}
-function text(t,x,y,size,color,weight='600'){ctx.fillStyle=color;ctx.font=`${weight} ${size}px 'DM Sans',sans-serif`;ctx.textAlign='center';ctx.fillText(t,x,y)}
-function ellipse(x,y,rx,ry,color){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fillStyle=color;ctx.fill()}
-function shelf(s,index){round(s.x+5,s.y+9,s.w,s.h,9,'#384c3820');round(s.x,s.y,s.w,s.h,8,'#d6c9a9');round(s.x+4,s.y+4,s.w-8,s.h-13,5,'#f6e9ce');for(let row=0;row<4;row++){let y=s.y+40+row*60;for(let col=0;col<4;col++){let x=s.x+18+col*29;if(index===1){ellipse(x+6,y-9,11,13,['#91b462','#df9570','#c3ca70','#7f9f65'][col]);ctx.fillStyle='#5e8253';ctx.fillRect(x+4,y-25,4,8)}else{round(x,y-28,17,30,3,index===0?['#d79179','#e4bd68','#adbb85','#d7a678'][col]:['#b0c8cf','#ece8d6','#abc4ba','#e5c79e'][col]);round(x+3,y-18,11,8,1,'#fff9e8');}}round(s.x+3,y+5,s.w-6,7,2,'#c5b28f');}round(s.x-4,s.y-15,s.w+8,25,5,s.color);text(s.name,s.x+s.w/2,s.y+2,10,'#fffdf3','700');round(s.x+43,s.y+s.h-5,49,13,3,'#fcf8e8');text('£ 2.50',s.x+s.w/2,s.y+s.h+5,8,'#81755d')}
-function tap(x,y,scale=1){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);let bob=state==='playing'&&steps>0?Math.sin(elapsed*13)*2:Math.sin(elapsed*2)*1.5;ellipse(0,26,26,8,'#3f69522b');ctx.translate(0,bob);ctx.lineCap='round';ctx.strokeStyle='#527d70';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(-12,15);ctx.lineTo(-15,27);ctx.moveTo(12,15);ctx.lineTo(16,27);ctx.stroke();ellipse(-17,28,10,4,'#3e665b');ellipse(18,28,10,4,'#3e665b');ctx.strokeStyle='#82b7ab';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-21,-3);ctx.lineTo(-29,5);ctx.moveTo(22,-3);ctx.lineTo(29,-11);ctx.stroke();round(-22,-27,44,48,14,'#a4d6ca','#568c7b');round(-17,-24,9,28,5,'#d0eee0');round(12,-26,30,15,6,'#a4d6ca','#568c7b');round(32,-18,13,15,4,'#9bcbbf','#568c7b');round(-5,-39,10,15,3,'#85b8a8','#568c7b');round(-18,-45,36,9,4,'#edbe77','#b38c52');ellipse(-8,-4,3.2,4.4,'#294d44');ellipse(9,-4,3.2,4.4,'#294d44');ellipse(-9,-5.5,1,1.5,'white');ellipse(8,-5.5,1,1.5,'white');ellipse(-14,4,5,3,'#e7a397');ellipse(15,4,5,3,'#e7a397');ctx.strokeStyle='#365b4f';ctx.lineWidth=2;ctx.beginPath();ctx.arc(1,3,6,0,Math.PI);ctx.stroke();ctx.restore()}
-
-function person(x,y,color,skin,staff=false){
- ctx.save();ctx.translate(x,y);ellipse(0,24,17,5,'#344c3c25');
- round(-12,8,9,17,3,'#424f51');round(3,8,9,17,3,'#424f51');
- round(-15,22,13,5,2,'#303c3b');round(3,22,13,5,2,'#303c3b');
- round(-16,-16,32,30,9,color);round(-21,-11,7,24,4,skin);round(14,-11,7,24,4,skin);
- if(staff){round(-10,-11,20,27,2,'#e6dfc8');round(3,-8,6,4,1,'#fff9ef')}
- ellipse(0,-29,13,15,skin);ellipse(0,-39,13,7,'#4b3d32');
- ellipse(-5,-29,1.4,1.8,'#393b33');ellipse(5,-29,1.4,1.8,'#393b33');
- ctx.strokeStyle='#694a3a';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(-3,-22);ctx.lineTo(3,-22);ctx.stroke();
- if(staff){round(-15,-45,30,7,3,'#365d49');text('SHOPKEEPER',0,41,8,'#42684e');}
- ctx.restore();
+import {createWorld,tick,stickVector} from './world.js';
+import {createShop} from './scene.js';
+const $=id=>document.getElementById(id),keys=new Set();
+let world=createWorld(),shop,previous=performance.now(),pointerWash=null,stick={x:0,z:0,pointer:null},lastUI='';
+const icons=['▤','✎','✒','♬'];
+function clearInput(){keys.clear();pointerWash=null;stick={x:0,z:0,pointer:null};$('stick-knob').style.transform='translate(0px,0px)';$('wash').classList.remove('active')}
+function overlay(title,copy,button){clearInput();$('overlay').hidden=false;document.querySelector('.welcome h1').textContent=title;$('overlay-copy').textContent=copy;$('start').textContent=button;$('start').disabled=false;$('pause').disabled=true}
+function start(){if(world.phase!=='paused')world=createWorld();world.phase='playing';clearInput();$('overlay').hidden=true;$('pause').disabled=false;lastUI='';previous=performance.now()}
+function pause(){if(world.phase==='playing'){world.phase='paused';overlay('A little breather.', 'The customers and their things will be here when you’re ready.','Keep washing')}else if(world.phase==='paused')start()}
+function updateUI(){
+ $('mission').textContent=world.message;const count=world.jobs.filter(j=>j.clean===1).length;$('count').textContent=`${count} / 4 washed`;
+ const signature=world.jobs.map(j=>Math.round(j.clean*100)).join();if(signature!==lastUI){$('jobs').innerHTML=world.jobs.map((j,i)=>`<div class="job ${j.clean===1?'done':''}"><span class="job-icon">${icons[i]}</span><span>${j.name}<small>${j.customer}’s ${j.clean===1?'all clean!':'wash station'}</small></span><b>${j.clean===1?'✓':Math.round(j.clean*100)+'%'}</b></div>`).join('');lastUI=signature}
+ $('suspicion-label').textContent=`SHOPKEEPER · ${world.suspicion>60?'SUSPICIOUS':world.suspicion>10?'WATCHING':'CALM'}`;$('suspicion-fill').style.width=`${world.suspicion}%`;
+ $('target').hidden=world.active<0||world.phase!=='playing';if(world.active>=0){const j=world.jobs[world.active];$('target-label').textContent=`${j.customer}’s ${j.name.toLowerCase()} · ${Math.round(j.clean*100)}%`;$('target-fill').style.width=`${j.clean*100}%`}
+ $('wash').classList.toggle('active',world.spraying&&world.phase==='playing');
 }
-function canSeeKeeper(){
- const distance=Math.hypot(keeper.x-player.x,keeper.y-player.y);
- if(distance>330)return false;
- for(let n=1;n<24;n++){const x=keeper.x+(player.x-keeper.x)*n/24,y=keeper.y+(player.y-keeper.y)*n/24;
- if(shelves.some(s=>x>s.x&&x<s.x+s.w&&y>s.y-15&&y<s.y+s.h))return false}
- return true;
+$('start').addEventListener('click',start);$('pause').addEventListener('click',pause);$('view').addEventListener('click',()=>{$('view').textContent=shop.toggleView()?'Follow Tappy':'View shop'});
+window.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(!e.repeat&&(k==='p'||k==='escape'))pause();else keys.add(k)});
+window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+window.addEventListener('blur',()=>{clearInput();if(world.phase==='playing')pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(world.phase==='playing')pause()}});
+function moveStick(e){const r=$('thumbstick').getBoundingClientRect(),v=stickVector(e.clientX-r.left-r.width/2,e.clientY-r.top-r.height/2,r.width*.3);Object.assign(stick,{x:v.x,z:v.z});$('stick-knob').style.transform=`translate(${v.px}px,${v.py}px)`}
+$('thumbstick').addEventListener('pointerdown',e=>{e.preventDefault();if(world.phase!=='playing'||stick.pointer!==null)return;stick.pointer=e.pointerId;$('thumbstick').setPointerCapture(e.pointerId);moveStick(e)});
+$('thumbstick').addEventListener('pointermove',e=>{if(e.pointerId===stick.pointer)moveStick(e)});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])$('thumbstick').addEventListener(event,e=>{if(e.pointerId===stick.pointer){stick={x:0,z:0,pointer:null};$('stick-knob').style.transform='translate(0px,0px)'}});
+$('wash').addEventListener('pointerdown',e=>{e.preventDefault();if(world.phase!=='playing'||pointerWash!==null)return;pointerWash=e.pointerId;$('wash').setPointerCapture(e.pointerId)});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])$('wash').addEventListener(event,e=>{if(pointerWash===e.pointerId)pointerWash=null});
+$('game').addEventListener('webglcontextlost',e=>{e.preventDefault();if(world.phase==='playing')pause();overlay('The 3D view stopped.', 'Reload the page to reopen the shop.','Reload shop');$('start').onclick=()=>location.reload()});
+function frame(now){const dt=Math.min((now-previous)/1000,.05);previous=now;const before=world.phase;
+ const x=stick.pointer!==null?stick.x:Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
+ const z=stick.pointer!==null?stick.z:Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
+ tick(world,dt,{x,z,spray:keys.has(' ')||pointerWash!==null});
+ if(before==='playing'&&world.phase==='won')overlay('A lovely clean!',world.message,'Wash again');
+ if(before==='playing'&&world.phase==='lost')overlay('A little too splashy.',world.message,'Try again');
+ updateUI();shop.render(world,dt);requestAnimationFrame(frame);
 }
-function updateKeeper(dt){
- if(elapsed-lastMischief>4)suspicion=Math.max(0,suspicion-dt*5);
- const route=[[880,520],[880,115],[120,115],[120,500],[880,500]];
- const target=route[keeper.waypoint],dx=target[0]-keeper.x,dy=target[1]-keeper.y,d=Math.hypot(dx,dy);
- const speed=suspicion>=60?100:42;
- if(d<3)keeper.waypoint=(keeper.waypoint+1)%route.length;
- else{keeper.x+=dx/d*Math.min(d,speed*dt);keeper.y+=dy/d*Math.min(d,speed*dt)}
- const meter=document.getElementById('suspicion');
- meter.textContent=`${suspicion>=60?'⚠ Watching you':suspicion>15?'◉ Suspicious':'◉ Shopkeeper calm'} · ${Math.round(suspicion)}%`;
- meter.style.color=suspicion>=60?'#b54b38':'#69836d';
- if(suspicion>=60&&Math.hypot(keeper.x-player.x,keeper.y-player.y)<48){
- state='lost';show('The shopkeeper caught you!','Too much splashing in the shop! Give people space and let suspicion cool down.','Try again','CLEAN UP IN AISLE THREE');return;
- }
-}
-
-function cart(c){ctx.save();ctx.translate(c.x,c.y);ellipse(0,20,23,6,'#485f4520');round(-21,-19,42,32,5,c.stun>0?'#b7dedb':'#c1c9b2','#7e937e');ctx.strokeStyle='#8a9d89';ctx.lineWidth=2;for(let i=-12;i<=12;i+=12){ctx.beginPath();ctx.moveTo(i,-15);ctx.lineTo(i,8);ctx.stroke()}ctx.beginPath();ctx.moveTo(-19,-4);ctx.lineTo(19,-4);ctx.moveTo(-19,-22);ctx.lineTo(-25,-29);ctx.lineTo(-35,-29);ctx.stroke();ellipse(-13,17,5,5,'#738875');ellipse(13,17,5,5,'#738875');text(c.stun>0?'✦':'🥬',0,-8,20,c.stun>0?'#4c9eae':'#487858');if(c.stun>0)text('splash!',0,-34,11,'#4c9eae');ctx.restore()}
-function draw(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#eeeee0';ctx.fillRect(0,0,W,H);for(let y=80;y<H;y+=55)for(let x=0;x<W;x+=55){ctx.fillStyle=((x/55+Math.floor(y/55))%2)?'#e9eadc':'#eeeee0';ctx.fillRect(x,y,54,54)}ctx.fillStyle='#d4dfc9';ctx.fillRect(0,0,W,80);round(18,15,964,57,8,'#e6ecdc');text('tappy’s market',W/2,48,25,'#4e795b','700');text('GOOD FOOD · GOOD MOOD',W/2,64,8,'#7e9576');text('OPEN DAILY',92,48,11,'#71916a');text('FRESH & FRIENDLY',885,48,11,'#71916a');round(667,19,55,39,3,'#faf5df');text('TODAY',694,32,7,'#847a5e');text('£1.99',694,48,13,'#9c6248');round(18,91,44,405,9,'#bdd1a6');for(let y=114;y<485;y+=43){text('🥬',40,y,24,'#4d784f')}round(938,91,44,405,9,'#ded9b7');for(let y=114;y<485;y+=43){text('🌻',959,y,24,'#947b46')}shelves.forEach(shelf);round(245,535,112,50,5,'#b1bbb0');round(251,541,100,36,3,'#68766b');text('BASKETS',301,565,10,'#f3efdc');round(461,581,132,26,4,'#b2a58d');text('THANK YOU · EXIT ↓',527,598,9,'#fff8e8');round(740,540,176,57,10,items.every(i=>i.collected)?'#83b890':'#d1d7c4');round(851,548,43,28,5,'#567c67');round(857,551,30,15,2,'#c4dec2');text('CHECKOUT →',803,571,12,'#46634f','700');text('START HERE',104,591,9,'#91a08a');ctx.setLineDash([5,7]);ctx.strokeStyle='#aab99c';ctx.beginPath();ctx.moveTo(165,561);ctx.lineTo(690,561);ctx.stroke();ctx.setLineDash([]);
-for(const i of items){if(i.collected)continue;const bob=Math.sin(elapsed*3+i.x)*3;ellipse(i.x,i.y+17,19,5,'#5b79521c');ellipse(i.x,i.y+bob,23,23,'#fffdf1');ctx.strokeStyle='#d7ddbd';ctx.lineWidth=1;ctx.stroke();text(i.emoji,i.x,i.y+9+bob,27,'#436149')}
-carts.forEach(c=>{person(c.x,c.y-38,c.color,c.skin);cart(c);if(c.stun>0){round(c.x-43,c.y-105,86,23,6,"#fffaf0");text("Hey! I’m soaked!",c.x,c.y-90,9,"#8f6553")}else if(c.browse>0)text("Hmm… what’s next?",c.x,c.y-91,9,"#667860")});person(keeper.x,keeper.y,"#4c785b","#d3a781",true);if(suspicion>15){text(suspicion>=60?"!":"?",keeper.x,keeper.y-57,23,"#bc7750")}if(player.invincible<=0||Math.floor(elapsed*10)%2===0)tap(player.x,player.y);if(splashRing>0){ctx.beginPath();ctx.arc(player.x,player.y,110*(1-splashRing/.45),0,Math.PI*2);ctx.strokeStyle=`rgba(91,174,193,${splashRing*1.8})`;ctx.lineWidth=7;ctx.stroke()}for(const p of particles){ellipse(p.x,p.y,3,5,`rgba(87,173,196,${Math.max(0,p.life)})`)}}
-function updateUI(){const count=items.filter(i=>i.collected).length;ui.basket.innerHTML=`BASKET <b>${count} / 8</b>`;ui.hearts.textContent='♥ '.repeat(player.hearts)+'♡ '.repeat(3-player.hearts);ui.hearts.setAttribute('aria-label',`${player.hearts} hearts`);ui.list.innerHTML=items.map(i=>`<span class="${i.collected?'collected':''}" title="${i.name}${i.collected?' collected':''}">${i.emoji}</span>`).join('');ui.mission.textContent=count===8?'All packed! Head to checkout →':'Collect the 8 goodies on your list'}
-function toast(message){ui.toast.textContent=message;ui.toast.classList.add('visible');toastTime=2.5}
-function splash(){if(state!=='playing'||cooldown>0)return;cooldown=2;splashRing=.45;let witnesses=carts.filter(c=>Math.hypot(c.x-player.x,c.y-player.y)<150).length;const seen=canSeeKeeper();if(witnesses||seen){suspicion=Math.min(100,suspicion+witnesses*22+(seen?26:0));lastMischief=elapsed;toast(seen?'Shopkeeper: No splashing in my shop!':'A customer complained! Let suspicion cool down.')}for(const c of carts)if(Math.hypot(c.x-player.x,c.y-player.y)<130)c.stun=3;for(let i=0;i<22;i++){let a=Math.PI*2*i/22;particles.push({x:player.x,y:player.y,vx:Math.cos(a)*170,vy:Math.sin(a)*170,life:.7})}}
-function blocked(x,y){return x<83||x>917||y<102||y>593||shelves.some(s=>x>s.x-22&&x<s.x+s.w+22&&y>s.y-37&&y<s.y+s.h+26)}
-function show(title,copy,button,pill){ui['overlay-title'].textContent=title;ui['overlay-copy'].textContent=copy;ui.start.innerHTML=button+' <span>→</span>';ui.pill.textContent=pill;ui['overlay-hint'].textContent='Arrow keys or WASD to move · Space to splash';ui.overlay.hidden=false;ui.pause.disabled=true;keys.clear();releaseStick();ui.start.focus()}
-function pause(){if(state==='playing'){state='paused';show('A little breather.','Your groceries will be right here when you get back.','Keep shopping','TAKE YOUR TIME')}else if(state==='paused'){begin()}}
-function begin(){if(state!=='paused')reset();state='playing';ui.overlay.hidden=true;ui.pause.disabled=false;ui.pause.textContent='Ⅱ';last=performance.now();toast('Let’s fill that basket!')}
-function update(dt){elapsed+=dt;player.invincible=Math.max(0,player.invincible-dt);cooldown=Math.max(0,cooldown-dt);splashRing=Math.max(0,splashRing-dt);toastTime-=dt;if(toastTime<=0)ui.toast.classList.remove('visible');ui['splash-status'].textContent=cooldown>0?`💧 Refilling… ${cooldown.toFixed(1)}s`:'✦ Splash ready';let dx=Number(keys.has('ArrowRight')||keys.has('d'))-Number(keys.has('ArrowLeft')||keys.has('a')),dy=Number(keys.has('ArrowDown')||keys.has('s'))-Number(keys.has('ArrowUp')||keys.has('w'));if(stick.pointer!==null){dx=stick.x;dy=stick.y}steps=Math.hypot(dx,dy);if(steps){const divisor=Math.max(1,steps);dx=dx/divisor*185*dt;dy=dy/divisor*185*dt;if(!blocked(player.x+dx,player.y))player.x+=dx;if(!blocked(player.x,player.y+dy))player.y+=dy}
-for(const c of carts){if(c.stun>0)c.stun-=dt;else if(c.browse>0)c.browse-=dt;else{const axis=c.axis||"x";c[axis]+=c.v*dt;if(c[axis]<c.min||c[axis]>c.max){c[axis]=Math.max(c.min,Math.min(c.max,c[axis]));c.v*=-1;c.browse=2.5}}if(c.stun<=0&&player.invincible===0&&Math.hypot(c.x-player.x,c.y-player.y)<36){player.hearts--;player.invincible=2.5;c.stun=1;toast('Oops! Watch the carts — Space to splash!');updateUI();if(player.hearts<=0){state='lost';show('A tiny shopping mishap.','Those carts are speedy! Splash them when they get close to make a little room.','Try again','YOU’VE GOT THIS');return}}}
-updateKeeper(dt);if(state!=='playing')return;
-for(const i of items)if(!i.collected&&Math.hypot(player.x-i.x,player.y-i.y)<38){i.collected=true;updateUI();toast(items.every(i=>i.collected)?'Basket full! Find the checkout ↘':`${i.emoji} ${i.name} in the basket!`)}
-if(items.every(i=>i.collected)&&player.x>735&&player.y>525){state='won';show('You’re a super shopper!','Eight goodies, one happy tap. Thanks for shopping at Tappy’s Market!','Shop again','BASKET FULL. HEART HAPPY.');ui.mission.textContent='Shopping complete. Have a lovely day!'}
-particles=particles.filter(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;return p.life>0})}
-function frame(t){const dt=Math.min((t-last)/1000,.035);last=t;if(state==='playing')update(dt);draw();requestAnimationFrame(frame)}
-window.addEventListener('keydown',e=>{const key=e.key.length===1?e.key.toLowerCase():e.key;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(key))e.preventDefault();if(e.repeat)return;if(key==='p'||key==='Escape')pause();else if(key===' ')splash();else keys.add(key)});
-window.addEventListener('keyup',e=>keys.delete(e.key.length===1?e.key.toLowerCase():e.key));
-window.addEventListener('blur',()=>{keys.clear();if(state==='playing')pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pause()});
-function releaseStick(){stick.x=0;stick.y=0;stick.pointer=null;document.getElementById('stick-knob').style.transform='translate(0px, 0px)'}
-function moveStick(clientX,clientY){
- const bounds=document.getElementById('thumbstick').getBoundingClientRect();
- const radius=bounds.width*.30,dx=clientX-bounds.left-bounds.width/2,dy=clientY-bounds.top-bounds.height/2;
- const distance=Math.hypot(dx,dy),travel=Math.min(distance,radius),factor=distance?travel/distance:0;
- document.getElementById('stick-knob').style.transform=`translate(${dx*factor}px, ${dy*factor}px)`;
- const speed=Math.max(0,(travel/radius-.12)/.88);
- stick.x=distance?dx/distance*speed:0;stick.y=distance?dy/distance*speed:0;
-}
-const thumbstick=document.getElementById('thumbstick');
-thumbstick.addEventListener('pointerdown',e=>{e.preventDefault();if(state!=='playing'||stick.pointer!==null)return;stick.pointer=e.pointerId;thumbstick.setPointerCapture(e.pointerId);moveStick(e.clientX,e.clientY)});
-thumbstick.addEventListener('pointermove',e=>{if(e.pointerId===stick.pointer)moveStick(e.clientX,e.clientY)});
-for(const event of ['pointerup','pointercancel','lostpointercapture'])thumbstick.addEventListener(event,e=>{if(e.pointerId===stick.pointer)releaseStick()});
-window.addEventListener('blur',releaseStick);
-document.getElementById('splash').addEventListener('pointerdown',e=>{e.preventDefault();splash()});ui.start.addEventListener('click',begin);ui.pause.addEventListener('click',pause);reset();ui.mission.textContent='Your shopping adventure awaits';requestAnimationFrame(frame);
+try{shop=createShop($('game'));$('start').disabled=false;$('start').textContent='Open the wash shop →';$('load-status').textContent='Drag the thumbstick or use arrow keys / WASD';updateUI();requestAnimationFrame(frame);document.body.dataset.ready='true'}catch(error){console.error(error);$('load-status').textContent='This shop needs WebGL. Enable graphics acceleration in your browser and reload.';$('start').textContent='3D graphics unavailable'}
