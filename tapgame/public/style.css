@@ -4,3 +4,17 @@
 #suspicion{font-size:11px;color:#69836d}.game-footer{gap:10px;flex-wrap:wrap}@media(max-width:650px){#suspicion{font-size:9px;order:3;width:100%;text-align:center}}
 
 .stick-wrap{display:grid;justify-items:center;gap:10px;margin-left:10px}#thumbstick{position:relative;width:116px;height:116px;border-radius:50%;touch-action:none;cursor:grab;background:radial-gradient(circle at 50% 60%,#c7d2c0,#e1e6d8 65%,#aab8a2);border:2px solid #bdc8b2;box-shadow:inset 0 5px 13px #40523825,0 2px 0 #fff;user-select:none}#thumbstick:active{cursor:grabbing}.stick-guides{position:absolute;inset:0;display:grid;place-items:center;font-size:102px;color:#a4b39c;line-height:1}#stick-knob{position:absolute;left:32px;top:32px;width:48px;height:48px;border-radius:50%;background:radial-gradient(circle at 38% 30%,#749a7d,#3e6b50 70%);border:2px solid #497359;box-shadow:0 5px 8px #264b4240,inset 0 2px 3px #ffffff60;pointer-events:none}#stick-knob:after{content:"";position:absolute;inset:9px;border:1px solid #97b49b80;border-radius:50%}.stick-label{font-size:8px;letter-spacing:1.3px;color:#819279}.touch-controls{max-width:420px;margin:22px auto 0}
+
+/* Keep both touch controls attached to the game without covering its aisles. */
+.stage{padding-bottom:100px}
+.touch-controls{position:absolute;bottom:0;left:0;right:0;height:100px;max-width:none;margin:0;padding:8px 24px;background:#e2e8d8;border-top:1px solid #cdd8c4;gap:20px}
+.stick-wrap{margin:0;gap:0}
+#thumbstick{width:80px;height:80px}
+.stick-guides{font-size:70px}
+#stick-knob{width:36px;height:36px;left:20px;top:20px}
+.stick-label{display:none}
+#splash{min-width:94px;min-height:48px}
+.toast{bottom:112px}
+.overlay{z-index:2}
+@media(max-width:650px){main{padding:10px 8px}.intro{padding:14px 4px}.intro .subtitle{margin-top:6px}.touch-controls{height:88px;padding:4px 15px}.stage{padding-bottom:88px}.toast{bottom:96px}.below{margin-top:10px}}
+@media(max-height:550px) and (orientation:landscape){main{max-width:760px;padding:6px 12px}header,.intro,.below{display:none}.game-bar{min-height:38px;padding:4px 12px}.game-shell{max-width:650px;margin:auto}.stage{padding-bottom:0;padding-left:90px;padding-right:100px;background:#e2e8d8}.touch-controls{height:100%;padding:0;background:transparent;border:0;pointer-events:none}.touch-controls .stick-wrap{position:absolute;left:5px;bottom:12px;pointer-events:auto}#splash{position:absolute;right:5px;bottom:24px;min-width:85px;padding:12px 8px;pointer-events:auto}.toast{bottom:10px}.game-footer{padding:5px 12px}}
