@@ -751,3 +751,24 @@ kbd {
     min-height: 44px;
   }
 }
+
+.shop-actions {
+  display: grid;
+  gap: 7px;
+  text-align: center;
+  flex: 0 0 110px;
+}
+.shop-price {
+  color: #254a32;
+  font-size: 13px;
+}
+.shop-item button {
+  color: #fff9e7;
+  min-height: 44px;
+}
+.shop-item button:disabled {
+  opacity: 1;
+  color: #43563f;
+  background: #d3dac8;
+  border-color: #c3ccb9;
+}

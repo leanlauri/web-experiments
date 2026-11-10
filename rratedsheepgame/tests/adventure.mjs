@@ -245,7 +245,7 @@ for (const f of FARMS) {
   });
   const a = g.animals.find((a) => a.farm === 0);
   Object.assign(a, { x: 202, z: 0, following: true });
-  g.update(0.05, { throttle: 1 });
+  g.update(0.05, { x: 1 });
   assert(a.down, "driving into an animal causes sleep");
   const h = new Game();
   h.revives = 0;

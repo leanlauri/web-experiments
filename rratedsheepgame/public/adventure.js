@@ -1,6 +1,6 @@
-import { Game } from "./simulation.js?v=car-handling-1";
+import { Game } from "./simulation.js?v=directional-drift-1";
 import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.js";
-import { createWorld } from "./world.js?v=car-handling-1";
+import { createWorld } from "./world.js?v=directional-drift-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -208,7 +208,8 @@ function shop() {
     items.push({
       key: "part",
       name: part.name,
-      detail: `Part ${game.parts + 1}/5 · ${part.animals} cumulative animal credit`,
+      detail: `Part ${game.parts + 1}/5 · cumulative animal credit, never spent`,
+      costLabel: `${part.animals} animal credit`,
       price:
         game.delivered >= part.animals
           ? "Install part"
@@ -219,6 +220,7 @@ function shop() {
     key: "revive",
     name: "Wake-up snack pack",
     detail: "Revives 3 sleepy animals · use R nearby",
+    costLabel: "$15",
     price: "$15",
     disabled: game.money < 15,
   });
@@ -227,6 +229,7 @@ function shop() {
       key: "heart",
       name: "One extra heart",
       detail: `Permanent upgrade · ${game.player.maxHp}/6 hearts now`,
+      costLabel: `$${(game.player.maxHp - 2) * 60}`,
       price: `$${(game.player.maxHp - 2) * 60}`,
       disabled: game.money < (game.player.maxHp - 2) * 60,
     });
@@ -235,6 +238,7 @@ function shop() {
       key: i,
       name: w.name,
       detail: `${w.range < 6 ? "Melee" : "Projectile"} · ${w.range} m range · cartoon knockout`,
+      costLabel: w.cost ? `$${w.cost}` : "Free",
       price: game.owned.includes(i) ? "Owned" : `$${w.cost}`,
       disabled: game.owned.includes(i) || game.money < w.cost,
     }),
@@ -253,7 +257,13 @@ function shop() {
         shopSignature = "";
         shop();
       };
-      row.append(text, b);
+      const actions = document.createElement("div");
+      actions.className = "shop-actions";
+      const price = document.createElement("strong");
+      price.className = "shop-price";
+      price.textContent = item.costLabel;
+      actions.append(price, b);
+      row.append(text, actions);
       return row;
     }),
   );
@@ -465,8 +475,6 @@ function frame(now) {
       if (keys.has("KeyA") || keys.has("ArrowLeft")) x -= 1;
       if (keys.has("KeyD") || keys.has("ArrowRight")) x += 1;
       game.update(1 / 60, {
-        throttle: -z,
-        steer: x,
         brake: touchBrake || keys.has("Space"),
         x: x * 0.768 + z * 0.64,
         z: -x * 0.64 + z * 0.768,
@@ -507,11 +515,15 @@ window.sheepGame = {
             id: game.vehicle,
             heading: game.vehicles[game.vehicle].heading,
             speed: game.vehicles[game.vehicle].driveSpeed || 0,
+            vx: game.vehicles[game.vehicle].vx || 0,
+            vz: game.vehicles[game.vehicle].vz || 0,
+            skidding: !!game.vehicles[game.vehicle].skidding,
           },
     wanted: game.wanted,
     hearts: game.player.hp,
     money: game.money,
     parts: game.parts,
+    skidmarks: game.skidmarks.length,
     stats: world.stats(),
   }),
 };

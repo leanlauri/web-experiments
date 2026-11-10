@@ -60,9 +60,17 @@ const serveSource = async (route) => {
       (await page.evaluate(() => sheepGame.getState())).sheep.length,
       12,
     );
+    const jumpCameraHeight = await page.evaluate(
+      () => sheepGame.getState().stats.cameraHeight,
+    );
     await page.keyboard.down("Space");
     await page.waitForTimeout(100);
     assert((await page.evaluate(() => sheepGame.getState())).player[1] > 0);
+    assert.equal(
+      await page.evaluate(() => sheepGame.getState().stats.cameraHeight),
+      jumpCameraHeight,
+      "camera stays at ground height during a jump",
+    );
     await page.keyboard.up("Space");
     const before = await page.evaluate(() => sheepGame.getState().player);
     await page.keyboard.down("KeyW");
@@ -97,6 +105,30 @@ const serveSource = async (route) => {
     await page.keyboard.press("KeyB");
     await page.waitForTimeout(200);
     assert(await page.locator("#shop").isVisible());
+    assert.equal(
+      await page
+        .locator(".shop-item")
+        .filter({ hasText: "Foam bat" })
+        .locator(".shop-price")
+        .textContent(),
+      "$35",
+    );
+    assert.equal(
+      await page
+        .locator(".shop-item")
+        .filter({ hasText: "Wake-up snack pack" })
+        .locator(".shop-price")
+        .textContent(),
+      "$15",
+    );
+    assert.equal(
+      await page
+        .locator(".shop-item")
+        .first()
+        .locator(".shop-price")
+        .textContent(),
+      "12 animal credit",
+    );
     for (let i = 0; i < 5; i++)
       await page
         .getByRole("button", { name: "Install part", exact: true })

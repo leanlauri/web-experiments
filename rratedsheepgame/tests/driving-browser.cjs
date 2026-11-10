@@ -13,6 +13,9 @@ const assert = require("node:assert/strict");
     });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
     await page.addInitScript(() =>
       localStorage.setItem(
         "little-pastures-moon-v1",
@@ -53,19 +56,17 @@ const assert = require("node:assert/strict");
     await page.locator(".touch-actions [data-action=interact]").tap();
     await page.waitForFunction(() => sheepGame.getState().vehicle?.id === 24);
     await page.getByRole("button", { name: "Brake", exact: true }).waitFor();
-    const heading = await page.evaluate(
-      () => sheepGame.getState().vehicle.heading,
-    );
+
     const stick = await page.locator("#thumbstick").boundingBox();
     await page.mouse.move(stick.x + stick.width / 2, stick.y + 10);
     await page.mouse.down();
-    await page.waitForFunction(() => sheepGame.getState().vehicle.speed > 3);
+    await page.waitForFunction(() => sheepGame.getState().vehicle.speed > 12);
     await page.mouse.up();
     const moving = await page.evaluate(() => sheepGame.getState().vehicle);
     assert(moving.speed > 0 && moving.speed < 15, "accelerates progressively");
     assert(
-      Math.abs(moving.heading - heading) < 0.01,
-      "pedal preserves heading",
+      moving.vx < 0 && moving.vz < 0,
+      "up on the joystick drives camera-forward, rather than following the previous nose direction",
     );
     const brake = await page
       .getByRole("button", { name: "Brake", exact: true })
@@ -77,15 +78,29 @@ const assert = require("node:assert/strict");
     await page.mouse.down();
     await page.waitForFunction(() => sheepGame.getState().vehicle.speed === 0);
     await page.mouse.up();
+    assert(
+      (await page.evaluate(() => sheepGame.getState().skidmarks)) > 0,
+      "hard braking records tire trails",
+    );
+    assert(
+      (await page.evaluate(() => sheepGame.getState().stats.skidmarks)) > 0,
+      "trails reach the renderer",
+    );
+    await page.screenshot({ path: "/tmp/rratedsheepgame-skidmarks.png" });
     await page.keyboard.down("KeyS");
-    await page.waitForFunction(() => sheepGame.getState().vehicle.speed < -2);
+    await page.waitForFunction(
+      () =>
+        sheepGame.getState().vehicle.speed > 2 &&
+        sheepGame.getState().vehicle.vx > 0 &&
+        sheepGame.getState().vehicle.vz > 0,
+    );
     await page.keyboard.up("KeyS");
     await page.locator(".touch-actions [data-action=interact]").tap();
     await page.waitForFunction(() => sheepGame.getState().vehicle === null);
     await page.getByRole("button", { name: "Jump", exact: true }).waitFor();
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: deployed compact HUD, versioned assets, boarding, touch throttle, hold-to-brake, keyboard reverse and exit.",
+      "PASS: deployed compact HUD, versioned assets, boarding, directional touch driving, hold-to-brake, rendered skid marks, keyboard direction changes and exit.",
     );
   } finally {
     await browser.close();

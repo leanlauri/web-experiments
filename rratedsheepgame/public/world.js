@@ -1,4 +1,5 @@
 import * as T from "./vendor/three.module.js";
+import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js";
 import { SIZE, HOME, FARMS, OBSTACLES, road, water, dist } from "./region.js";
 const materials = new Map();
 const material = (c) => {
@@ -498,6 +499,68 @@ export function createWorld(canvas) {
   const tip = new T.Mesh(new T.ConeGeometry(1, 1.5, 8), material(0xdb8269));
   tip.position.y = 2;
   spaceRocket.add(tip);
+  // All tire segments share one draw call and fade through an instance attribute.
+  const skidGeometry = new T.PlaneGeometry(0.22, 1);
+  skidGeometry.rotateX(-Math.PI / 2);
+  const skidAlpha = new T.InstancedBufferAttribute(
+    new Float32Array(MAX_SKID_SEGMENTS),
+    1,
+  );
+  skidGeometry.setAttribute("instanceOpacity", skidAlpha);
+  const skidMaterial = new T.MeshBasicMaterial({
+    color: 0x273028,
+    transparent: true,
+    depthWrite: false,
+  });
+  skidMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nattribute float instanceOpacity; varying float tireAlpha;",
+      )
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\ntireAlpha = instanceOpacity;",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying float tireAlpha;",
+      )
+      .replace(
+        "#include <color_fragment>",
+        "#include <color_fragment>\ndiffuseColor.a *= tireAlpha;",
+      );
+  };
+  const skidMesh = new T.InstancedMesh(
+    skidGeometry,
+    skidMaterial,
+    MAX_SKID_SEGMENTS,
+  );
+  skidMesh.count = 0;
+  skidMesh.frustumCulled = false;
+  skidMesh.renderOrder = 1;
+  world.add(skidMesh);
+  const skidTransform = new T.Object3D();
+  function updateSkids(game) {
+    skidMesh.count = game.skidmarks.length;
+    game.skidmarks.forEach((mark, i) => {
+      const dx = mark.x2 - mark.x1,
+        dz = mark.z2 - mark.z1;
+      skidTransform.position.set(
+        (mark.x1 + mark.x2) / 2,
+        0.205,
+        (mark.z1 + mark.z2) / 2,
+      );
+      skidTransform.rotation.y = Math.atan2(dx, dz);
+      skidTransform.scale.set(1, 1, Math.hypot(dx, dz) + 0.04);
+      skidTransform.updateMatrix();
+      skidMesh.setMatrixAt(i, skidTransform.matrix);
+      skidAlpha.setX(i, skidOpacity(mark, game.time));
+    });
+    skidMesh.instanceMatrix.needsUpdate = true;
+    skidAlpha.needsUpdate = true;
+  }
   let shotMeshes = [];
   const compactLabels = matchMedia("(max-width: 750px), (pointer: coarse)");
   const placeLabels = [];
@@ -505,6 +568,7 @@ export function createWorld(canvas) {
     if (node.isSprite) placeLabels.push(node);
   });
   function render(game) {
+    updateSkids(game);
     for (const sprite of placeLabels) sprite.visible = !compactLabels.matches;
     gamePlayer = game.player;
     const flight = game.phase === "launch" || game.phase === "credits";
@@ -611,7 +675,7 @@ export function createWorld(canvas) {
             rocket.position.y + 4,
             rocket.position.z,
           )
-        : new T.Vector3(game.player.x, game.player.y, game.player.z);
+        : new T.Vector3(game.player.x, 0, game.player.z);
       camera.position
         .copy(target)
         .add(new T.Vector3(30 * zoom, 43 * zoom, 36 * zoom));
@@ -633,6 +697,8 @@ export function createWorld(canvas) {
     },
     stats() {
       return {
+        skidmarks: skidMesh.count,
+        cameraHeight: camera.position.y,
         chunks: chunks.size,
         actors: actors.size,
         drawCalls: renderer.info.render.calls,

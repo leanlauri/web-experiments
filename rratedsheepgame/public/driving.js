@@ -1,71 +1,84 @@
 import { blocked, road } from "./region.js";
 
 const PROFILES = {
-  buggy: { top: 34, acceleration: 11, wheelbase: 2, steering: 0.62 },
-  car: { top: 32, acceleration: 9, wheelbase: 2.5, steering: 0.58 },
-  van: { top: 28, acceleration: 7, wheelbase: 3.1, steering: 0.52 },
-  bus: { top: 24, acceleration: 5, wheelbase: 4.5, steering: 0.48 },
+  buggy: { top: 34, acceleration: 11, turn: 4, grip: 12 },
+  car: { top: 32, acceleration: 9, turn: 3.3, grip: 13 },
+  van: { top: 28, acceleration: 7, turn: 2.7, grip: 11 },
+  bus: { top: 24, acceleration: 5, turn: 1.9, grip: 10 },
 };
 const approach = (value, target, amount) =>
   value < target
     ? Math.min(target, value + amount)
     : Math.max(target, value - amount);
-const clamp = (value) => Math.max(-1, Math.min(1, Number(value) || 0));
+const angleDifference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
-// Signed speed follows the vehicle's nose; steering alone can never translate it.
-export function drive(vehicle, dt, input = {}, level = 0) {
+// Directional input aims the car. Velocity stays independent of its nose, so
+// turning requires tire grip to redirect momentum rather than rotating it instantly.
+export function drive(v, dt, input = {}, level = 0) {
   if (dt <= 0) return;
-  const profile = PROFILES[vehicle.kind] || PROFILES.car;
-  const throttle = clamp(input.throttle),
-    steer = clamp(input.steer);
-  let speed = vehicle.driveSpeed || 0;
-  const top = profile.top * (road(vehicle) ? 1 : 0.55);
-  const reversing =
-    throttle &&
-    Math.sign(throttle) !== Math.sign(speed) &&
-    Math.abs(speed) > 0.1;
-  if (input.brake || reversing) {
-    speed = approach(
-      speed,
-      0,
-      23 * dt * (input.brake ? 1.35 : Math.abs(throttle)),
-    );
-  } else if (Math.abs(throttle) > 0.03) {
-    const target = throttle * (throttle < 0 ? Math.min(9, top * 0.35) : top);
-    speed = approach(speed, target, profile.acceleration * dt);
-  } else {
-    speed = approach(speed, 0, (1.3 + Math.abs(speed) * 0.065) * dt);
+  const profile = PROFILES[v.kind] || PROFILES.car;
+  let dx = Number(input.x) || 0,
+    dz = Number(input.z) || 0;
+  const length = Math.hypot(dx, dz),
+    strength = Math.min(1, length);
+  if (length > 1) {
+    dx /= length;
+    dz /= length;
   }
-  // Grass gradually slows the car rather than cutting its speed instantly.
-  if (Math.abs(speed) > top)
-    speed = approach(speed, Math.sign(speed) * top, 9 * dt);
-  vehicle.steerAngle = approach(
-    vehicle.steerAngle || 0,
-    steer * profile.steering,
-    2.4 * dt,
-  );
-  const start = { x: vehicle.x, z: vehicle.z };
-  const steps = Math.max(1, Math.ceil((Math.abs(speed) * dt) / 0.4));
+  let vx = v.vx ?? Math.cos(v.heading) * (v.driveSpeed || 0);
+  let vz = v.vz ?? Math.sin(v.heading) * (v.driveSpeed || 0);
+  const start = { x: v.x, z: v.z };
+  v.skidding = false;
+  const steps = Math.max(1, Math.ceil(dt * 120));
   for (let i = 0; i < steps; i++) {
-    const step = dt / steps;
-    // Reduce steering lock at speed. Reverse naturally changes the turning direction.
-    const yawRate =
-      ((speed / profile.wheelbase) * Math.tan(vehicle.steerAngle)) /
-      (1 + Math.abs(speed) * 0.09);
-    const heading = vehicle.heading + yawRate * step;
-    const next = {
-      x: vehicle.x + Math.cos((vehicle.heading + heading) / 2) * speed * step,
-      z: vehicle.z + Math.sin((vehicle.heading + heading) / 2) * speed * step,
-    };
+    const step = dt / steps,
+      speed = Math.hypot(vx, vz),
+      paved = road(v);
+    const top = profile.top * (paved ? 1 : 0.55);
+    const error =
+      strength > 0.05 ? angleDifference(Math.atan2(dz, dx), v.heading) : 0;
+    const yaw =
+      (Math.max(-1, Math.min(1, error * 2)) * profile.turn) /
+      (1 + speed * 0.025);
+    v.heading = angleDifference(v.heading + yaw * step, 0);
+    v.steerAngle = approach(
+      v.steerAngle || 0,
+      Math.max(-0.6, Math.min(0.6, error)),
+      step * 2.4,
+    );
+    const fx = Math.cos(v.heading),
+      fz = Math.sin(v.heading);
+    let forward = vx * fx + vz * fz,
+      lateral = -vx * fz + vz * fx;
+    const grip = profile.grip * (paved ? 1 : 0.6) * (input.brake ? 0.45 : 1);
+    if (speed > 6 && (input.brake || Math.abs(lateral) > 2.5))
+      v.skidding = true;
+    // Grip is a capped lateral force, not an instantaneous velocity rotation.
+    lateral = approach(lateral, 0, grip * step);
+    if (!input.brake && strength > 0.05)
+      forward = approach(forward, top * strength, profile.acceleration * step);
+    vx = fx * forward - fz * lateral;
+    vz = fz * forward + fx * lateral;
+    const magnitude = Math.hypot(vx, vz);
+    const drag = input.brake
+      ? 27
+      : 1.3 + magnitude * 0.065 + (magnitude > top ? 9 : 0);
+    const remaining = Math.max(0, magnitude - drag * step);
+    if (magnitude) {
+      vx *= remaining / magnitude;
+      vz *= remaining / magnitude;
+    }
+    const next = { x: v.x + vx * step, z: v.z + vz * step };
     if (blocked(next, 1.4, level)) {
-      speed = 0;
+      vx = vz = 0;
+      v.skidding = false;
       break;
     }
-    vehicle.x = next.x;
-    vehicle.z = next.z;
-    vehicle.heading = Math.atan2(Math.sin(heading), Math.cos(heading));
+    v.x = next.x;
+    v.z = next.z;
   }
-  vehicle.driveSpeed = speed;
-  vehicle.currentSpeed =
-    Math.hypot(vehicle.x - start.x, vehicle.z - start.z) / dt;
+  v.vx = vx;
+  v.vz = vz;
+  v.driveSpeed = Math.hypot(vx, vz);
+  v.currentSpeed = Math.hypot(v.x - start.x, v.z - start.z) / dt;
 }

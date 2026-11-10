@@ -21,7 +21,7 @@ Buy a cushion club, foam bat, bubble wand, foam blaster and pillow launcher. Mel
 ## Controls
 
 - On foot: WASD / arrows move relative to the camera; Shift runs; Space jumps.
-- Driving: W / up accelerates; S / down brakes, then reverses; A / D steers. Hold Space for the brake. Touch uses joystick up/down for pedals and left/right for steering, with Jump becoming a holdable Brake button. Vehicles accelerate, coast, and turn only while moving; reverse steering changes direction. Grass slows vehicles; vans and buses accelerate and turn more slowly than smaller cars. Exiting applies the parking brake.
+- Driving: the same camera-relative WASD / arrows or joystick directions aim and accelerate the car toward your destination. The body turns smoothly, but velocity carries through turns and tire grip gradually redirects it. Release to coast; hold Space / Brake to stop. Hard braking and sharp turns break traction and leave paired rear-tire marks that fade after eight seconds. Grass has lower grip and speed; heavier vehicles accelerate and turn more slowly. Exiting applies the parking brake.
 - E: enter the nearest vehicle within 6 m, or exit with passengers.
 - F: use equipped weapon; Q: cycle owned weapons.
 - R: revive an animal within 7 m; B: home workshop.
@@ -32,7 +32,7 @@ The help and region-map panels pause the simulation. The workshop stops player m
 
 ## Implementation and performance
 
-`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `driving.js` simulates acceleration, steering, braking and solid vehicle collisions. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
+`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `driving.js` simulates directional steering, independent planar momentum, tire traction, braking and solid vehicle collisions. `skidmarks.js` records bounded tire trails with an eight-second lifetime; the renderer draws them in one instanced call with per-segment fading. The camera tracks ground position during jumps. Shop prices remain visible as separate labels, including on unaffordable or owned items. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
 
 The renderer maintains at most 49 nearby 64 m scenery chunks. Trees use instanced meshes; departing chunks are removed and their instance resources disposed. Actors beyond 150 m are hidden, distant ambient animals and guards skip AI movement, and static geometry uses frustum culling. Actor meshes and geometry/materials are reused; no remote assets are streamed. The map remains lightweight simulation data. The view is fog-limited with adjustable zoom and capped pixel density. Buildings, farm fences, water and region boundaries block movement; decorative trees and crops do not.
 

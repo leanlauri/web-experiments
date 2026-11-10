@@ -1,4 +1,5 @@
-import { drive } from "./driving.js";
+import { drive } from "./driving.js?v=directional-drift-1";
+import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js";
 import {
   HOME,
   START,
@@ -46,6 +47,7 @@ export class Game {
       "Walk close to your twelve sheep, then lead them north to your little farm.";
     this.noteUntil = 10;
     this.shots = [];
+    this.skidmarks = [];
     this.police = [];
     this.guards = [];
     this.animals = [];
@@ -309,7 +311,9 @@ export class Game {
       const v = this.vehicles[this.vehicle];
       this.player.x = v.x + Math.cos(v.heading + Math.PI / 2) * 3;
       this.player.z = v.z + Math.sin(v.heading + Math.PI / 2) * 3;
-      v.driveSpeed = v.currentSpeed = 0;
+      v.driveSpeed = v.currentSpeed = v.vx = v.vz = 0;
+      v.skidAnchor = null;
+      v.skidding = false;
       this.vehicle = null;
       for (const a of this.herd)
         if (a.boarded === v.id) {
@@ -328,6 +332,9 @@ export class Game {
       return;
     }
     v.driveSpeed = v.currentSpeed || (!v.stolen ? v.speed : 0);
+    v.vx = Math.cos(v.heading) * v.driveSpeed;
+    v.vz = Math.sin(v.heading) * v.driveSpeed;
+    v.skidAnchor = null;
     if (!v.stolen) {
       v.stolen = true;
       this.crime(1);
@@ -347,7 +354,7 @@ export class Game {
     this.player.x = v.x;
     this.player.z = v.z;
     this.tell(
-      `${v.kind}: ${v.seats - 1 - room}/${v.seats - 1} animal seats filled. Up/down accelerates or brakes/reverses; left/right steers. Space / Brake stops.`,
+      `${v.kind}: ${v.seats - 1 - room}/${v.seats - 1} animal seats filled. Point the stick or use WASD toward your destination. Momentum carries through turns. Space / Brake stops.`,
     );
   }
   revive() {
@@ -467,6 +474,9 @@ export class Game {
   update(dt, input = {}) {
     dt = Math.min(0.05, Math.max(0, dt));
     this.time += dt;
+    this.skidmarks = this.skidmarks.filter(
+      (mark) => this.time - mark.born < SKID_LIFETIME,
+    );
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.player.invulnerable = Math.max(0, this.player.invulnerable - dt);
     this.player.stun = Math.max(0, this.player.stun - dt);
@@ -511,12 +521,13 @@ export class Game {
         v,
         dt,
         {
-          throttle: inactive ? 0 : input.throttle,
-          steer: inactive ? 0 : input.steer,
+          x: inactive ? 0 : dx,
+          z: inactive ? 0 : dz,
           brake: inactive || input.brake,
         },
         this.level,
       );
+      recordSkidmarks(this.skidmarks, v, this.time);
       p.x = v.x;
       p.z = v.z;
       p.heading = v.heading;
