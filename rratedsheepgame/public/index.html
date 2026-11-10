@@ -24,6 +24,13 @@
         ><button id="reset">New adventure</button>
       </div>
     </header>
+    <nav id="mobile-toolbar" aria-label="Game panels">
+      <button id="mobile-map-button">Map</button>
+      <button id="menu-button" aria-controls="menu" aria-expanded="false">
+        Menu
+      </button>
+    </nav>
+    <div id="mobile-summary" aria-label="Herd and home distance"></div>
     <section id="status" aria-label="Player status">
       <div>
         <span id="hearts" aria-label="Hearts">♥ ♥ ♥</span><b id="cash">$0</b>
@@ -82,6 +89,30 @@
         ><button data-action="shop">Shop</button
         ><button data-action="cycle">Weapon</button>
       </div>
+    </div>
+    <div id="menu" class="overlay" hidden>
+      <section
+        class="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="menu-title"
+      >
+        <button class="close" id="menu-close" aria-label="Close menu">×</button>
+        <div class="eyebrow">ADVENTURE PAUSED</div>
+        <h2 id="menu-title">Your adventure.</h2>
+        <h3 id="menu-objective"></h3>
+        <p id="menu-description"></p>
+        <p id="menu-progress"></p>
+        <p id="menu-loadout"></p>
+        <div class="menu-actions">
+          <button data-action="revive">Revive animal</button>
+          <button data-action="shop">Home shop</button>
+          <button data-action="cycle">Switch weapon</button>
+          <button id="menu-help">Controls & help</button>
+          <button id="menu-reset">New adventure</button>
+        </div>
+        <button id="menu-resume" class="primary">Resume game</button>
+      </section>
     </div>
     <div id="shop" class="overlay" hidden>
       <section class="panel">

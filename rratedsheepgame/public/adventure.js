@@ -17,7 +17,8 @@ try {
 }
 const keys = new Set(),
   stick = { x: 0, y: 0 },
-  panels = ["help", "atlas"];
+  panels = ["help", "atlas", "menu"];
+const compactHUD = matchMedia("(max-width: 750px), (pointer: coarse)");
 let jump = false,
   lastSave = null,
   shopSignature = "",
@@ -94,7 +95,7 @@ function steer(e) {
     x = e.clientX - r.left - r.width / 2,
     y = e.clientY - r.top - r.height / 2,
     d = Math.hypot(x, y),
-    limit = 34;
+    limit = Math.max(1, (r.width - $("stick-knob").offsetWidth) / 2);
   stick.x = x / Math.max(limit, d);
   stick.y = y / Math.max(limit, d);
   $("stick-knob").style.transform =
@@ -114,10 +115,33 @@ for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
     clearInput();
   });
 for (const b of document.querySelectorAll("[data-action]"))
-  b.addEventListener("pointerdown", (e) => {
+  b.addEventListener(b.closest("#menu") ? "click" : "pointerdown", (e) => {
     e.preventDefault();
+    if (!$("menu").hidden) clearInput();
+    $("menu").hidden = true;
     action(b.dataset.action);
   });
+function closeMenu() {
+  $("menu").hidden = true;
+}
+$("menu-button").onclick = () => {
+  clearInput();
+  $("menu").hidden = !$("menu").hidden;
+};
+$("menu-close").onclick = $("menu-resume").onclick = closeMenu;
+$("mobile-map-button").onclick = () => {
+  clearInput();
+  $("atlas").hidden = false;
+};
+$("menu-help").onclick = () => {
+  closeMenu();
+  $("help-button").click();
+};
+$("menu-reset").onclick = () => $("reset").click();
+compactHUD.addEventListener("change", () => {
+  closeMenu();
+  clearInput();
+});
 $("help-button").onclick = () => {
   $("help").hidden = false;
 };
@@ -345,7 +369,7 @@ function hud() {
   $("rocket-fill").style.width = `${(game.parts / 5) * 100}%`;
   $("rocket-progress").hidden = intro;
   $("toast").textContent = game.note;
-  $("toast").hidden = game.time > game.noteUntil;
+  $("toast").hidden = game.time > game.noteUntil - (compactHUD.matches ? 4 : 0);
   $("weapon").textContent = WEAPONS[game.weapon].name;
   $("snacks").textContent = `${game.revives} wake-up snacks`;
   $("vehicle").textContent =
@@ -365,6 +389,16 @@ function hud() {
       ? `Settling trip · ${Math.max(0, Math.ceil(4 - game.homeTimer))}s`
       : "Hearts restored · B for shop"
     : `Home · ${Math.round(dist(game.player, HOME))} m`;
+  $("status").dataset.wanted = stars > 0 ? "active" : "clear";
+  $("mobile-summary").textContent =
+    `${intro ? `${herd.length}/${12 - game.introDelivered} sheep` : `${awake.length} ${herd[0]?.type || "animals"}`}${herd.some((a) => a.down) ? " · needs revival" : ""} · ${game.atHome ? (!game.homeInside && !intro ? `Home · settling ${Math.max(0, Math.ceil(4 - game.homeTimer))}s` : "At home") : `Home ${Math.round(dist(game.player, HOME))}m`}`;
+  $("menu-objective").textContent = $("objective").textContent;
+  $("menu-description").textContent = $("description").textContent;
+  $("menu-progress").textContent =
+    `${$("count").textContent} ${$("cargo").textContent}${intro ? "" : ` · ${$("rocket-count").textContent}`}`;
+  $("menu-loadout").textContent =
+    `${$("weapon").textContent} · ${$("snacks").textContent}${$("vehicle").textContent ? ` · ${$("vehicle").textContent}` : ""}`;
+  $("menu-button").setAttribute("aria-expanded", String(!$("menu").hidden));
   $("shop").hidden = !game.shop;
   if (game.shop) shop();
   $("jail").hidden = !game.jail;
@@ -373,7 +407,15 @@ function hud() {
   $("credits").hidden = game.phase !== "credits";
   document.querySelector("footer").style.visibility =
     game.phase === "credits" ? "hidden" : "";
-  for (const id of ["mission", "navigation", "status", "loadout", "touch"]) {
+  for (const id of [
+    "mission",
+    "navigation",
+    "status",
+    "loadout",
+    "touch",
+    "mobile-toolbar",
+    "mobile-summary",
+  ]) {
     if (game.phase === "credits" || game.phase === "launch")
       $(id).style.visibility = "hidden";
     else $(id).style.visibility = "";

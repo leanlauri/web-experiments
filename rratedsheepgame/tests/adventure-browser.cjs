@@ -141,6 +141,67 @@ const serveSource = async (route) => {
         mobileAfter[2] - mobileBefore[2],
       ) > 1,
     );
+    // The main play surface must stay clear; full details are available on demand.
+    for (const selector of [
+      "header",
+      "#mission",
+      "#navigation",
+      "#loadout",
+      "#wanted",
+      ".touch-actions [data-action=revive]",
+    ])
+      assert(
+        !(await mobile.locator(selector).isVisible()),
+        `${selector} should be collapsed on mobile`,
+      );
+    assert.equal(
+      await mobile.locator(".touch-actions button:visible").count(),
+      3,
+    );
+    await mobile.locator("#mobile-map-button").tap();
+    assert(await mobile.locator("#atlas").isVisible());
+    await mobile.locator("#atlas-close").tap();
+    await mobile.locator("#menu-button").tap();
+    assert(await mobile.locator("#menu").isVisible());
+    assert(
+      (await mobile.locator("#menu-description").textContent()).includes(
+        "sheep",
+      ),
+    );
+    assert(await mobile.locator("#menu [data-action=revive]").isVisible());
+    const pausedAt = await mobile.evaluate(() => sheepGame.getState().player);
+    await mobile.keyboard.down("KeyW");
+    await mobile.waitForTimeout(250);
+    assert.deepEqual(
+      await mobile.evaluate(() => sheepGame.getState().player),
+      pausedAt,
+      "menu pauses gameplay",
+    );
+    await mobile.keyboard.up("KeyW");
+    await mobile.screenshot({ path: "/tmp/rratedsheepgame-mobile-menu.png" });
+    await mobile.locator("#menu-help").tap();
+    assert(await mobile.locator("#help").isVisible());
+    await mobile.locator("#help-close").tap();
+    await mobile.locator("#menu-button").tap();
+    await mobile.locator("#menu [data-action=cycle]").tap();
+    assert(!(await mobile.locator("#menu").isVisible()));
+    // Compact HUD also applies in landscape, keeping the player at screen center exposed.
+    for (const viewport of [
+      { width: 844, height: 390 },
+      { width: 390, height: 720 },
+    ]) {
+      await mobile.setViewportSize(viewport);
+      assert(await mobile.locator("#menu-button").isVisible());
+      assert(!(await mobile.locator("#mission").isVisible()));
+      const center = await mobile.evaluate(
+        () => document.elementFromPoint(innerWidth / 2, innerHeight / 2).id,
+      );
+      assert.equal(
+        center,
+        "world",
+        "player must remain visible in the center of the screen",
+      );
+    }
     await mobile.screenshot({ path: "/tmp/rratedsheepgame-mobile.png" });
     await mobile.close();
     const stats = await page.evaluate(() => sheepGame.getState().stats);

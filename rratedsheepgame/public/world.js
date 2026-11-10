@@ -495,7 +495,13 @@ export function createWorld(canvas) {
   tip.position.y = 2;
   spaceRocket.add(tip);
   let shotMeshes = [];
+  const compactLabels = matchMedia("(max-width: 750px), (pointer: coarse)");
+  const placeLabels = [];
+  world.traverse((node) => {
+    if (node.isSprite) placeLabels.push(node);
+  });
   function render(game) {
+    for (const sprite of placeLabels) sprite.visible = !compactLabels.matches;
     gamePlayer = game.player;
     const flight = game.phase === "launch" || game.phase === "credits";
     if (game.phase === "credits") {

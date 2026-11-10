@@ -613,3 +613,141 @@ kbd {
     margin-top: 8px;
   }
 }
+
+/* Compact play surface: details are available in the paused menu. */
+#mobile-toolbar,
+#mobile-summary {
+  display: none;
+}
+.menu-actions button {
+  color: #fff9e7;
+}
+.menu-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 20px;
+}
+#menu h3 {
+  font:
+    24px Georgia,
+    serif;
+  margin-bottom: 8px;
+}
+#menu-progress,
+#menu-loadout {
+  padding: 10px 12px;
+  background: #eae9d9;
+  border-radius: 8px;
+}
+@media (max-width: 750px), (pointer: coarse) {
+  header,
+  #mission,
+  #navigation,
+  #loadout,
+  footer {
+    display: none;
+  }
+  #mobile-toolbar {
+    display: flex;
+    gap: 6px;
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+  }
+  #mobile-toolbar button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  #status {
+    top: max(10px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+    min-width: 0;
+    max-width: calc(100vw - 130px);
+    padding: 7px 10px;
+    border-radius: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 8px;
+    min-height: 44px;
+    box-shadow: none;
+    pointer-events: none;
+  }
+  #status > div:first-child {
+    gap: 10px;
+  }
+  #hearts,
+  #cash {
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  #wanted {
+    font-size: 12px;
+    letter-spacing: 0;
+    margin: 0;
+  }
+  #status[data-wanted="clear"] #wanted,
+  #escape {
+    display: none;
+  }
+  #mobile-summary {
+    display: block;
+    position: absolute;
+    top: calc(max(10px, env(safe-area-inset-top)) + 49px);
+    left: max(10px, env(safe-area-inset-left));
+    max-width: calc(100% - 20px);
+    padding: 5px 9px;
+    border-radius: 7px;
+    background: #1c322dbb;
+    font-size: 10px;
+    pointer-events: none;
+  }
+  #toast {
+    top: calc(max(10px, env(safe-area-inset-top)) + 80px);
+    width: auto;
+    max-width: min(90vw, 420px);
+    padding: 7px 10px;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  #touch {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+  }
+  #thumbstick {
+    width: 100px;
+    height: 100px;
+  }
+  .touch-actions {
+    grid-template-columns: repeat(3, 52px);
+    gap: 6px;
+  }
+  .touch-actions button {
+    min-height: 48px;
+    padding: 8px 2px;
+    background: #213a32c9;
+  }
+  .touch-actions [data-action="revive"],
+  .touch-actions [data-action="shop"],
+  .touch-actions [data-action="cycle"] {
+    display: none;
+  }
+  .overlay {
+    padding: max(12px, env(safe-area-inset-top)) 12px
+      max(12px, env(safe-area-inset-bottom));
+  }
+  .panel {
+    max-height: 92dvh;
+  }
+  .close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  #menu .menu-actions button {
+    min-height: 44px;
+  }
+}

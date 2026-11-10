@@ -25,7 +25,7 @@ Buy a cushion club, foam bat, bubble wand, foam blaster and pillow launcher. Mel
 - F: use equipped weapon; Q: cycle owned weapons.
 - R: revive an animal within 7 m; B: home workshop.
 - M: region map and faction guide. Escape: close a panel. Mouse wheel: zoom.
-- Touch: analog joystick and Jump, Ride, Bonk, Revive, Shop and Weapon buttons.
+- Touch: analog joystick and Jump, Ride and Bonk buttons. Map opens the regional map; Menu pauses the game and shows mission/rocket progress, equipment, Revive, Home shop, Switch weapon, help and restart. The compact HUD shows hearts, cash, active wanted stars and herd/home distance.
 
 The help and region-map panels pause the simulation. The workshop stops player movement; the home area protects the player. Local progress is saved at home and after purchases. Reload resumes from the last home checkpoint. Trips in progress are not saved. New adventure replaces the local save after confirmation.
 
