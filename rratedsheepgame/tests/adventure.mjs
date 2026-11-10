@@ -202,7 +202,9 @@ for (const f of FARMS) {
   const g = new Game();
   unlock(g);
   g.guards.forEach((a) => (a.down = 10000));
-  g.vehicles.forEach((v) => Object.assign(v, { stolen: true, x: 450, z: 450 }));
+  g.vehicles.forEach((v) =>
+    Object.assign(v, { stolen: true, x: 440, z: -400 + v.id * 10 }),
+  );
   at(g, { x: f.x - 8, z: f.z + 8 });
   g.animals.forEach((a) => (a.delivered = a.farm !== f.id));
   g.animals

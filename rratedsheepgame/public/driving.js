@@ -1,4 +1,5 @@
-import { blocked, road } from "./region.js";
+import { vehicleBlocked } from "./vehicle-collisions.js";
+import { road } from "./region.js";
 
 const PROFILES = {
   buggy: { top: 34, acceleration: 11, turn: 4, grip: 12 },
@@ -69,7 +70,7 @@ export function drive(v, dt, input = {}, level = 0) {
       vz *= remaining / magnitude;
     }
     const next = { x: v.x + vx * step, z: v.z + vz * step };
-    if (blocked(next, 1.4, level)) {
+    if (vehicleBlocked(v, { ...next, heading: v.heading }, level)) {
       vx = vz = 0;
       v.skidding = false;
       break;

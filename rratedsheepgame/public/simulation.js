@@ -1,4 +1,11 @@
-import { drive } from "./driving.js?v=directional-drift-1";
+import {
+  resolveVehicleCollisions,
+  vehiclePersonContact,
+  circleVehicle,
+  vehicleBlocked,
+} from "./vehicle-collisions.js?v=vehicle-impacts-1";
+import { startTumble, stepTumble, clearTumble } from "./tumbles.js";
+import { drive } from "./driving.js?v=vehicle-impacts-1";
 import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js";
 import {
   HOME,
@@ -75,15 +82,16 @@ export class Game {
     }
     for (let i = 0; i < 24; i++) {
       const f = FARMS[i % 6],
-        t = 0.16 + (i % 4) * 0.19;
+        t = 0.16 + Math.floor(i / 6) * 0.19,
+        direction = (Math.floor(i / 6) + i) % 2 ? 1 : -1;
       this.vehicles.push({
         id: i,
-        x: f.x * t - Math.sin(f.angle) * 2,
-        z: f.z * t + Math.cos(f.angle) * 2,
-        heading: f.angle,
+        x: f.x * t - Math.sin(f.angle) * 2 * direction,
+        z: f.z * t + Math.cos(f.angle) * 2 * direction,
+        heading: f.angle + (direction > 0 ? 0 : Math.PI),
         route: i % 6,
         t,
-        dir: i % 2 ? 1 : -1,
+        dir: direction,
         speed: 9 + (i % 4),
         seats: [2, 4, 7, 13][i % 4],
         kind: ["buggy", "car", "van", "bus"][i % 4],
@@ -248,6 +256,7 @@ export class Game {
     // A visit resolves the whole trip, including animals left unconscious or behind.
     for (const a of this.animals)
       if (a.farm >= 0) {
+        clearTumble(a);
         Object.assign(a, a.origin, {
           following: false,
           down: false,
@@ -305,7 +314,12 @@ export class Game {
     return false;
   }
   interact() {
-    if (this.jail || this.phase === "launch" || this.phase === "credits")
+    if (
+      this.jail ||
+      this.player.ragdoll ||
+      this.phase === "launch" ||
+      this.phase === "credits"
+    )
       return;
     if (this.vehicle !== null) {
       const v = this.vehicles[this.vehicle];
@@ -373,6 +387,8 @@ export class Game {
     }
     this.revives--;
     a.down = false;
+    clearTumble(a);
+    a.impactImmuneUntil = this.time + 2;
     this.tell("Wide awake again! Lead your friend home.");
   }
   attack() {
@@ -381,6 +397,7 @@ export class Game {
       this.shop ||
       this.jail ||
       this.player.stun > 0 ||
+      this.player.ragdoll ||
       this.vehicle !== null
     )
       return;
@@ -449,13 +466,16 @@ export class Game {
       this.vehicle = null;
       this.wanted = 0;
       this.police = [];
+      clearTumble(this.player);
       for (const a of this.animals)
-        if (!a.delivered)
+        if (!a.delivered) {
+          clearTumble(a);
           Object.assign(a, a.origin, {
             following: false,
             down: false,
             boarded: null,
           });
+        }
       this.tell(
         "Time out in the town jail. Release to your farm in five seconds.",
       );
@@ -502,6 +522,18 @@ export class Game {
       }
       return;
     }
+    const bodies = [
+      this.player,
+      ...this.animals.filter((a) => !a.delivered && a.boarded === null),
+      ...this.guards,
+      ...this.police,
+    ];
+    const previousBodies = new Map(
+      bodies.map((body) => [body, { x: body.x, z: body.z, y: body.y || 0 }]),
+    );
+    const recovering = new Set();
+    for (const body of bodies)
+      if (stepTumble(body, dt, this.time, this.level)) recovering.add(body);
     const p = this.player;
     let dx = input.x || 0,
       dz = input.z || 0;
@@ -515,7 +547,7 @@ export class Game {
     }
     if (this.vehicle !== null) {
       const v = this.vehicles[this.vehicle];
-      v.previous = { x: v.x, z: v.z };
+      v.previous = { x: v.x, z: v.z, heading: v.heading };
       const inactive = this.shop || p.stun > 0;
       drive(
         v,
@@ -531,7 +563,7 @@ export class Game {
       p.x = v.x;
       p.z = v.z;
       p.heading = v.heading;
-    } else {
+    } else if (!recovering.has(p)) {
       if (dx || dz) {
         p.heading = Math.atan2(dz, dx);
         const speed = input.run ? 10 : 6.6;
@@ -545,20 +577,60 @@ export class Game {
     }
     for (const v of this.vehicles) {
       if (v.id === this.vehicle) continue;
-      v.previous = { x: v.x, z: v.z };
+      v.previous = { x: v.x, z: v.z, heading: v.heading };
       v.disabled = Math.max(0, v.disabled - dt);
       if (!v.stolen && v.disabled === 0) {
-        const f = FARMS[v.route];
+        const f = FARMS[v.route],
+          oldT = v.t;
         v.t += (v.dir * v.speed * dt) / 330;
         if (v.t > 0.87 || v.t < 0.06) {
           v.dir *= -1;
           v.t = Math.max(0.06, Math.min(0.87, v.t));
         }
-        v.x = f.x * v.t - Math.sin(f.angle) * 2 * v.dir;
-        v.z = f.z * v.t + Math.cos(f.angle) * 2 * v.dir;
-        v.heading = f.angle + (v.dir < 0 ? Math.PI : 0);
-        v.currentSpeed = v.speed;
-      } else v.currentSpeed = 0;
+        const target = {
+          x: f.x * v.t - Math.sin(f.angle) * 2 * v.dir,
+          z: f.z * v.t + Math.cos(f.angle) * 2 * v.dir,
+        };
+        const d = dist(v, target),
+          factor = d ? Math.min(1, (v.speed * dt) / d) : 0;
+        const next = {
+          x: v.x + (target.x - v.x) * factor,
+          z: v.z + (target.z - v.z) * factor,
+        };
+        if (d > 0.01) v.heading = Math.atan2(next.z - v.z, next.x - v.x);
+        if (!vehicleBlocked(v, next, this.level)) {
+          v.x = next.x;
+          v.z = next.z;
+        } else {
+          v.t = oldT;
+          v.disabled = 0.3;
+        }
+      }
+      v.vx = dt ? (v.x - v.previous.x) / dt : 0;
+      v.vz = dt ? (v.z - v.previous.z) / dt : 0;
+      v.currentSpeed = Math.hypot(v.vx, v.vz);
+    }
+    for (const v of this.vehicles)
+      v.impactVelocity = {
+        x: dt ? (v.x - v.previous.x) / dt : 0,
+        z: dt ? (v.z - v.previous.z) / dt : 0,
+      };
+    this.vehicleContacts = resolveVehicleCollisions(
+      this.vehicles,
+      this.time,
+      this.level,
+    );
+    for (const v of this.vehicles)
+      if (
+        Math.hypot(v.vx || 0, v.vz || 0) >
+        Math.hypot(v.impactVelocity.x, v.impactVelocity.z)
+      )
+        v.impactVelocity = { x: v.vx || 0, z: v.vz || 0 };
+    if (this.vehicle !== null) {
+      const v = this.vehicles[this.vehicle];
+      p.x = v.x;
+      p.z = v.z;
+      p.heading = v.heading;
     }
     const herdType = this.herd[0]?.type;
     let recruited = false;
@@ -570,7 +642,7 @@ export class Game {
         a.z = v.z;
         continue;
       }
-      if (a.down) continue;
+      if (a.down || recovering.has(a)) continue;
       const d = dist(a, p);
       if (
         !a.following &&
@@ -624,30 +696,62 @@ export class Game {
         `Herd heist! ${this.herd.length} ${this.herd[0].type} following. Head home or find a vehicle.`,
       );
     }
-    for (const v of this.vehicles) {
-      if (v.currentSpeed < 5 || dist(v, p) > 100) continue;
-      if (this.vehicle !== v.id && p.y < 1.5 && dist(v, p) < 2.1) this.hurt();
-      for (const a of this.animals) {
-        if (a.delivered || a.down || a.boarded !== null || dist(a, v) > 2)
-          continue;
-        a.down = true;
-        if (a.following)
-          this.tell(
-            "An animal is snoozing after a bump. Use R nearby with a wake-up snack.",
-          );
-      }
-      if (v.id === this.vehicle && v.currentSpeed > 10) {
-        for (const g of [...this.guards, ...this.police])
-          if (g.down <= 0 && dist(g, v) < 2) {
-            this.hitGuard(g, 5);
-            this.crime(0.3);
+    this.updateOpponents(dt, recovering);
+    this.updateShots(dt);
+    for (const body of [p, ...this.animals, ...this.guards, ...this.police]) {
+      if (this.jail) break;
+      if (
+        body.delivered ||
+        body.boarded != null ||
+        body.ragdoll ||
+        (body === p && (this.vehicle !== null || this.jail))
+      )
+        continue;
+      for (const v of this.vehicles) {
+        if (dist(v, body) > 14) continue;
+        const velocity = v.impactVelocity || { x: 0, z: 0 },
+          speed = Math.hypot(velocity.x, velocity.z);
+        const from = previousBodies.get(body) || body;
+        if (
+          speed >= 4 &&
+          this.time >= (body.impactImmuneUntil || 0) &&
+          !(body === p && p.invulnerable > 0) &&
+          vehiclePersonContact(v, from, body, body.type === "cow" ? 0.7 : 0.5)
+        ) {
+          if (body === p) {
+            this.hurt();
+            if (this.jail) break;
           }
+          if (startTumble(body, velocity, this.time)) {
+            if (body !== p) body.down = body.type ? true : 6;
+            if (v.id === this.vehicle && !body.type && body !== p)
+              this.crime(0.3);
+            if (body.type && body.following)
+              this.tell(
+                "A cartoon tumble! Your friend will wake up soon, or use R with a wake-up snack.",
+              );
+          }
+          break;
+        }
+        if ((body.y || 0) < 2.2) {
+          const overlap = circleVehicle(
+            body,
+            v,
+            body.type === "cow" ? 0.7 : 0.5,
+          );
+          if (overlap)
+            move(
+              body,
+              overlap.x * (overlap.depth + 0.02),
+              overlap.z * (overlap.depth + 0.02),
+              0.5,
+              this.level,
+            );
+        }
       }
     }
-    this.updateOpponents(dt);
-    this.updateShots(dt);
     const home = this.atHome;
-    if (home) {
+    if (home && !p.ragdoll) {
       this.player.hp = this.player.maxHp;
       this.homeTimer += dt;
       if (this.phase === "intro") this.arrive();
@@ -660,7 +764,7 @@ export class Game {
       this.homeTimer = 0;
     }
   }
-  updateOpponents(dt) {
+  updateOpponents(dt, recovering = new Set()) {
     const p = this.player;
     if (this.wanted > 0) {
       const required = Math.ceil(this.wanted) * 2;
@@ -677,7 +781,9 @@ export class Game {
           cooldown: 2,
         });
       }
-      const seen = this.police.some((g) => g.down <= 0 && dist(g, p) < 33);
+      const seen = this.police.some(
+        (g) => g.down <= 0 && !g.ragdoll && dist(g, p) < 33,
+      );
       this.escape = seen ? 0 : this.escape + dt;
       if (this.escape >= 12) {
         this.wanted = Math.max(0, this.wanted - 1);
@@ -692,7 +798,7 @@ export class Game {
     }
     for (const g of [...this.guards, ...this.police]) {
       g.down = Math.max(0, g.down - dt);
-      if (g.down > 0) continue;
+      if (g.down > 0 || recovering.has(g) || g.ragdoll) continue;
       g.cooldown -= dt;
       const f = g.farm === undefined ? null : FARMS[g.farm];
       const d = dist(g, p);

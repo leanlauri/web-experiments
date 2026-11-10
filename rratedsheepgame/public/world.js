@@ -56,6 +56,12 @@ function animalModel(type) {
       goat: 0xc5ad8d,
       alpaca: 0xe6c79f,
     };
+  g.userData.limbs = [];
+  g.userData.head = new T.Vector3(
+    0,
+    type === "alpaca" ? 2 : 1.1,
+    type === "alpaca" ? 0.65 : 0.95,
+  );
   const c = colors[type],
     size = type === "cow" ? 1.3 : type === "rabbit" ? 0.65 : 1;
   shape(g, c, 0, 0.9, 0, 0.65, 0.58, 1, sphere);
@@ -72,7 +78,7 @@ function animalModel(type) {
   );
   for (const x of [-0.4, 0.4])
     for (const z of [-0.55, 0.55])
-      shape(g, 0x665b4c, x, 0.35, z, 0.17, 0.65, 0.18);
+      g.userData.limbs.push(shape(g, 0x665b4c, x, 0.35, z, 0.17, 0.65, 0.18));
   for (const x of [-0.23, 0.23]) {
     shape(g, 0xffffff, x, 1.22, 1.27, 0.1, 0.1, 0.06, sphere);
     shape(g, 0x293935, x, 1.22, 1.32, 0.045, 0.055, 0.03, sphere);
@@ -114,6 +120,8 @@ function animalModel(type) {
 }
 function person(color = 0x52878c, police = false) {
   const g = new T.Group();
+  g.userData.limbs = [];
+  g.userData.head = new T.Vector3(0, 1.7, 0);
   shape(g, color, 0, 1, 0, 0.65, 0.9, 0.45);
   shape(g, 0xecc49d, 0, 1.7, 0, 0.29, 0.32, 0.28, sphere);
   shape(g, police ? 0x203e65 : 0xdcc491, 0, 1.97, 0, 0.43, 0.09, 0.4, cylinder);
@@ -128,8 +136,10 @@ function person(color = 0x52878c, police = false) {
     0.28,
     cylinder,
   );
-  for (const x of [-0.2, 0.2]) shape(g, 0x454c45, x, 0.35, 0, 0.22, 0.7, 0.26);
-  for (const x of [-0.43, 0.43]) shape(g, color, x, 1, 0, 0.18, 0.65, 0.23);
+  for (const x of [-0.2, 0.2])
+    g.userData.limbs.push(shape(g, 0x454c45, x, 0.35, 0, 0.22, 0.7, 0.26));
+  for (const x of [-0.43, 0.43])
+    g.userData.limbs.push(shape(g, color, x, 1, 0, 0.18, 0.65, 0.23));
   if (police) shape(g, 0xf5d779, -0.2, 1.2, 0.24, 0.13, 0.18, 0.04);
   return g;
 }
@@ -414,6 +424,84 @@ export function createWorld(canvas) {
         }
       }
   }
+  const starCanvas = document.createElement("canvas");
+  starCanvas.width = starCanvas.height = 64;
+  const starContext = starCanvas.getContext("2d");
+  starContext.fillStyle = "#ffe36d";
+  starContext.strokeStyle = "#b58121";
+  starContext.lineWidth = 2;
+  starContext.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i * Math.PI) / 5 - Math.PI / 2,
+      r = i % 2 ? 13 : 29;
+    const x = 32 + Math.cos(a) * r,
+      y = 32 + Math.sin(a) * r;
+    i ? starContext.lineTo(x, y) : starContext.moveTo(x, y);
+  }
+  starContext.closePath();
+  starContext.fill();
+  starContext.stroke();
+  const starMaterial = new T.SpriteMaterial({
+    map: new T.CanvasTexture(starCanvas),
+    depthTest: false,
+  });
+  const headPosition = new T.Vector3();
+  function poseBody(g, p, down = false) {
+    if (!g.userData.head) return;
+    if (!g.userData.pivot) {
+      const pivot = new T.Group();
+      pivot.position.y = 0.9;
+      for (const child of [...g.children]) {
+        child.position.y -= 0.9;
+        pivot.add(child);
+      }
+      g.add(pivot);
+      g.userData.pivot = pivot;
+      const stars = new T.Group();
+      for (let i = 0; i < 4; i++) {
+        const sprite = new T.Sprite(starMaterial);
+        sprite.scale.set(0.48, 0.48, 1);
+        stars.add(sprite);
+      }
+      g.add(stars);
+      g.userData.stars = stars;
+      g.userData.bounds = new T.Box3();
+    }
+    const pivot = g.userData.pivot,
+      r = p.ragdoll,
+      alpha = r?.phase === "recovering" ? r.recovery : 0;
+    pivot.rotation.set(r ? r.rx : 0, 0, r ? r.rz : down ? Math.PI / 2 : 0);
+    pivot.position.y =
+      0.9 - ((r && (p.y || 0) < 0.1) || down ? 0.45 : 0) * (1 - alpha);
+    for (let i = 0; i < g.userData.limbs.length; i++)
+      g.userData.limbs[i].rotation.x = r
+        ? Math.sin(r.age * 11 + i * 1.8) * 1.1 * (1 - alpha)
+        : 0;
+    if (r || down) {
+      g.updateMatrixWorld(true);
+      g.userData.bounds.setFromObject(pivot);
+      pivot.position.y += Math.max(0, -g.userData.bounds.min.y);
+    }
+    const stars = g.userData.stars;
+    stars.visible = !!r || down || (p.starsUntil || 0) > currentTime;
+    if (stars.visible) {
+      pivot.updateMatrix();
+      headPosition.copy(g.userData.head);
+      headPosition.y -= 0.9;
+      headPosition.applyMatrix4(pivot.matrix);
+      stars.position.copy(headPosition);
+      stars.position.y += 0.45;
+      stars.children.forEach((star, i) => {
+        const a = currentTime * 3 + (i * Math.PI) / 2;
+        star.position.set(
+          Math.cos(a) * 0.6,
+          Math.sin(a * 2) * 0.08,
+          Math.sin(a) * 0.6,
+        );
+      });
+    }
+  }
+  let currentTime = 0;
   function actor(id, create, p, down = false, hidden = false) {
     let g = actors.get(id);
     if (hidden || dist(p, gamePlayer) > 150) {
@@ -442,9 +530,10 @@ export function createWorld(canvas) {
       wheel.rotation.y = -(p.steerAngle || 0);
     g.userData.shadow.visible = true;
     g.userData.shadow.position.set(p.x, 0.22, p.z);
-    g.position.set(p.x, down ? 0.5 : 0, p.z);
-    g.rotation.set(0, Math.PI / 2 - p.heading, down ? Math.PI / 2 : 0);
-    if (!down)
+    g.position.set(p.x, p.y || 0, p.z);
+    g.rotation.set(0, Math.PI / 2 - p.heading, 0);
+    poseBody(g, p, down);
+    if (!down && !p.ragdoll)
       g.position.y +=
         Math.sin(performance.now() * 0.006 + (p.phase || 0)) * 0.04;
   }
@@ -568,6 +657,7 @@ export function createWorld(canvas) {
     if (node.isSprite) placeLabels.push(node);
   });
   function render(game) {
+    currentTime = game.time;
     updateSkids(game);
     for (const sprite of placeLabels) sprite.visible = !compactLabels.matches;
     gamePlayer = game.player;
@@ -598,19 +688,17 @@ export function createWorld(canvas) {
       updateChunks(game.player);
       fences(game.level);
       player.visible = game.vehicle === null;
-      player.position.set(
-        game.player.x,
-        game.player.y + (game.player.stun ? 0.6 : 0),
-        game.player.z,
-      );
-      player.rotation.set(
-        0,
-        Math.PI / 2 - game.player.heading,
-        game.player.stun ? Math.PI / 2 : 0,
+      player.position.set(game.player.x, game.player.y, game.player.z);
+      player.rotation.set(0, Math.PI / 2 - game.player.heading, 0);
+      poseBody(
+        player,
+        game.player,
+        game.player.stun > 0 && !game.player.ragdoll,
       );
       player.visible =
         player.visible &&
-        !(game.player.invulnerable > 0 && Math.floor(game.time * 12) % 2);
+        (!!game.player.ragdoll ||
+          !(game.player.invulnerable > 0 && Math.floor(game.time * 12) % 2));
       const live = new Set();
       for (const a of game.animals) {
         const id = `a${a.id}`;
@@ -697,6 +785,9 @@ export function createWorld(canvas) {
     },
     stats() {
       return {
+        recoveringActors: [player, ...actors.values()].filter(
+          (g) => g.visible && g.userData.stars?.visible,
+        ).length,
         skidmarks: skidMesh.count,
         cameraHeight: camera.position.y,
         chunks: chunks.size,

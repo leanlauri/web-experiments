@@ -14,7 +14,9 @@ Animal theft, vehicle theft and weapon use raise wanted stars. Police pursue on 
 
 Stay at home for four seconds to settle a trip. Conscious animals inside the home area or riding in your vehicle earn $8 each and permanent rocket credit. Every other animal from a big farm, including lost and unconscious animals, resets to its original location. Successful trips increase guard numbers, armor, pursuit speed and firing frequency; later upgrades narrow gates and add fence rails. Difficulty caps at eight defense tiers.
 
-All combat is nonlethal. Guards and police wake after twelve seconds. Animals knocked out by traffic or projectiles need wake-up snacks (R nearby) or reset when you return home. Snacks cost $15 per three; the opening journey replenishes a minimum of three at home to prevent getting stuck. Start with three hearts and buy upgrades to six. A knockout costs one heart and briefly stuns the player. At zero, spend five seconds in jail, lose the current herd, then return home healed.
+Cars have oriented solid colliders matched to their body sizes, swept collision checks and mass-dependent impact response. They block one another and pedestrians; traffic pauses and changes direction after a crash. Vehicle hits send people, the player and animals through airborne cartoon tumbles with floppy limbs, a short get-up animation and orbiting stars. Traffic victims recover automatically after settling, with two seconds of stars and impact protection afterward. Wake-up snacks can revive animals sooner. Weapon knockouts still need snacks or a home reset.
+
+All combat is nonlethal. Guards and police wake after twelve seconds. Animals knocked out by projectiles need wake-up snacks (R nearby) or reset when you return home; traffic tumbles also recover automatically. Snacks cost $15 per three; the opening journey replenishes a minimum of three at home to prevent getting stuck. Start with three hearts and buy upgrades to six. A knockout costs one heart and briefly stuns the player. At zero, spend five seconds in jail, lose the current herd, then return home healed.
 
 Buy a cushion club, foam bat, bubble wand, foam blaster and pillow launcher. Melee attacks target the nearest opponent in reach; projectiles auto-aim at the nearest opponent in range and can hit animals along their path. Buildings stop projectiles. Five rocket parts unlock at 12, 20, 30, 42 and 56 cumulative animal deliveries. These credits are not consumed. Install each part at home, then launch to see the rocket orbiting the Moon as the credits roll.
 
@@ -43,10 +45,12 @@ The previous countryside implementation and its standalone physics tests remain 
 Run from the repository root:
 
 ```sh
+node rratedsheepgame/tests/vehicle-impacts.mjs
 node rratedsheepgame/tests/driving.mjs
 node rratedsheepgame/tests/adventure.mjs
 node rratedsheepgame/tests/adventure-browser.cjs
 node rratedsheepgame/tests/driving-browser.cjs
+node rratedsheepgame/tests/vehicle-impacts-browser.cjs
 ```
 
 The first checks the six roads and bridges, opening journey, one-species rule, capacity, theft, revival, payouts, resetting lost animals, wanted decay, jail, upgrades, defense scaling, save/load, collisions, friendly fire and the rocket ending. It walks actual flock simulations through all six farm gates and town to home.

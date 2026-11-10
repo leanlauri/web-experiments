@@ -1,6 +1,6 @@
-import { Game } from "./simulation.js?v=directional-drift-1";
+import { Game } from "./simulation.js?v=vehicle-impacts-1";
 import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.js";
-import { createWorld } from "./world.js?v=directional-drift-1";
+import { createWorld } from "./world.js?v=vehicle-impacts-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -521,8 +521,22 @@ window.sheepGame = {
           },
     wanted: game.wanted,
     hearts: game.player.hp,
+    recovery: game.player.ragdoll
+      ? {
+          phase: game.player.ragdoll.phase,
+          height: game.player.y,
+          rx: game.player.ragdoll.rx,
+          rz: game.player.ragdoll.rz,
+        }
+      : null,
     money: game.money,
     parts: game.parts,
+    tumbling: {
+      player: !!game.player.ragdoll,
+      animals: game.animals.filter((a) => a.ragdoll).length,
+      people: [...game.guards, ...game.police].filter((g) => g.ragdoll).length,
+    },
+    vehicleContacts: game.vehicleContacts || 0,
     skidmarks: game.skidmarks.length,
     stats: world.stats(),
   }),
