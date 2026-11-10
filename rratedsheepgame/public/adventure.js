@@ -1,6 +1,6 @@
-import { Game } from "./simulation.js";
+import { Game } from "./simulation.js?v=car-handling-1";
 import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.js";
-import { createWorld } from "./world.js";
+import { createWorld } from "./world.js?v=car-handling-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -19,6 +19,7 @@ const keys = new Set(),
   stick = { x: 0, y: 0 },
   panels = ["help", "atlas", "menu"];
 const compactHUD = matchMedia("(max-width: 750px), (pointer: coarse)");
+let touchBrake = false;
 let jump = false,
   lastSave = null,
   shopSignature = "",
@@ -77,6 +78,7 @@ function clearInput() {
   keys.clear();
   stick.x = stick.y = 0;
   jump = false;
+  touchBrake = false;
   $("stick-knob").style.transform = "";
 }
 addEventListener("blur", clearInput);
@@ -119,8 +121,18 @@ for (const b of document.querySelectorAll("[data-action]"))
     e.preventDefault();
     if (!$("menu").hidden) clearInput();
     $("menu").hidden = true;
+    if (b.dataset.action === "jump" && game.vehicle !== null) {
+      touchBrake = true;
+      b.setPointerCapture(e.pointerId);
+    }
     action(b.dataset.action);
   });
+for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
+  document
+    .querySelector('.touch-actions [data-action="jump"]')
+    .addEventListener(event, () => {
+      touchBrake = false;
+    });
 function closeMenu() {
   $("menu").hidden = true;
 }
@@ -389,6 +401,11 @@ function hud() {
       ? `Settling trip · ${Math.max(0, Math.ceil(4 - game.homeTimer))}s`
       : "Hearts restored · B for shop"
     : `Home · ${Math.round(dist(game.player, HOME))} m`;
+  document.querySelector('.touch-actions [data-action="jump"]').textContent =
+    game.vehicle === null ? "Jump" : "Brake";
+  document.querySelector(
+    '.touch-actions [data-action="interact"]',
+  ).textContent = game.vehicle === null ? "Ride" : "Exit";
   $("status").dataset.wanted = stars > 0 ? "active" : "clear";
   $("mobile-summary").textContent =
     `${intro ? `${herd.length}/${12 - game.introDelivered} sheep` : `${awake.length} ${herd[0]?.type || "animals"}`}${herd.some((a) => a.down) ? " · needs revival" : ""} · ${game.atHome ? (!game.homeInside && !intro ? `Home · settling ${Math.max(0, Math.ceil(4 - game.homeTimer))}s` : "At home") : `Home ${Math.round(dist(game.player, HOME))}m`}`;
@@ -448,6 +465,9 @@ function frame(now) {
       if (keys.has("KeyA") || keys.has("ArrowLeft")) x -= 1;
       if (keys.has("KeyD") || keys.has("ArrowRight")) x += 1;
       game.update(1 / 60, {
+        throttle: -z,
+        steer: x,
+        brake: touchBrake || keys.has("Space"),
         x: x * 0.768 + z * 0.64,
         z: -x * 0.64 + z * 0.768,
         run:
@@ -480,6 +500,14 @@ window.sheepGame = {
     sheep: game.animals
       .filter((a) => a.farm === -1)
       .map((a) => ({ position: [a.x, 0, a.z], following: a.following })),
+    vehicle:
+      game.vehicle === null
+        ? null
+        : {
+            id: game.vehicle,
+            heading: game.vehicles[game.vehicle].heading,
+            speed: game.vehicles[game.vehicle].driveSpeed || 0,
+          },
     wanted: game.wanted,
     hearts: game.player.hp,
     money: game.money,

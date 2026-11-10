@@ -236,10 +236,16 @@ for (const f of FARMS) {
   unlock(g);
   at(g, { x: 200, z: 0 });
   g.vehicle = 0;
-  Object.assign(g.vehicles[0], { x: 200, z: 0, stolen: true });
+  Object.assign(g.vehicles[0], {
+    x: 200,
+    z: 0,
+    heading: 0,
+    stolen: true,
+    driveSpeed: 18,
+  });
   const a = g.animals.find((a) => a.farm === 0);
   Object.assign(a, { x: 202, z: 0, following: true });
-  g.update(0.05, { x: 1, z: 0 });
+  g.update(0.05, { throttle: 1 });
   assert(a.down, "driving into an animal causes sleep");
   const h = new Game();
   h.revives = 0;

@@ -9,7 +9,7 @@ sudo -n mkdir -p "$destination"
 sudo -n rsync -rlt --delete --chmod=D755,F644 "$project_dir/public/" "$destination/"
 curl --fail --silent --show-error http://localhost:80/web-experiments/rratedsheepgame/ | cmp -s "$project_dir/public/index.html" -
 # Module scripts require a JavaScript MIME type; a successful download alone is insufficient.
-for asset in adventure.js simulation.js region.js world.js vendor/three.module.js; do
+for asset in adventure.js simulation.js region.js world.js driving.js vendor/three.module.js; do
   mime="$(curl --fail --silent --show-error -o /dev/null -w '%{content_type}' "http://localhost:80/web-experiments/rratedsheepgame/$asset")"
   case "$mime" in
     application/javascript*|text/javascript*|application/ecmascript*|text/ecmascript*) ;;

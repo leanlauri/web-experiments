@@ -139,10 +139,12 @@ function carModel(v) {
   shape(g, color, 0, 0.8, 0, 2.2, 1, length);
   shape(g, color, 0, 1.7, -0.2, 2, 1, length * 0.65);
   shape(g, 0xb8e1df, 0, 1.8, length * 0.33, 1.75, 0.65, 0.05);
+  g.userData.frontWheels = [];
   for (const x of [-1.15, 1.15])
     for (const z of [-length * 0.32, length * 0.32]) {
       const w = shape(g, 0x37433c, x, 0.5, z, 0.43, 0.26, 0.43, cylinder);
       w.rotation.z = Math.PI / 2;
+      if (z > 0) g.userData.frontWheels.push(w);
     }
   for (const x of [-0.7, 0.7])
     shape(g, 0xffeab2, x, 0.85, length / 2 + 0.02, 0.35, 0.22, 0.08);
@@ -435,6 +437,8 @@ export function createWorld(canvas) {
       g.userData.shadow = shadow;
     }
     g.visible = true;
+    for (const wheel of g.userData.frontWheels || [])
+      wheel.rotation.y = -(p.steerAngle || 0);
     g.userData.shadow.visible = true;
     g.userData.shadow.position.set(p.x, 0.22, p.z);
     g.position.set(p.x, down ? 0.5 : 0, p.z);

@@ -1,3 +1,4 @@
+import { drive } from "./driving.js";
 import {
   HOME,
   START,
@@ -6,7 +7,6 @@ import {
   PARTS,
   dist,
   move,
-  road,
   routeTarget,
   OBSTACLES,
 } from "./region.js";
@@ -309,6 +309,7 @@ export class Game {
       const v = this.vehicles[this.vehicle];
       this.player.x = v.x + Math.cos(v.heading + Math.PI / 2) * 3;
       this.player.z = v.z + Math.sin(v.heading + Math.PI / 2) * 3;
+      v.driveSpeed = v.currentSpeed = 0;
       this.vehicle = null;
       for (const a of this.herd)
         if (a.boarded === v.id) {
@@ -326,6 +327,7 @@ export class Game {
       this.tell("Get closer to a vehicle, then press E to board.");
       return;
     }
+    v.driveSpeed = v.currentSpeed || (!v.stolen ? v.speed : 0);
     if (!v.stolen) {
       v.stolen = true;
       this.crime(1);
@@ -333,6 +335,8 @@ export class Game {
     }
     v.occupied = false;
     this.vehicle = v.id;
+    this.player.heading = v.heading;
+    this.player.y = this.player.vy = 0;
     let room = v.seats - 1;
     for (const a of this.herd) {
       if (!a.down && dist(a, this.player) < 18 && room > 0) {
@@ -340,8 +344,10 @@ export class Game {
         room--;
       }
     }
+    this.player.x = v.x;
+    this.player.z = v.z;
     this.tell(
-      `${v.kind}: ${v.seats - 1 - room}/${v.seats - 1} animal seats filled. Any remaining animals follow on foot.`,
+      `${v.kind}: ${v.seats - 1 - room}/${v.seats - 1} animal seats filled. Up/down accelerates or brakes/reverses; left/right steers. Space / Brake stops.`,
     );
   }
   revive() {
@@ -486,8 +492,7 @@ export class Game {
       }
       return;
     }
-    const p = this.player,
-      old = { x: p.x, z: p.z };
+    const p = this.player;
     let dx = input.x || 0,
       dz = input.z || 0;
     const len = Math.hypot(dx, dz);
@@ -498,31 +503,34 @@ export class Game {
     if (this.shop || p.stun > 0) {
       dx = dz = 0;
     }
-    if (dx || dz) {
-      p.heading = Math.atan2(dz, dx);
-      const speed =
-        this.vehicle !== null ? (road(p) ? 32 : 17) : input.run ? 10 : 6.6;
-      move(
-        p,
-        dx * speed * dt,
-        dz * speed * dt,
-        this.vehicle !== null ? 1.4 : 0.5,
-        this.level,
-      );
-    }
-    if (input.jump && p.y === 0 && this.vehicle === null && !this.shop)
-      p.vy = 7;
-    if (p.y > 0 || p.vy > 0) {
-      p.vy -= 20 * dt;
-      p.y = Math.max(0, p.y + p.vy * dt);
-    }
     if (this.vehicle !== null) {
       const v = this.vehicles[this.vehicle];
       v.previous = { x: v.x, z: v.z };
-      v.x = p.x;
-      v.z = p.z;
-      v.heading = p.heading;
-      v.currentSpeed = dist(p, old) / dt;
+      const inactive = this.shop || p.stun > 0;
+      drive(
+        v,
+        dt,
+        {
+          throttle: inactive ? 0 : input.throttle,
+          steer: inactive ? 0 : input.steer,
+          brake: inactive || input.brake,
+        },
+        this.level,
+      );
+      p.x = v.x;
+      p.z = v.z;
+      p.heading = v.heading;
+    } else {
+      if (dx || dz) {
+        p.heading = Math.atan2(dz, dx);
+        const speed = input.run ? 10 : 6.6;
+        move(p, dx * speed * dt, dz * speed * dt, 0.5, this.level);
+      }
+      if (input.jump && p.y === 0 && !this.shop) p.vy = 7;
+      if (p.y > 0 || p.vy > 0) {
+        p.vy -= 20 * dt;
+        p.y = Math.max(0, p.y + p.vy * dt);
+      }
     }
     for (const v of this.vehicles) {
       if (v.id === this.vehicle) continue;
