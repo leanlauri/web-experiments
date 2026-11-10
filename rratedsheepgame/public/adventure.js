@@ -1,6 +1,6 @@
-import { Game } from "./simulation.js?v=vehicle-impacts-1";
+import { Game } from "./simulation.js?v=continuous-traffic-1";
 import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.js";
-import { createWorld } from "./world.js?v=vehicle-impacts-1";
+import { createWorld } from "./world.js?v=continuous-traffic-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;

@@ -194,9 +194,18 @@ export function createWorld(canvas) {
   const roadMat = material(0x69766b);
   for (const f of [...FARMS, HOME]) {
     const r = Math.hypot(f.x, f.z),
-      strip = shape(world, 0x69766b, f.x / 2, 0.08, f.z / 2, 11, 0.12, r + 6);
+      strip = shape(
+        world,
+        0x69766b,
+        ((f.x / r) * (r + 27)) / 2,
+        0.08,
+        ((f.z / r) * (r + 27)) / 2,
+        11,
+        0.12,
+        r - 27,
+      );
     strip.rotation.y = Math.atan2(f.x, f.z);
-    for (let d = 12; d < r; d += 10) {
+    for (let d = 36; d < r; d += 10) {
       const line = shape(
         world,
         0xd6d1af,
@@ -210,6 +219,20 @@ export function createWorld(canvas) {
       line.rotation.y = strip.rotation.y;
     }
   }
+  const townJunction = new T.Mesh(
+    new T.RingGeometry(15, 29, 64),
+    material(0x69766b),
+  );
+  townJunction.rotation.x = -Math.PI / 2;
+  townJunction.position.y = 0.155;
+  world.add(townJunction);
+  const townIsland = new T.Mesh(
+    new T.CircleGeometry(15, 48),
+    material(0x91b578),
+  );
+  townIsland.rotation.x = -Math.PI / 2;
+  townIsland.position.y = 0.155;
+  world.add(townIsland);
   const ring = new T.Mesh(new T.RingGeometry(94, 106, 96), roadMat);
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.14;

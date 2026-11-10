@@ -8,13 +8,13 @@ Begin in Clover Meadow with twelve sheep. Walk close to recruit them and lead th
 
 The 920 × 920 m region has a central town and six large faction farms connected by roads. Six rivers divide the outer farms; the town ring road bridges the rivers. Farm gates face town. Sunflower Union raises sheep, Rosewood Riders pigs, Bluebell Dairy cows, Copper Carrot Co. rabbits, Mint Meadow goats, and Violet Valley alpacas. Each has its own colors, guard temperament and weapon preference.
 
-Recruit one species per trip. A vehicle reserves one seat for the driver and one for each animal. Nearby conscious followers board automatically; overflow follows on foot. Traffic continually runs on the six main roads, and its vehicles can be hijacked. Your own van is free to use without committing a vehicle crime.
+Recruit one species per trip. A vehicle reserves one seat for the driver and one for each animal. Nearby conscious followers board automatically; overflow follows on foot. Forty-eight traffic vehicles follow continuous closed routes along all six farm roads and a new town roundabout. Farm-end turns use smooth curves; cars keep their heading through route seams, slow for corners, follow queues and yield when merging. Their vehicles can be hijacked. Your own van is free to use without committing a vehicle crime.
 
 Animal theft, vehicle theft and weapon use raise wanted stars. Police pursue on foot and fire foam projectiles. Keep more than 33 m from every conscious police officer for 12 uninterrupted seconds to lose one star; repeat until clear. Home prevents hostile shots and restores hearts, but does not erase a police search.
 
 Stay at home for four seconds to settle a trip. Conscious animals inside the home area or riding in your vehicle earn $8 each and permanent rocket credit. Every other animal from a big farm, including lost and unconscious animals, resets to its original location. Successful trips increase guard numbers, armor, pursuit speed and firing frequency; later upgrades narrow gates and add fence rails. Difficulty caps at eight defense tiers.
 
-Cars have oriented solid colliders matched to their body sizes, swept collision checks and mass-dependent impact response. They block one another and pedestrians; traffic pauses and changes direction after a crash. Vehicle hits send people, the player and animals through airborne cartoon tumbles with floppy limbs, a short get-up animation and orbiting stars. Traffic victims recover automatically after settling, with two seconds of stars and impact protection afterward. Wake-up snacks can revive animals sooner. Weapon knockouts still need snacks or a home reset.
+Cars have oriented solid colliders matched to their body sizes, swept collision checks and mass-dependent impact response. They block one another and pedestrians; traffic pauses and rejoins its existing route after a crash. Vehicle hits send people, the player and animals through airborne cartoon tumbles with floppy limbs, a short get-up animation and orbiting stars. Traffic victims recover automatically after settling, with two seconds of stars and impact protection afterward. Wake-up snacks can revive animals sooner. Weapon knockouts still need snacks or a home reset.
 
 All combat is nonlethal. Guards and police wake after twelve seconds. Animals knocked out by projectiles need wake-up snacks (R nearby) or reset when you return home; traffic tumbles also recover automatically. Snacks cost $15 per three; the opening journey replenishes a minimum of three at home to prevent getting stuck. Start with three hearts and buy upgrades to six. A knockout costs one heart and briefly stuns the player. At zero, spend five seconds in jail, lose the current herd, then return home healed.
 
@@ -34,7 +34,7 @@ The help and region-map panels pause the simulation. The workshop stops player m
 
 ## Implementation and performance
 
-`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `driving.js` simulates directional steering, independent planar momentum, tire traction, braking and solid vehicle collisions. `skidmarks.js` records bounded tire trails with an eight-second lifetime; the renderer draws them in one instanced call with per-segment fading. The camera tracks ground position during jumps. Shop prices remain visible as separate labels, including on unaffordable or owned items. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
+`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `traffic.js` defines arc-length sampled traffic routes and following/merge behavior. `driving.js` simulates directional steering, independent planar momentum, tire traction, braking and solid vehicle collisions. `skidmarks.js` records bounded tire trails with an eight-second lifetime; the renderer draws them in one instanced call with per-segment fading. The camera tracks ground position during jumps. Shop prices remain visible as separate labels, including on unaffordable or owned items. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
 
 The renderer maintains at most 49 nearby 64 m scenery chunks. Trees use instanced meshes; departing chunks are removed and their instance resources disposed. Actors beyond 150 m are hidden, distant ambient animals and guards skip AI movement, and static geometry uses frustum culling. Actor meshes and geometry/materials are reused; no remote assets are streamed. The map remains lightweight simulation data. The view is fog-limited with adjustable zoom and capped pixel density. Buildings, farm fences, water and region boundaries block movement; decorative trees and crops do not.
 
@@ -45,12 +45,14 @@ The previous countryside implementation and its standalone physics tests remain 
 Run from the repository root:
 
 ```sh
+node rratedsheepgame/tests/traffic.mjs
 node rratedsheepgame/tests/vehicle-impacts.mjs
 node rratedsheepgame/tests/driving.mjs
 node rratedsheepgame/tests/adventure.mjs
 node rratedsheepgame/tests/adventure-browser.cjs
 node rratedsheepgame/tests/driving-browser.cjs
 node rratedsheepgame/tests/vehicle-impacts-browser.cjs
+node rratedsheepgame/tests/traffic-browser.cjs
 ```
 
 The first checks the six roads and bridges, opening journey, one-species rule, capacity, theft, revival, payouts, resetting lost animals, wanted decay, jail, upgrades, defense scaling, save/load, collisions, friendly fire and the rocket ending. It walks actual flock simulations through all six farm gates and town to home.

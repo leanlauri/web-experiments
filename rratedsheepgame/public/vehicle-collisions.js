@@ -161,7 +161,7 @@ export function resolveVehicleCollisions(vehicles, time, level = 0) {
           if (time >= (v.collisionUntil || 0)) {
             v.collisionUntil = time + 1;
             v.disabled = Math.max(v.disabled || 0, 0.8);
-            if (!v.stolen) v.dir *= -1;
+            // Traffic keeps its route after a crash; never flip its lane or heading.
           }
         }
       }

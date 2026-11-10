@@ -1,11 +1,15 @@
 import {
+  createTraffic,
+  stepTraffic,
+} from "./traffic.js?v=continuous-traffic-1";
+import {
   resolveVehicleCollisions,
   vehiclePersonContact,
   circleVehicle,
   vehicleBlocked,
-} from "./vehicle-collisions.js?v=vehicle-impacts-1";
+} from "./vehicle-collisions.js?v=continuous-traffic-1";
 import { startTumble, stepTumble, clearTumble } from "./tumbles.js";
-import { drive } from "./driving.js?v=vehicle-impacts-1";
+import { drive } from "./driving.js?v=continuous-traffic-1";
 import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js";
 import {
   HOME,
@@ -80,43 +84,7 @@ export class Game {
           f.z + 8 + Math.sin(i * 2.4) * (5 + i * 0.48),
         );
     }
-    for (let i = 0; i < 24; i++) {
-      const f = FARMS[i % 6],
-        t = 0.16 + Math.floor(i / 6) * 0.19,
-        direction = (Math.floor(i / 6) + i) % 2 ? 1 : -1;
-      this.vehicles.push({
-        id: i,
-        x: f.x * t - Math.sin(f.angle) * 2 * direction,
-        z: f.z * t + Math.cos(f.angle) * 2 * direction,
-        heading: f.angle + (direction > 0 ? 0 : Math.PI),
-        route: i % 6,
-        t,
-        dir: direction,
-        speed: 9 + (i % 4),
-        seats: [2, 4, 7, 13][i % 4],
-        kind: ["buggy", "car", "van", "bus"][i % 4],
-        stolen: false,
-        occupied: true,
-        disabled: 0,
-        previous: null,
-      });
-    }
-    this.vehicles.push({
-      id: 24,
-      x: -9,
-      z: HOME.z + 7,
-      heading: 0,
-      route: 0,
-      t: 0,
-      dir: 1,
-      speed: 0,
-      seats: 7,
-      kind: "van",
-      stolen: true,
-      occupied: false,
-      disabled: 0,
-      previous: null,
-    });
+    this.vehicles = createTraffic();
     if (
       save &&
       save.version === 1 &&
@@ -579,33 +547,7 @@ export class Game {
       if (v.id === this.vehicle) continue;
       v.previous = { x: v.x, z: v.z, heading: v.heading };
       v.disabled = Math.max(0, v.disabled - dt);
-      if (!v.stolen && v.disabled === 0) {
-        const f = FARMS[v.route],
-          oldT = v.t;
-        v.t += (v.dir * v.speed * dt) / 330;
-        if (v.t > 0.87 || v.t < 0.06) {
-          v.dir *= -1;
-          v.t = Math.max(0.06, Math.min(0.87, v.t));
-        }
-        const target = {
-          x: f.x * v.t - Math.sin(f.angle) * 2 * v.dir,
-          z: f.z * v.t + Math.cos(f.angle) * 2 * v.dir,
-        };
-        const d = dist(v, target),
-          factor = d ? Math.min(1, (v.speed * dt) / d) : 0;
-        const next = {
-          x: v.x + (target.x - v.x) * factor,
-          z: v.z + (target.z - v.z) * factor,
-        };
-        if (d > 0.01) v.heading = Math.atan2(next.z - v.z, next.x - v.x);
-        if (!vehicleBlocked(v, next, this.level)) {
-          v.x = next.x;
-          v.z = next.z;
-        } else {
-          v.t = oldT;
-          v.disabled = 0.3;
-        }
-      }
+      if (!v.stolen) stepTraffic(v, dt, this.vehicles, this.level);
       v.vx = dt ? (v.x - v.previous.x) / dt : 0;
       v.vz = dt ? (v.z - v.previous.z) / dt : 0;
       v.currentSpeed = Math.hypot(v.vx, v.vz);

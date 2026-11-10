@@ -114,8 +114,8 @@ function trafficScenario(kind) {
   const v = {
     ...make(
       0,
-      f.x * t - Math.sin(f.angle) * 2,
-      f.z * t + Math.cos(f.angle) * 2,
+      f.x * t - Math.sin(f.angle) * 3,
+      f.z * t + Math.cos(f.angle) * 3,
       f.angle,
     ),
     route: 0,
