@@ -1,6 +1,20 @@
-import { Game } from "./simulation.js?v=continuous-traffic-1";
-import { HOME, FARMS, WEAPONS, PARTS, SIZE, dist } from "./region.js";
-import { createWorld } from "./world.js?v=continuous-traffic-1";
+import { createWheel } from "./wheel.js?v=town-equipment-1";
+import { createAudio } from "./audio.js?v=town-equipment-1";
+import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
+import { Game } from "./simulation.js?v=town-equipment-1";
+import {
+  HOME,
+  FARMS,
+  WEAPONS,
+  PARTS,
+  SIZE,
+  TOWN_STREETS,
+  OBSTACLES,
+  RIVER_START,
+  inTown,
+  dist,
+} from "./region.js?v=town-equipment-1";
+import { createWorld } from "./world.js?v=town-equipment-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -8,6 +22,9 @@ try {
   saved = JSON.parse(localStorage.getItem(SAVE));
 } catch {}
 const game = new Game(saved);
+const audio = createAudio();
+const wheel = createWheel(game, $("wheel"));
+let atlasTown = false;
 let world;
 try {
   world = createWorld($("world"));
@@ -17,7 +34,7 @@ try {
 }
 const keys = new Set(),
   stick = { x: 0, y: 0 },
-  panels = ["help", "atlas", "menu"];
+  panels = ["help", "atlas", "menu", "wheel"];
 const compactHUD = matchMedia("(max-width: 750px), (pointer: coarse)");
 let touchBrake = false;
 let jump = false,
@@ -44,17 +61,14 @@ function action(name) {
   if (name === "attack") game.attack();
   if (name === "revive") game.revive();
   if (name === "jump") jump = true;
-  if (name === "cycle") {
-    const i = game.owned.indexOf(game.weapon);
-    game.weapon = game.owned[(i + 1) % game.owned.length];
-  }
+  if (name === "cycle") openWheel("tap");
 }
 const actions = {
   KeyE: "interact",
   KeyF: "attack",
   KeyR: "revive",
   KeyB: "shop",
-  KeyQ: "cycle",
+
   Space: "jump",
 };
 addEventListener("keydown", (e) => {
@@ -67,13 +81,25 @@ addEventListener("keydown", (e) => {
   if (e.target.closest("button") && e.code === "Space") return;
   keys.add(e.code);
   if (e.repeat) return;
+  if (wheel.key(e.code)) {
+    e.preventDefault();
+    return;
+  }
+  if (e.code === "KeyQ") {
+    e.preventDefault();
+    openWheel("hold");
+    return;
+  }
   if (e.code === "Escape") {
     for (const id of panels) $(id).hidden = true;
     game.shop = false;
   } else if (e.code === "KeyM") $("atlas").hidden = !$("atlas").hidden;
   else if (actions[e.code]) action(actions[e.code]);
 });
-addEventListener("keyup", (e) => keys.delete(e.code));
+addEventListener("keyup", (e) => {
+  keys.delete(e.code);
+  if (e.code === "KeyQ") wheel.release();
+});
 function clearInput() {
   keys.clear();
   stick.x = stick.y = 0;
@@ -81,8 +107,34 @@ function clearInput() {
   touchBrake = false;
   $("stick-knob").style.transform = "";
 }
-addEventListener("blur", clearInput);
-document.addEventListener("visibilitychange", clearInput);
+addEventListener("blur", () => {
+  clearInput();
+  wheel.close();
+  audio.silence();
+});
+document.addEventListener("visibilitychange", () => {
+  clearInput();
+  wheel.close();
+  audio.silence();
+});
+addEventListener("pointerdown", () => audio.unlock(), { passive: true });
+addEventListener("keydown", () => audio.unlock());
+function openWheel(mode) {
+  if (game.shop) return;
+  clearInput();
+  for (const id of panels) $(id).hidden = true;
+  wheel.open(mode);
+}
+$("equipment-button").onclick = $("desktop-equipment").onclick = () =>
+  openWheel("tap");
+function soundLabel() {
+  $("sound-button").textContent = "Sound: " + (audio.enabled ? "on" : "off");
+}
+$("sound-button").onclick = () => {
+  audio.toggle();
+  soundLabel();
+};
+soundLabel();
 $("world").addEventListener(
   "wheel",
   (e) => {
@@ -175,6 +227,7 @@ function reset() {
   lastSave = null;
   shopSignature = "";
   clearInput();
+  wheel.close();
   for (const id of [...panels, "credits"]) $(id).hidden = true;
 }
 $("reset").onclick = () => {
@@ -233,16 +286,18 @@ function shop() {
       price: `$${(game.player.maxHp - 2) * 60}`,
       disabled: game.money < (game.player.maxHp - 2) * 60,
     });
-  WEAPONS.forEach((w, i) =>
-    items.push({
-      key: i,
-      name: w.name,
-      detail: `${w.range < 6 ? "Melee" : "Projectile"} · ${w.range} m range · cartoon knockout`,
-      costLabel: w.cost ? `$${w.cost}` : "Free",
-      price: game.owned.includes(i) ? "Owned" : `$${w.cost}`,
-      disabled: game.owned.includes(i) || game.money < w.cost,
-    }),
-  );
+  WEAPONS.map((w, i) => ({ w, i }))
+    .sort((a, b) => a.w.cost - b.w.cost)
+    .forEach(({ w, i }) =>
+      items.push({
+        key: i,
+        name: w.name,
+        detail: `${w.range < 6 ? "Melee" : "Projectile"} · ${w.range} m range · cartoon knockout`,
+        costLabel: w.cost ? `$${w.cost}` : "Free",
+        price: game.owned.includes(i) ? "Owned" : `$${w.cost}`,
+        disabled: game.owned.includes(i) || game.money < w.cost,
+      }),
+    );
   $("shop-items").replaceChildren(
     ...items.map((item) => {
       const row = document.createElement("div");
@@ -269,13 +324,36 @@ function shop() {
   );
   $("launch").hidden = game.parts < 5;
 }
+$("atlas-town").onclick = () => {
+  atlasTown = true;
+  $("factions").hidden = true;
+  $("atlas-title").textContent = "River Crossing town.";
+  $("map-legend").textContent =
+    "Beige: homes · Rose: shops · Gold: fuel stations · Blue: warehouses. Streets connect to the six farm avenues.";
+  $("atlas-town").setAttribute("aria-pressed", "true");
+  $("atlas-region").setAttribute("aria-pressed", "false");
+};
+$("atlas-region").onclick = () => {
+  atlasTown = false;
+  $("factions").hidden = false;
+  $("atlas-title").textContent = "A whole lot of pasture.";
+  $("map-legend").textContent =
+    "White: you · Gold: home · Red: police · Dark lines: roads · Blue: rivers. All farms connect through town.";
+  $("atlas-town").setAttribute("aria-pressed", "false");
+  $("atlas-region").setAttribute("aria-pressed", "true");
+};
 function map(canvas, large = false) {
   const c = canvas.getContext("2d"),
     w = canvas.width,
     h = canvas.height,
     pad = large ? 35 : 9,
-    scale = (Math.min(w, h) - pad * 2) / (SIZE * 2);
-  const point = (p) => [w / 2 + p.x * scale, h / 2 + p.z * scale];
+    scale =
+      (Math.min(w, h) - pad * 2) / (large ? (atlasTown ? 270 : SIZE * 2) : 280);
+  const center = large ? { x: 0, z: 0 } : game.player;
+  const point = (p) => [
+    w / 2 + (p.x - center.x) * scale,
+    h / 2 + (p.z - center.z) * scale,
+  ];
   const line = (a, b, color, width) => {
     c.strokeStyle = color;
     c.lineWidth = width;
@@ -295,7 +373,7 @@ function map(canvas, large = false) {
   for (const f of FARMS) {
     const a = f.angle + Math.PI / 6;
     line(
-      { x: Math.cos(a) * 68, z: Math.sin(a) * 68 },
+      { x: Math.cos(a) * RIVER_START, z: Math.sin(a) * RIVER_START },
       { x: Math.cos(a) * 650, z: Math.sin(a) * 650 },
       "#689faa",
       large ? 7 : 3,
@@ -316,14 +394,49 @@ function map(canvas, large = false) {
   c.strokeStyle = "#637667";
   c.lineWidth = large ? 6 : 2;
   c.beginPath();
-  c.arc(w / 2, h / 2, 100 * scale, 0, Math.PI * 2);
+  c.arc(...point({ x: 0, z: 0 }), 100 * scale, 0, Math.PI * 2);
   c.stroke();
-  dot({ x: 0, z: 0 }, "#ece1bf", large ? 12 : 5);
-  dot(HOME, "#ffe194", large ? 9 : 4);
+  for (const street of TOWN_STREETS)
+    line(street.a, street.b, "#68796a", Math.max(1, street.width * scale));
+  for (const b of OBSTACLES.filter((b) => b.type === "town")) {
+    c.fillStyle =
+      b.kind === "gas"
+        ? "#ce9b43"
+        : b.kind === "shop"
+          ? "#ae7686"
+          : b.kind === "warehouse"
+            ? "#6c8d99"
+            : "#dec5a2";
+    const [x, y] = point({ x: b.x - b.hx, z: b.z - b.hz });
+    c.fillRect(
+      x,
+      y,
+      Math.max(1, b.hx * 2 * scale),
+      Math.max(1, b.hz * 2 * scale),
+    );
+  }
+  if (large) dot(HOME, "#ffe194", 9);
+  else {
+    const [hx, hy] = point(HOME);
+    c.fillStyle = "#ffe194";
+    c.beginPath();
+    c.arc(
+      Math.max(10, Math.min(w - 10, hx)),
+      Math.max(10, Math.min(h - 10, hy)),
+      4,
+      0,
+      Math.PI * 2,
+    );
+    c.fill();
+  }
   if (large) {
     c.fillStyle = "#354b38";
     c.textAlign = "center";
-    c.fillText("TOWN", w / 2, h / 2 + 26);
+    c.fillText(
+      atlasTown ? "RIVER CROSSING · STREETS & SERVICES" : "TOWN",
+      w / 2,
+      h / 2 + (atlasTown ? 0 : 26),
+    );
     const [x, y] = point(HOME);
     c.fillText("YOUR FARM", x, y - 15);
   }
@@ -392,18 +505,25 @@ function hud() {
   $("rocket-progress").hidden = intro;
   $("toast").textContent = game.note;
   $("toast").hidden = game.time > game.noteUntil - (compactHUD.matches ? 4 : 0);
-  $("weapon").textContent = WEAPONS[game.weapon].name;
+  $("weapon").textContent =
+    game.item === "revive" ? "Wake-up snacks" : WEAPONS[game.weapon].name;
+  document.querySelector('.touch-actions [data-action="attack"]').textContent =
+    game.item === "revive"
+      ? "Revive"
+      : WEAPONS[game.weapon].range < 6
+        ? "Hit"
+        : "Shoot";
   $("snacks").textContent = `${game.revives} wake-up snacks`;
   $("vehicle").textContent =
     game.vehicle !== null
-      ? `${game.vehicles[game.vehicle].kind} · ${herd.filter((a) => a.boarded === game.vehicle).length}/${game.vehicles[game.vehicle].seats - 1} animal seats`
+      ? `${vehicleProfile(game.vehicles[game.vehicle]).name} · ${herd.filter((a) => a.boarded === game.vehicle).length}/${game.vehicles[game.vehicle].seats - 1} animal seats`
       : "";
   const near = FARMS.find((f) => dist(f, game.player) < 60);
   $("location").textContent = game.atHome
     ? "YOUR BACKYARD SPACEPORT"
     : near
       ? near.name
-      : Math.hypot(game.player.x, game.player.z) < 110
+      : inTown(game.player)
         ? "RIVER CROSSING · TOWN"
         : "THE SIX RIVER COUNTIES";
   $("distance").textContent = game.atHome
@@ -489,6 +609,7 @@ function frame(now) {
       accumulator -= 1 / 60;
     }
   } else accumulator = 0;
+  audio.update(game, !panels.every((id) => $(id).hidden));
   world.render(game);
   hudTime += elapsed;
   if (hudTime > 0.1) {
@@ -538,6 +659,9 @@ window.sheepGame = {
     },
     vehicleContacts: game.vehicleContacts || 0,
     skidmarks: game.skidmarks.length,
+    selectedItem: game.item || "weapon",
+    equippedWeapon: game.weapon,
+    audio: audio.stats(),
     stats: world.stats(),
   }),
 };

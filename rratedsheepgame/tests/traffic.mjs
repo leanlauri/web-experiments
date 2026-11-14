@@ -10,6 +10,7 @@ import {
   vehicleBlocked,
   vehicleOverlap,
   resolveVehicleCollisions,
+  vehicleSize,
 } from "../public/vehicle-collisions.js";
 const angle = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 assert.equal(TRAFFIC_COUNT, 48);
@@ -74,8 +75,10 @@ assert(
   "cars must keep progressing instead of gridlocking",
 );
 assert(
-  Math.min(...lateTravel.filter((_, i) => i !== 24)) > 10,
-  "traffic still progresses late in the run",
+  traffic
+    .filter((v) => !v.stolen)
+    .every((v) => lateTravel[v.id] > vehicleSize(v).halfLength * 2),
+  "even queued heavy vehicles must advance at least their body length late in the run",
 );
 assert(
   townCars.size > 6,

@@ -64,7 +64,7 @@ for (const f of FARMS) {
   tick(g, 10);
   assert.equal(g.phase, "heist");
   assert.equal(g.introDelivered, 12);
-  assert.equal(g.money, 25);
+  assert.equal(g.money, 60);
   assert(g.shop);
 }
 {

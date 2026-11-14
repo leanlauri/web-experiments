@@ -1,3 +1,4 @@
+import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
 export const SKID_LIFETIME = 8;
 export const MAX_SKID_SEGMENTS = 1200;
 export function recordSkidmarks(marks, vehicle, time) {
@@ -12,8 +13,7 @@ export function recordSkidmarks(marks, vehicle, time) {
     return;
   }
   if (Math.hypot(pose.x - old.x, pose.z - old.z) < 0.28) return;
-  const rear =
-    vehicle.kind === "bus" ? 1.9 : vehicle.kind === "van" ? 1.44 : 1.02;
+  const rear = vehicleProfile(vehicle).length * 0.32;
   const tire = (p, side) => ({
     x: p.x - Math.cos(p.heading) * rear - Math.sin(p.heading) * side,
     z: p.z - Math.sin(p.heading) * rear + Math.cos(p.heading) * side,

@@ -217,6 +217,7 @@ const serveSource = async (route) => {
     await mobile.locator("#menu-button").tap();
     await mobile.locator("#menu [data-action=cycle]").tap();
     assert(!(await mobile.locator("#menu").isVisible()));
+    await mobile.locator('#wheel [data-item="0"]').tap();
     // Compact HUD also applies in landscape, keeping the player at screen center exposed.
     for (const viewport of [
       { width: 844, height: 390 },

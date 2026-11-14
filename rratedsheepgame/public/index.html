@@ -8,11 +8,12 @@
     />
     <meta name="theme-color" content="#192c28" />
     <title>Little Pastures · The Great Moon Heist</title>
-    <link rel="stylesheet" href="style.css?v=continuous-traffic-1" />
+    <link rel="stylesheet" href="style.css?v=town-equipment-1" />
   </head>
   <body>
     <canvas
       id="world"
+      tabindex="0"
       aria-label="Three-dimensional farm adventure. Move with WASD, recruit nearby animals and lead them home."
     ></canvas>
     <header>
@@ -20,12 +21,14 @@
         <b>Little Pastures<span>THE GREAT MOON HEIST</span></b>
       </div>
       <div class="header-actions">
-        <button id="help-button" aria-label="Show controls">?</button
+        <button id="desktop-equipment">Items [Q]</button
+        ><button id="help-button" aria-label="Show controls">?</button
         ><button id="reset">New adventure</button>
       </div>
     </header>
     <nav id="mobile-toolbar" aria-label="Game panels">
-      <button id="mobile-map-button">Map</button>
+      <button id="mobile-map-button">Map</button
+      ><button id="equipment-button" aria-controls="wheel">Items</button>
       <button id="menu-button" aria-controls="menu" aria-expanded="false">
         Menu
       </button>
@@ -73,7 +76,7 @@
       <span
         ><kbd>WASD</kbd> move <kbd>SHIFT</kbd> run <kbd>SPACE</kbd> jump</span
       ><span
-        ><kbd>E</kbd> vehicle <kbd>F</kbd> use weapon <kbd>Q</kbd> switch
+        ><kbd>E</kbd> vehicle <kbd>F</kbd> use weapon <kbd>Q</kbd> items
         <kbd>R</kbd> revive <kbd>B</kbd> home shop</span
       >
     </footer>
@@ -108,11 +111,41 @@
           <button data-action="revive">Revive animal</button>
           <button data-action="shop">Home shop</button>
           <button data-action="cycle">Switch weapon</button>
-          <button id="menu-help">Controls & help</button>
+          <button id="sound-button">Sound: on</button
+          ><button id="menu-help">Controls & help</button>
           <button id="menu-reset">New adventure</button>
         </div>
         <button id="menu-resume" class="primary">Resume game</button>
       </section>
+    </div>
+    <div
+      id="wheel"
+      class="overlay"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-label="Equipment wheel"
+    >
+      <div class="wheel-panel">
+        <button class="wheel-close" aria-label="Close equipment wheel">
+          ×
+        </button>
+        <div class="eyebrow">EQUIPMENT · GAME PAUSED</div>
+        <div
+          class="wheel-ring"
+          role="listbox"
+          aria-label="Choose weapon or item"
+        >
+          <div class="wheel-center">
+            <strong class="wheel-selected"></strong>
+            <p class="wheel-detail"></p>
+          </div>
+        </div>
+        <p class="wheel-hint">
+          Hold Q, point, then release. Or tap an item. Arrow keys and Enter also
+          work.
+        </p>
+      </div>
     </div>
     <div id="shop" class="overlay" hidden>
       <section class="panel">
@@ -163,15 +196,17 @@
         </p>
         <p>
           <b>F</b> uses your weapon, aiming at the nearest opponent in range;
-          <b>Q</b> changes weapons. Watch for friendly fire! <b>R</b> gives a
-          nearby unconscious animal a wake-up snack. <b>B</b> opens your home
-          shop. <b>M</b> opens the map. Scroll to zoom.
+          <b>Q</b> opens the equipment wheel: hold, point and release to choose.
+          On touch, tap Items then an item. Watch for friendly fire!
+          <b>R</b> gives a nearby unconscious animal a wake-up snack.
+          <b>B</b> opens your home shop. <b>M</b> opens the map. Scroll to zoom.
         </p>
         <p>
-          Road bridges cross rivers. Farm gates face town. Borrowing animals or
-          vehicles alerts police. Stay more than 33 m from all awake police for
-          12 seconds to lose one wanted star. Repeat until clear. Home prevents
-          attacks, but you must still escape the police search.
+          Rivers divide the outer farms. Use the town streets to travel between
+          counties. Farm gates face town. Borrowing animals or vehicles alerts
+          police. Stay more than 33 m from all awake police for 12 seconds to
+          lose one wanted star. Repeat until clear. Home prevents attacks, but
+          you must still escape the police search.
         </p>
         <p>
           Pause at home for four seconds to settle a trip. Animals inside the
@@ -192,7 +227,11 @@
       <section class="panel">
         <button class="close" id="atlas-close" aria-label="Close map">×</button>
         <div class="eyebrow">THE SIX RIVER COUNTIES</div>
-        <h2>A whole lot of pasture.</h2>
+        <h2 id="atlas-title">A whole lot of pasture.</h2>
+        <div class="map-tabs">
+          <button id="atlas-region" aria-pressed="true">Region</button
+          ><button id="atlas-town" aria-pressed="false">Town streets</button>
+        </div>
         <canvas
           id="atlas-map"
           width="620"
@@ -200,7 +239,7 @@
           aria-label="Full regional map"
         ></canvas>
         <div id="factions"></div>
-        <p class="fine">
+        <p class="fine" id="map-legend">
           White: you · Gold: home · Red: police · Dark lines: roads · Blue:
           rivers. All farms connect through town. Cross rivers on the town ring
           bridges.
@@ -239,6 +278,6 @@
     <div id="error" hidden>
       We couldn’t start the 3D world. Please enable WebGL and reload.
     </div>
-    <script type="module" src="adventure.js?v=continuous-traffic-1"></script>
+    <script type="module" src="adventure.js?v=town-equipment-1"></script>
   </body>
 </html>

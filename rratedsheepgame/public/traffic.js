@@ -1,9 +1,10 @@
-import { FARMS, HOME } from "./region.js";
+import { VEHICLES, vehicleProfile } from "./vehicles.js?v=town-equipment-1";
+import { FARMS, HOME } from "./region.js?v=town-equipment-1";
 import {
   vehicleBlocked,
   vehicleOverlap,
   vehicleSize,
-} from "./vehicle-collisions.js";
+} from "./vehicle-collisions.js?v=town-equipment-1";
 export const TRAFFIC_COUNT = 48;
 const LANE = 3,
   INNER = 38,
@@ -167,6 +168,7 @@ export function createTraffic() {
       });
       continue;
     }
+    const kind = Object.keys(VEHICLES)[id % Object.keys(VEHICLES).length];
     const index = id < 24 ? id : id - 1,
       distance = (TRAFFIC_LENGTH * index) / TRAFFIC_COUNT,
       pose = trafficPose(distance);
@@ -176,8 +178,8 @@ export function createTraffic() {
       trafficDistance: distance,
       trafficSpeed: Math.min(10 + (id % 3), pose.limit),
       speed: 10 + (id % 3),
-      seats: [2, 4, 7, 13][id % 4],
-      kind: ["buggy", "car", "van", "bus"][id % 4],
+      seats: vehicleProfile(kind).seats,
+      kind,
       stolen: false,
       occupied: true,
       disabled: 0,
@@ -193,6 +195,36 @@ export function stepTraffic(v, dt, vehicles, level = 0) {
   if (dt <= 0) return;
   if (v.trafficDistance === undefined)
     v.trafficDistance = nearestTrafficDistance(v);
+  if (v.mergeBackup > 0) {
+    const amount = Math.min(v.mergeBackup, 1.8 * dt),
+      distance = wrap(v.trafficDistance - amount),
+      pose = trafficPose(distance);
+    const heading =
+      v.heading +
+      Math.max(
+        -1.8 * dt,
+        Math.min(1.8 * dt, angleDiff(pose.heading, v.heading)),
+      );
+    const next = { ...v, ...pose, heading };
+    if (
+      !vehicleBlocked(v, next, level) &&
+      !vehicles.some(
+        (other) =>
+          other !== v &&
+          Math.hypot(other.x - v.x, other.z - v.z) < 12 &&
+          vehicleOverlap(next, other),
+      )
+    ) {
+      v.x = pose.x;
+      v.z = pose.z;
+      v.heading = heading;
+      v.trafficDistance = distance;
+      v.mergeBackup -= amount;
+    } else v.mergeBackup = 0;
+    v.trafficSpeed = 0;
+    v.enteringJunction = false;
+    return;
+  }
   const pose = trafficPose(v.trafficDistance);
   let target = Math.min(
     v.speed,
@@ -276,5 +308,15 @@ export function stepTraffic(v, dt, vehicles, level = 0) {
     v.z = next.z;
     v.heading = next.heading;
     v.trafficDistance = nextDistance;
-  } else v.trafficSpeed = 0;
+    v.mergeWait = 0;
+  } else {
+    v.trafficSpeed = 0;
+    v.mergeWait = (v.mergeWait || 0) + dt;
+    // A long vehicle can block an imperfect merge with its rear corner. Back up
+    // along the same lane, without a position or heading reset, to let it clear.
+    if (v.mergeWait > 1.5 && radius > 22.15 && radius < 32) {
+      v.mergeBackup = 6;
+      v.mergeWait = 0;
+    }
+  }
 }

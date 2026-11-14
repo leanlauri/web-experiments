@@ -1,12 +1,7 @@
-import { vehicleBlocked } from "./vehicle-collisions.js";
-import { road } from "./region.js";
+import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
+import { vehicleBlocked } from "./vehicle-collisions.js?v=town-equipment-1";
+import { road } from "./region.js?v=town-equipment-1";
 
-const PROFILES = {
-  buggy: { top: 34, acceleration: 11, turn: 4, grip: 12 },
-  car: { top: 32, acceleration: 9, turn: 3.3, grip: 13 },
-  van: { top: 28, acceleration: 7, turn: 2.7, grip: 11 },
-  bus: { top: 24, acceleration: 5, turn: 1.9, grip: 10 },
-};
 const approach = (value, target, amount) =>
   value < target
     ? Math.min(target, value + amount)
@@ -17,7 +12,7 @@ const angleDifference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 // turning requires tire grip to redirect momentum rather than rotating it instantly.
 export function drive(v, dt, input = {}, level = 0) {
   if (dt <= 0) return;
-  const profile = PROFILES[v.kind] || PROFILES.car;
+  const profile = vehicleProfile(v);
   let dx = Number(input.x) || 0,
     dz = Number(input.z) || 0;
   const length = Math.hypot(dx, dz),

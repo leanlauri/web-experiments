@@ -1,10 +1,29 @@
+import { createEquipment } from "./equipment.js?v=town-equipment-1";
+import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
 import * as T from "./vendor/three.module.js";
-import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js";
-import { SIZE, HOME, FARMS, OBSTACLES, road, water, dist } from "./region.js";
+import {
+  MAX_SKID_SEGMENTS,
+  skidOpacity,
+} from "./skidmarks.js?v=town-equipment-1";
+import {
+  SIZE,
+  HOME,
+  FARMS,
+  OBSTACLES,
+  TOWN_STREETS,
+  RIVER_START,
+  inTown,
+  road,
+  water,
+  dist,
+} from "./region.js?v=town-equipment-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
-    materials.set(c, new T.MeshLambertMaterial({ color: c }));
+    materials.set(
+      c,
+      new T.MeshLambertMaterial({ color: c, depthWrite: c !== 0x69766b }),
+    );
   return materials.get(c);
 };
 const shadowMaterial = new T.MeshBasicMaterial({
@@ -17,7 +36,17 @@ const shadowGeo = new T.CircleGeometry(1, 16);
 const cube = new T.BoxGeometry(1, 1, 1),
   sphere = new T.IcosahedronGeometry(1, 1),
   cylinder = new T.CylinderGeometry(1, 1, 1, 8);
+const roadPlane = new T.PlaneGeometry(1, 1);
+roadPlane.rotateX(-Math.PI / 2);
 function shape(parent, color, x, y, z, sx, sy, sz, geo = cube) {
+  if (color === 0x69766b && sy <= 0.13) {
+    const m = new T.Mesh(roadPlane, material(color));
+    m.renderOrder = 1;
+    m.position.set(x, y + sy / 2, z);
+    m.scale.set(sx, 1, sz);
+    parent.add(m);
+    return m;
+  }
   const m = new T.Mesh(geo, material(color));
   m.position.set(x, y, z);
   m.scale.set(sx, sy, sz);
@@ -138,27 +167,125 @@ function person(color = 0x52878c, police = false) {
   );
   for (const x of [-0.2, 0.2])
     g.userData.limbs.push(shape(g, 0x454c45, x, 0.35, 0, 0.22, 0.7, 0.26));
-  for (const x of [-0.43, 0.43])
-    g.userData.limbs.push(shape(g, color, x, 1, 0, 0.18, 0.65, 0.23));
+  for (const x of [-0.43, 0.43]) {
+    const arm = shape(g, color, x, 1, 0, 0.18, 0.65, 0.23);
+    g.userData.limbs.push(arm);
+    if (x > 0) g.userData.rightArm = arm;
+  }
   if (police) shape(g, 0xf5d779, -0.2, 1.2, 0.24, 0.13, 0.18, 0.04);
   return g;
 }
 function carModel(v) {
   const g = new T.Group(),
-    length = v.kind === "bus" ? 6 : v.kind === "van" ? 4.5 : 3.2;
-  const color = [0xd3a45c, 0x9d687d, 0x639c9e, 0x6f89b0][v.id % 4];
-  shape(g, color, 0, 0.8, 0, 2.2, 1, length);
-  shape(g, color, 0, 1.7, -0.2, 2, 1, length * 0.65);
-  shape(g, 0xb8e1df, 0, 1.8, length * 0.33, 1.75, 0.65, 0.05);
-  g.userData.frontWheels = [];
-  for (const x of [-1.15, 1.15])
-    for (const z of [-length * 0.32, length * 0.32]) {
-      const w = shape(g, 0x37433c, x, 0.5, z, 0.43, 0.26, 0.43, cylinder);
-      w.rotation.z = Math.PI / 2;
-      if (z > 0) g.userData.frontWheels.push(w);
+    p = vehicleProfile(v),
+    length = p.length,
+    width = p.width,
+    color = p.color;
+  shape(g, color, 0, 0.7, 0, width, 0.8, length);
+  if (v.kind === "pickup" || v.kind === "truck") {
+    shape(g, color, 0, 1.5, length * 0.27, width * 0.93, 1.3, length * 0.35);
+    shape(g, 0xb8e1df, 0, 1.65, length * 0.45, width * 0.8, 0.7, 0.06);
+    shape(
+      g,
+      0x635e4c,
+      0,
+      1.08,
+      -length * 0.22,
+      width * 0.75,
+      0.12,
+      length * 0.45,
+    );
+    for (const side of [-1, 1]) {
+      shape(
+        g,
+        color,
+        side * width * 0.44,
+        1.5,
+        -length * 0.22,
+        0.18,
+        0.7,
+        length * 0.5,
+      );
+      if (v.kind === "truck")
+        for (let j = 0; j < 4; j++)
+          shape(
+            g,
+            0xd8c297,
+            side * width * 0.44,
+            2.05,
+            -length * 0.42 + j * length * 0.13,
+            0.12,
+            1.6,
+            0.12,
+          );
     }
-  for (const x of [-0.7, 0.7])
-    shape(g, 0xffeab2, x, 0.85, length / 2 + 0.02, 0.35, 0.22, 0.08);
+  } else if (v.kind === "buggy") {
+    for (const side of [-1, 1]) {
+      shape(g, 0x4c5c55, side * 0.85, 1.5, 0, 0.12, 1.2, 0.12);
+      shape(g, 0x4c5c55, 0, 2.1, 0, 1.8, 0.12, 0.12);
+    }
+    shape(g, 0x6b7666, 0, 1.2, -0.35, 1.35, 0.6, 0.8);
+  } else {
+    const h = v.kind === "sport" ? 0.65 : v.kind === "bus" ? 1.5 : 1;
+    shape(
+      g,
+      color,
+      0,
+      1.2 + h / 2,
+      -0.15,
+      width * 0.9,
+      h,
+      length * (v.kind === "sport" ? 0.42 : 0.68),
+    );
+    shape(
+      g,
+      0xb8e1df,
+      0,
+      1.2 + h * 0.6,
+      length * 0.3,
+      width * 0.78,
+      h * 0.65,
+      0.06,
+    );
+    if (v.kind === "bus" || v.kind === "van")
+      for (const side of [-1, 1])
+        for (let j = 0; j < (v.kind === "bus" ? 5 : 3); j++)
+          shape(
+            g,
+            0xb0d7d4,
+            side * width * 0.46,
+            1.8,
+            -length * 0.3 + j * length * 0.13,
+            0.06,
+            0.7,
+            length * 0.1,
+          );
+    if (v.kind === "sport") {
+      shape(g, 0xf4dba4, 0, 1.15, 0.95, 0.22, 0.08, 1.4);
+      shape(g, 0x44564e, 0, 1.3, -length * 0.43, width, 0.15, 0.35);
+    }
+    if (v.kind === "electric")
+      shape(g, 0xb8f1db, 0, 0.7, length * 0.5 + 0.04, width * 0.7, 0.15, 0.08);
+  }
+  g.userData.frontWheels = [];
+  for (const side of [-1, 1])
+    for (const z of [-length * 0.32, length * 0.32]) {
+      const wheel = shape(
+        g,
+        0x37433c,
+        side * width * 0.51,
+        0.45,
+        z,
+        0.43,
+        0.27,
+        0.43,
+        cylinder,
+      );
+      wheel.rotation.z = Math.PI / 2;
+      if (z > 0) g.userData.frontWheels.push(wheel);
+    }
+  for (const x of [-width * 0.32, width * 0.32])
+    shape(g, 0xffeab2, x, 0.8, length * 0.5 + 0.04, 0.3, 0.2, 0.08);
   return g;
 }
 export function createWorld(canvas) {
@@ -177,14 +304,14 @@ export function createWorld(canvas) {
   const world = new T.Group();
   scene.add(world);
   for (const f of FARMS) {
-    const length = SIZE * 1.44 - 68,
+    const length = SIZE * 1.44 - RIVER_START,
       a = f.angle + Math.PI / 6;
     const river = shape(
       world,
       0x72b6bd,
-      Math.cos(a) * (68 + length / 2),
+      Math.cos(a) * (RIVER_START + length / 2),
       -0.01,
-      Math.sin(a) * (68 + length / 2),
+      Math.sin(a) * (RIVER_START + length / 2),
       10,
       0.12,
       length,
@@ -219,10 +346,47 @@ export function createWorld(canvas) {
       line.rotation.y = strip.rotation.y;
     }
   }
+  for (const street of TOWN_STREETS) {
+    const vertical = street.a.x === street.b.x,
+      central = vertical ? street.a.x === 0 : street.a.z === 0;
+    const ranges = central
+      ? [
+          [-(vertical ? 102 : 114), -29],
+          [29, vertical ? 102 : 114],
+        ]
+      : [[-(vertical ? 102 : 114), vertical ? 102 : 114]];
+    for (const [from, to] of ranges) {
+      const mid = (from + to) / 2,
+        x = vertical ? street.a.x : mid,
+        z = vertical ? mid : street.a.z,
+        length = to - from;
+      shape(
+        world,
+        0xc7c5ad,
+        x,
+        0.015,
+        z,
+        vertical ? 15 : length,
+        0.08,
+        vertical ? length : 15,
+      );
+      shape(
+        world,
+        0x69766b,
+        x,
+        0.08,
+        z,
+        vertical ? 11 : length,
+        0.12,
+        vertical ? length : 11,
+      );
+    }
+  }
   const townJunction = new T.Mesh(
     new T.RingGeometry(15, 29, 64),
     material(0x69766b),
   );
+  townJunction.renderOrder = 1;
   townJunction.rotation.x = -Math.PI / 2;
   townJunction.position.y = 0.155;
   world.add(townJunction);
@@ -234,24 +398,11 @@ export function createWorld(canvas) {
   townIsland.position.y = 0.155;
   world.add(townIsland);
   const ring = new T.Mesh(new T.RingGeometry(94, 106, 96), roadMat);
+  ring.renderOrder = 1;
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.14;
   world.add(ring);
   for (const f of FARMS) {
-    const a = f.angle + Math.PI / 6;
-    for (const side of [-1, 1]) {
-      const rail = shape(
-        world,
-        0xe6d7b5,
-        Math.cos(a) * (100 + side * 6),
-        1,
-        Math.sin(a) * (100 + side * 6),
-        0.4,
-        1,
-        15,
-      );
-      rail.rotation.y = -a;
-    }
     shape(world, 0xc2bc81, f.x, -0.02, f.z, 66, 0.15, 66);
     label(world, f.name, f.x, 13, f.z, `#${f.color.toString(16)}`, 1.2);
     for (let j = 0; j < 7; j++) {
@@ -272,30 +423,132 @@ export function createWorld(canvas) {
     shape(world, 0x806b4e, f.x + 26, 4, f.z + 21, 0.2, 8, 0.2);
     shape(world, f.color, f.x + 27.7, 7, f.z + 21, 3.2, 1.8, 0.12);
   }
-  for (const b of OBSTACLES) {
-    shape(world, b.color, b.x, b.h / 2, b.z, b.hx * 2, b.h, b.hz * 2);
-    const roof = shape(
-      world,
-      b.type === "town" ? 0x596c64 : 0x815e52,
-      b.x,
-      b.h + 0.4,
-      b.z,
-      b.hx * 2 + 1,
-      0.8,
-      b.hz * 2 + 1,
+  function sign(text, x, y, z, width = 7) {
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 96;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#f8e8bd";
+    ctx.fillRect(0, 0, 512, 96);
+    ctx.fillStyle = "#324f45";
+    ctx.font = "bold 40px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(text, 256, 63);
+    const panel = new T.Mesh(
+      new T.PlaneGeometry(width, 1.25),
+      new T.MeshBasicMaterial({ map: new T.CanvasTexture(c) }),
     );
-    for (const x of [-1, 1])
+    panel.position.set(x, y, z);
+    world.add(panel);
+  }
+  for (const b of OBSTACLES) {
+    const gas = b.kind === "gas",
+      height = gas ? b.h * 0.65 : b.h;
+    shape(
+      world,
+      b.color,
+      b.x,
+      height / 2,
+      b.z - (gas ? 1.5 : 0),
+      b.hx * 2,
+      height,
+      gas ? b.hz : b.hz * 2,
+    );
+    if (b.kind === "house") {
+      const roof = new T.Mesh(new T.ConeGeometry(1, 1, 4), material(0x926f60));
+      roof.position.set(b.x, b.h + 1, b.z);
+      roof.scale.set(b.hx * 1.65, 2.8, b.hz * 1.65);
+      roof.rotation.y = Math.PI / 4;
+      world.add(roof);
+      shape(world, 0x8b7760, b.x + b.hx * 0.55, b.h + 1, b.z - 1, 0.7, 2, 0.8);
+    } else {
       shape(
         world,
-        0xe7e9c8,
-        b.x + x * b.hx * 0.55,
-        b.h * 0.6,
-        b.z + b.hz + 0.03,
-        1.5,
-        1.8,
-        0.05,
+        gas ? 0xe8c361 : b.kind === "warehouse" ? 0x6c7f80 : 0x6f8981,
+        b.x,
+        b.h + 0.3,
+        b.z,
+        b.hx * 2 + 0.7,
+        0.6,
+        b.hz * 2 + 0.7,
       );
-    shape(world, 0x4f6450, b.x, 1.6, b.z + b.hz + 0.06, 2, 3.2, 0.1);
+    }
+    for (const side of [-1, 1])
+      shape(
+        world,
+        0xb8d7d8,
+        b.x + side * b.hx * 0.55,
+        b.h * 0.58,
+        b.z + b.hz + 0.04,
+        1.6,
+        1.6,
+        0.08,
+      );
+    shape(world, 0x536e60, b.x, 0.9, b.z + b.hz + 0.07, 1.25, 1.8, 0.12);
+    if (b.kind === "shop") {
+      shape(
+        world,
+        0xa3cdd2,
+        b.x,
+        1.7,
+        b.z + b.hz + 0.09,
+        b.hx * 1.65,
+        2.2,
+        0.12,
+      );
+      shape(world, 0xd79a73, b.x, 3.2, b.z + b.hz + 0.55, b.hx * 2, 0.25, 1.2);
+      sign(b.name, b.x, 4.25, b.z + b.hz + 0.2, b.hx * 1.9);
+    }
+    if (gas) {
+      for (const side of [-1, 1]) {
+        shape(
+          world,
+          0xe6d9ab,
+          b.x + side * b.hx * 0.8,
+          2.6,
+          b.z + 2,
+          0.2,
+          5.2,
+          0.2,
+        );
+        shape(
+          world,
+          0xd77761,
+          b.x + side * 1.7,
+          0.8,
+          b.z + 1.7,
+          0.65,
+          1.6,
+          0.7,
+        );
+        shape(
+          world,
+          0x415b55,
+          b.x + side * 1.7,
+          1.1,
+          b.z + 2.08,
+          0.45,
+          0.4,
+          0.05,
+        );
+      }
+      sign("ORBIT FUEL", b.x, b.h + 0.3, b.z + b.hz + 0.4, b.hx * 1.8);
+    }
+    if (b.kind === "warehouse") {
+      shape(world, 0x869a9a, b.x, 2, b.z + b.hz + 0.1, b.hx * 1.6, 4, 0.15);
+      for (let i = 0; i < 6; i++)
+        shape(
+          world,
+          0xafb9ae,
+          b.x,
+          0.4 + i * 0.6,
+          b.z + b.hz + 0.2,
+          b.hx * 1.6,
+          0.08,
+          0.05,
+        );
+      sign("COUNTY FREIGHT", b.x, b.h - 0.6, b.z + b.hz + 0.2, b.hx * 1.8);
+    }
   }
   shape(world, 0xd9ce9e, HOME.x, 0.03, HOME.z, 43, 0.12, 43);
   const homeRing = new T.Mesh(
@@ -351,6 +604,7 @@ export function createWorld(canvas) {
         Math.abs(z) > SIZE ||
         road(p) ||
         water(p) ||
+        inTown(p) ||
         Math.hypot(x, z) < 72 ||
         dist(p, HOME) < 36 ||
         dist(p, { x: 0, z: -135 }) < 24 ||
@@ -404,6 +658,7 @@ export function createWorld(canvas) {
     actorRoot = new T.Group();
   scene.add(actorRoot);
   const player = person();
+  const equipment = createEquipment(player, actorRoot);
   actorRoot.add(player);
   const fenceGroup = new T.Group();
   world.add(fenceGroup);
@@ -502,9 +757,16 @@ export function createWorld(canvas) {
         : 0;
     if (r || down) {
       g.updateMatrixWorld(true);
+      const ignored = g.userData.equipmentGrip,
+        parent = ignored?.parent;
+      if (parent) parent.remove(ignored);
       g.userData.bounds.setFromObject(pivot);
+      if (parent) parent.add(ignored);
       pivot.position.y += Math.max(0, -g.userData.bounds.min.y);
     }
+    if (!r && !down && p.hitAt !== undefined && currentTime - p.hitAt < 0.25)
+      pivot.rotation.z =
+        Math.sin(((currentTime - p.hitAt) / 0.25) * Math.PI) * 0.3;
     const stars = g.userData.stars;
     stars.visible = !!r || down || (p.starsUntil || 0) > currentTime;
     if (stars.visible) {
@@ -722,6 +984,7 @@ export function createWorld(canvas) {
         player.visible &&
         (!!game.player.ragdoll ||
           !(game.player.invulnerable > 0 && Math.floor(game.time * 12) % 2));
+      equipment.update(game);
       const live = new Set();
       for (const a of game.animals) {
         const id = `a${a.id}`;
@@ -760,20 +1023,33 @@ export function createWorld(canvas) {
         }
       for (const m of shotMeshes) actorRoot.remove(m);
       shotMeshes = game.shots
-        .filter((s) => dist(s, game.player) < 100)
-        .map((s) =>
-          shape(
+        .filter((s) => dist(s, game.player) < 100 && s.owner !== "swing")
+        .flatMap((s) => {
+          const m = shape(
             actorRoot,
             s.owner === "enemy" ? 0xea9388 : 0xb2e4f2,
             s.x,
-            1.2,
+            1.3,
             s.z,
-            0.3,
-            0.3,
-            0.3,
+            0.25,
+            0.25,
+            0.65,
             sphere,
-          ),
-        );
+          );
+          m.rotation.y = Math.atan2(s.vx, s.vz);
+          const trail = shape(
+            actorRoot,
+            s.owner === "enemy" ? 0xefc4a5 : 0xe2fbff,
+            s.x - s.vx * 0.018,
+            1.3,
+            s.z - s.vz * 0.018,
+            0.08,
+            0.08,
+            1.1,
+          );
+          trail.rotation.y = m.rotation.y;
+          return [m, trail];
+        });
       rocketParts.forEach((m, i) => (m.visible = i < game.parts));
       flame.visible = flight;
       rocket.position.y = flight
@@ -808,6 +1084,8 @@ export function createWorld(canvas) {
     },
     stats() {
       return {
+        equipment: equipment.stats(),
+        townBuildings: OBSTACLES.filter((b) => b.type === "town").length,
         recoveringActors: [player, ...actors.values()].filter(
           (g) => g.visible && g.userData.stars?.visible,
         ).length,

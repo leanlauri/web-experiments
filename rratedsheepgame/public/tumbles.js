@@ -1,4 +1,4 @@
-import { move } from "./region.js";
+import { move } from "./region.js?v=town-equipment-1";
 export function startTumble(body, velocity, time) {
   if (body.ragdoll || time < (body.impactImmuneUntil || 0)) return false;
   const speed = Math.hypot(velocity.x, velocity.z),

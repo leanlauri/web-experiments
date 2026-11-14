@@ -1,27 +1,32 @@
-import {
-  createTraffic,
-  stepTraffic,
-} from "./traffic.js?v=continuous-traffic-1";
+import { createTraffic, stepTraffic } from "./traffic.js?v=town-equipment-1";
 import {
   resolveVehicleCollisions,
   vehiclePersonContact,
   circleVehicle,
   vehicleBlocked,
-} from "./vehicle-collisions.js?v=continuous-traffic-1";
-import { startTumble, stepTumble, clearTumble } from "./tumbles.js";
-import { drive } from "./driving.js?v=continuous-traffic-1";
-import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js";
+} from "./vehicle-collisions.js?v=town-equipment-1";
+import {
+  startTumble,
+  stepTumble,
+  clearTumble,
+} from "./tumbles.js?v=town-equipment-1";
+import { drive } from "./driving.js?v=town-equipment-1";
+import {
+  recordSkidmarks,
+  SKID_LIFETIME,
+} from "./skidmarks.js?v=town-equipment-1";
 import {
   HOME,
   START,
   FARMS,
   WEAPONS,
+  OPENING_REWARD,
   PARTS,
   dist,
   move,
   routeTarget,
   OBSTACLES,
-} from "./region.js";
+} from "./region.js?v=town-equipment-1";
 export class Game {
   constructor(save = null) {
     this.reset(save);
@@ -45,6 +50,7 @@ export class Game {
     this.parts = 0;
     this.owned = [0];
     this.weapon = 0;
+    this.item = "weapon";
     this.revives = 3;
     this.wanted = 0;
     this.escape = 0;
@@ -197,9 +203,9 @@ export class Game {
       }
       if (this.introDelivered === 12) {
         this.phase = "heist";
-        this.money = 25;
+        this.money = OPENING_REWARD;
         this.tell(
-          "The flock is home! Surprise: you are building a moon rocket. Borrow animals from the six big farms to fund it.",
+          "The flock is home! You earned $60 — enough for a $50 foam pistol. Build your moon rocket by bringing animals home from the six big farms.",
         );
         this.shop = true;
         this.checkpoint();
@@ -354,6 +360,12 @@ export class Game {
       return;
     }
     this.revives--;
+    this.player.attack = {
+      started: this.time,
+      weapon: this.weapon,
+      kind: "revive",
+      duration: 0.5,
+    };
     a.down = false;
     clearTumble(a);
     a.impactImmuneUntil = this.time + 2;
@@ -369,8 +381,19 @@ export class Game {
       this.vehicle !== null
     )
       return;
+    if (this.item === "revive") {
+      this.cooldown = 0.5;
+      this.revive();
+      return;
+    }
     const w = WEAPONS[this.weapon];
     this.cooldown = w.cooldown;
+    this.player.attack = {
+      started: this.time,
+      weapon: this.weapon,
+      kind: w.range < 6 ? "melee" : "shoot",
+      duration: w.range < 6 ? 0.42 : 0.3,
+    };
     const targets = [
       ...this.guards.filter((g) => g.down <= 0),
       ...this.police.filter((p) => p.down <= 0),
@@ -410,6 +433,7 @@ export class Game {
     }
   }
   hitGuard(g, power) {
+    g.hitAt = this.time;
     g.hp -= power;
     if (g.hp <= 0) {
       g.down = 12;

@@ -1,10 +1,13 @@
-import { blocked } from "./region.js";
-export const vehicleSize = (v) => ({
-  halfLength: v.kind === "bus" ? 3 : v.kind === "van" ? 2.25 : 1.6,
-  halfWidth: 1.15,
-  mass:
-    v.kind === "bus" ? 5 : v.kind === "van" ? 3 : v.kind === "buggy" ? 1 : 1.6,
-});
+import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
+import { blocked } from "./region.js?v=town-equipment-1";
+export const vehicleSize = (v) => {
+  const p = vehicleProfile(v);
+  return {
+    halfLength: p.length / 2,
+    halfWidth: p.width / 2 + 0.025,
+    mass: p.mass,
+  };
+};
 const axes = (v) => [
   { x: Math.cos(v.heading), z: Math.sin(v.heading) },
   { x: -Math.sin(v.heading), z: Math.cos(v.heading) },

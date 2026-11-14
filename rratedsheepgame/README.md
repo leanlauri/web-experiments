@@ -4,9 +4,9 @@ An independent, child-friendly 3D farm-heist adventure. Open **http://localhost/
 
 ## Adventure
 
-Begin in Clover Meadow with twelve sheep. Walk close to recruit them and lead them north into the gold circle at your little home farm. Once all twelve arrive, the backyard rocket workshop opens, with $25 and a free seven-seat van (six seats available for animals).
+Begin in Clover Meadow with twelve sheep. Walk close to recruit them and lead them north into the gold circle at your little home farm. Once all twelve arrive, the backyard rocket workshop opens, with $60, enough for the $50 foam pistol, and a free seven-seat van (six seats available for animals).
 
-The 920 × 920 m region has a central town and six large faction farms connected by roads. Six rivers divide the outer farms; the town ring road bridges the rivers. Farm gates face town. Sunflower Union raises sheep, Rosewood Riders pigs, Bluebell Dairy cows, Copper Carrot Co. rabbits, Mint Meadow goats, and Violet Valley alpacas. Each has its own colors, guard temperament and weapon preference.
+The 920 × 920 m region has a 236 × 212 m central town with 47 solid buildings: houses, signed shops, gas stations and warehouses. Ten grid streets meet the farm avenues and central roundabout, with sidewalks and building-aware herd routes. The atlas offers Region and Town streets views, and the minimap follows the player with a nearby view and an edge marker for home. Six large faction farms connect to town by road. Six rivers divide the outer farms, with their headwaters outside town; the town streets and ring road connect the counties. Farm gates face town. Sunflower Union raises sheep, Rosewood Riders pigs, Bluebell Dairy cows, Copper Carrot Co. rabbits, Mint Meadow goats, and Violet Valley alpacas. Each has its own colors, guard temperament and weapon preference.
 
 Recruit one species per trip. A vehicle reserves one seat for the driver and one for each animal. Nearby conscious followers board automatically; overflow follows on foot. Forty-eight traffic vehicles follow continuous closed routes along all six farm roads and a new town roundabout. Farm-end turns use smooth curves; cars keep their heading through route seams, slow for corners, follow queues and yield when merging. Their vehicles can be hijacked. Your own van is free to use without committing a vehicle crime.
 
@@ -18,23 +18,23 @@ Cars have oriented solid colliders matched to their body sizes, swept collision 
 
 All combat is nonlethal. Guards and police wake after twelve seconds. Animals knocked out by projectiles need wake-up snacks (R nearby) or reset when you return home; traffic tumbles also recover automatically. Snacks cost $15 per three; the opening journey replenishes a minimum of three at home to prevent getting stuck. Start with three hearts and buy upgrades to six. A knockout costs one heart and briefly stuns the player. At zero, spend five seconds in jail, lose the current herd, then return home healed.
 
-Buy a cushion club, foam bat, bubble wand, foam blaster and pillow launcher. Melee attacks target the nearest opponent in reach; projectiles auto-aim at the nearest opponent in range and can hit animals along their path. Buildings stop projectiles. Five rocket parts unlock at 12, 20, 30, 42 and 56 cumulative animal deliveries. These credits are not consumed. Install each part at home, then launch to see the rocket orbiting the Moon as the credits roll.
+Start with a visible cushion club. Buy a foam bat, $50 foam pistol, bubble wand, foam blaster or pillow launcher. Held models change with the equipped item; melee swings, aiming/recoil, muzzle flashes, foam trails and hit flinches show each action. Melee attacks target the nearest opponent in reach; projectiles auto-aim at the nearest opponent in range and can hit animals along their path. Buildings stop projectiles. Five rocket parts unlock at 12, 20, 30, 42 and 56 cumulative animal deliveries. These credits are not consumed. Install each part at home, then launch to see the rocket orbiting the Moon as the credits roll.
 
 ## Controls
 
 - On foot: WASD / arrows move relative to the camera; Shift runs; Space jumps.
 - Driving: the same camera-relative WASD / arrows or joystick directions aim and accelerate the car toward your destination. The body turns smoothly, but velocity carries through turns and tire grip gradually redirects it. Release to coast; hold Space / Brake to stop. Hard braking and sharp turns break traction and leave paired rear-tire marks that fade after eight seconds. Grass has lower grip and speed; heavier vehicles accelerate and turn more slowly. Exiting applies the parking brake.
 - E: enter the nearest vehicle within 6 m, or exit with passengers.
-- F: use equipped weapon; Q: cycle owned weapons.
+- F: use equipped weapon/item. Hold Q to open the paused radial equipment wheel; point at an owned item and release Q, or tap it. Arrow keys and Enter also select; Escape cancels. Wake-up snacks can be equipped alongside weapons.
 - R: revive an animal within 7 m; B: home workshop.
 - M: region map and faction guide. Escape: close a panel. Mouse wheel: zoom.
-- Touch: analog joystick and Jump, Ride and Bonk buttons. Map opens the regional map; Menu pauses the game and shows mission/rocket progress, equipment, Revive, Home shop, Switch weapon, help and restart. The compact HUD shows hearts, cash, active wanted stars and herd/home distance.
+- Touch: analog joystick and Jump, Ride and Bonk buttons. Map opens Region/Town views; Items opens the radial wheel; Menu pauses the game and shows mission/rocket progress, equipment, Revive, Home shop, the item wheel, sound toggle, help and restart. The compact HUD shows hearts, cash, active wanted stars and herd/home distance.
 
-The help and region-map panels pause the simulation. The workshop stops player movement; the home area protects the player. Local progress is saved at home and after purchases. Reload resumes from the last home checkpoint. Trips in progress are not saved. New adventure replaces the local save after confirmation.
+The help, map, menu and equipment wheel pause the simulation. The workshop stops player movement; the home area protects the player. Local progress is saved at home and after purchases. Reload resumes from the last home checkpoint. Trips in progress are not saved. New adventure replaces the local save after confirmation.
 
 ## Implementation and performance
 
-`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `traffic.js` defines arc-length sampled traffic routes and following/merge behavior. `driving.js` simulates directional steering, independent planar momentum, tire traction, braking and solid vehicle collisions. `skidmarks.js` records bounded tire trails with an eight-second lifetime; the renderer draws them in one instanced call with per-segment fading. The camera tracks ground position during jumps. Shop prices remain visible as separate labels, including on unaffordable or owned items. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
+`public/index.html`, `style.css` and `adventure.js` provide controls, HUD, map, workshop and local saves. `vehicles.js` shares eight vehicle profiles across handling, mass, collision size, models, seating and sound: dune buggy, hatchback, herd van, county bus, pickup, sports coupe, electric city car and livestock truck. `audio.js` synthesizes distinct engines and action sounds through WebAudio after the first user gesture, limits nearby engines to three voices, and mutes when hidden or paused. Sound can be toggled in Menu. `wheel.js` and `equipment.js` handle the radial selector and held/animated equipment. `traffic.js` defines arc-length sampled traffic routes and following/merge behavior. `driving.js` simulates directional steering, independent planar momentum, tire traction, braking and solid vehicle collisions. `skidmarks.js` records bounded tire trails with an eight-second lifetime; the renderer draws them in one instanced call with per-segment fading. The camera tracks ground position during jumps. Shop prices remain visible as separate labels, including on unaffordable or owned items. `simulation.js` owns gameplay state independently of rendering. `region.js` defines the shared map, collision shapes, roads, rivers and farm gates. `world.js` renders the world and Moon sequence with the locally vendored Three.js.
 
 The renderer maintains at most 49 nearby 64 m scenery chunks. Trees use instanced meshes; departing chunks are removed and their instance resources disposed. Actors beyond 150 m are hidden, distant ambient animals and guards skip AI movement, and static geometry uses frustum culling. Actor meshes and geometry/materials are reused; no remote assets are streamed. The map remains lightweight simulation data. The view is fog-limited with adjustable zoom and capped pixel density. Buildings, farm fences, water and region boundaries block movement; decorative trees and crops do not.
 
@@ -45,6 +45,7 @@ The previous countryside implementation and its standalone physics tests remain 
 Run from the repository root:
 
 ```sh
+node rratedsheepgame/tests/expansion.mjs
 node rratedsheepgame/tests/traffic.mjs
 node rratedsheepgame/tests/vehicle-impacts.mjs
 node rratedsheepgame/tests/driving.mjs
@@ -53,6 +54,8 @@ node rratedsheepgame/tests/adventure-browser.cjs
 node rratedsheepgame/tests/driving-browser.cjs
 node rratedsheepgame/tests/vehicle-impacts-browser.cjs
 node rratedsheepgame/tests/traffic-browser.cjs
+node rratedsheepgame/tests/expansion-browser.cjs
+node rratedsheepgame/tests/expansion-visuals.cjs
 ```
 
 The first checks the six roads and bridges, opening journey, one-species rule, capacity, theft, revival, payouts, resetting lost animals, wanted decay, jail, upgrades, defense scaling, save/load, collisions, friendly fire and the rocket ending. It walks actual flock simulations through all six farm gates and town to home.
