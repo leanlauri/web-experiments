@@ -67,7 +67,7 @@ const assert = require("node:assert/strict");
     assert.equal(s.money, 96);
     assert.equal(s.hearts, 5);
     s = await page.evaluate(() => fixture.town());
-    assert.equal(s.stats.townBuildings, 65);
+    assert.equal(s.stats.townBuildings, 48);
     await page.screenshot({ path: "/tmp/rratedsheepgame-grid-town.png" });
     await page.goto("http://localhost/web-experiments/rratedsheepgame/");
     await page.waitForFunction(() => window.sheepGame);

@@ -4,7 +4,7 @@ import {
   move,
   blocked,
   routeTarget,
-} from "./region.js?v=city-action-2";
+} from "./region.js?v=town-blocks-1";
 export const HERD_SPACING = {
   sheep: 2.5,
   cow: 3.2,

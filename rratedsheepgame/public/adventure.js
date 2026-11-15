@@ -1,9 +1,9 @@
-import { createMenus } from "./menus.js?v=city-action-2";
-import { createController } from "./controller.js?v=city-action-2";
-import { createWheel } from "./wheel.js?v=city-action-2";
-import { createAudio } from "./audio.js?v=city-action-2";
-import { vehicleProfile } from "./vehicles.js?v=city-action-2";
-import { Game } from "./simulation.js?v=city-action-2";
+import { createMenus } from "./menus.js?v=town-blocks-1";
+import { createController } from "./controller.js?v=town-blocks-1";
+import { createWheel } from "./wheel.js?v=town-blocks-1";
+import { createAudio } from "./audio.js?v=town-blocks-1";
+import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
+import { Game } from "./simulation.js?v=town-blocks-1";
 import {
   HOME,
   FARMS,
@@ -11,12 +11,13 @@ import {
   PARTS,
   SIZE,
   TOWN_STREETS,
+  COUNTRY_ROADS,
   OBSTACLES,
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=city-action-2";
-import { createWorld } from "./world.js?v=city-action-2";
+} from "./region.js?v=town-blocks-1";
+import { createWorld } from "./world.js?v=town-blocks-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -469,7 +470,7 @@ function map(canvas, large = false) {
       "#689faa",
       large ? 7 : 3,
     );
-    line({ x: 0, z: 0 }, f, "#5e7163", large ? 5 : 2);
+
     dot(f, `#${f.color.toString(16)}`, large ? 14 : 6);
     if (large && !atlasTown) {
       const [x, y] = point(f);
@@ -486,7 +487,9 @@ function map(canvas, large = false) {
       }
     }
   }
-  line({ x: 0, z: 0 }, HOME, "#5e7163", large ? 4 : 2);
+  for (const r of COUNTRY_ROADS)
+    for (let i = 1; i < r.points.length; i++)
+      line(r.points[i - 1], r.points[i], "#5e7163", large ? 5 : 2);
   for (const street of TOWN_STREETS)
     line(street.a, street.b, "#68796a", Math.max(1, street.width * scale));
   for (const b of OBSTACLES.filter((b) => b.type === "town")) {

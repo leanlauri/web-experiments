@@ -10,6 +10,8 @@ import {
   blocked,
   dist,
   farmGate,
+  COUNTRY_ROADS,
+  routeTarget,
 } from "../public/region.js";
 const tick = (g, seconds, input = {}) => {
   for (let i = 0; i < seconds * 60; i++) g.update(1 / 60, input);
@@ -44,12 +46,25 @@ for (const f of FARMS) {
   const angle = f.angle + Math.PI / 6;
   assert(water({ x: Math.cos(angle) * 200, z: Math.sin(angle) * 200 }));
   assert(!water({ x: Math.cos(angle) * 100, z: Math.sin(angle) * 100 }));
-  for (let r = 10; r < 290; r += 2)
-    assert(
-      !blocked({ x: Math.cos(f.angle) * r, z: Math.sin(f.angle) * r }),
-      `Road to ${f.name} blocked at ${r}`,
-    );
 }
+for (const road of COUNTRY_ROADS)
+  for (let i = 1; i < road.points.length; i++) {
+    const a = road.points[i - 1],
+      b = road.points[i],
+      length = dist(a, b);
+    for (
+      let d = 0;
+      d < length - (i === road.points.length - 1 ? 45 : 0);
+      d += 2
+    )
+      assert(
+        !blocked({
+          x: a.x + ((b.x - a.x) * d) / length,
+          z: a.z + ((b.z - a.z) * d) / length,
+        }),
+        "country approach stays clear",
+      );
+  }
 {
   const g = new Game();
   assert.equal(g.animals.filter((a) => a.farm === -1).length, 12);
@@ -215,10 +230,11 @@ for (const f of FARMS) {
   for (const target of [farmGate(f), { x: 0, z: 0 }, { x: 0, z: -185 }]) {
     let steps = 0;
     while (dist(g.player, target) > 1 && steps++ < 12000) {
-      const d = dist(g.player, target);
+      const waypoint = routeTarget(g.player, target),
+        d = dist(g.player, waypoint) || 1;
       g.update(1 / 60, {
-        x: (target.x - g.player.x) / d,
-        z: (target.z - g.player.z) / d,
+        x: (waypoint.x - g.player.x) / d,
+        z: (waypoint.z - g.player.z) / d,
       });
     }
     assert(steps < 12000, `${f.name}: route must make progress`);

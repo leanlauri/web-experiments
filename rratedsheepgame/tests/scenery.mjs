@@ -86,7 +86,12 @@ for (const type of [
 const crate = SOLID_PROPS.find((p) => p.type === "crate");
 assert(!SCENERY.blocks({ ...crate, y: 3 }, 0.4), "height clears a low crate");
 const gas = OBSTACLES.find((b) => b.kind === "gas"),
-  under = { kind: "car", heading: Math.PI / 2, x: gas.x, z: gas.z + 2.5 };
+  under = {
+    kind: "car",
+    heading: Math.PI / 2,
+    x: gas.x,
+    z: gas.z + (gas.front || 1) * 3,
+  };
 assert(!vehicleBlocked(under), "open gas forecourt is usable");
 assert(
   vehicleBlocked({ ...under, y: 4.1 }),

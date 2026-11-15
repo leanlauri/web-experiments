@@ -1,4 +1,4 @@
-import { createScenery } from "./scenery.js?v=city-action-2";
+import { createScenery } from "./scenery.js?v=town-blocks-1";
 export const SIZE = 460,
   HOME = { x: 0, z: -190, r: 28 },
   START = { x: 0, z: -135 };
@@ -69,6 +69,35 @@ for (const x of [-92, -46, 0, 46, 92])
   TOWN_STREETS.push({ a: { x, z: -102 }, b: { x, z: 102 }, width: 11 });
 for (const z of [-80, -40, 0, 40, 80])
   TOWN_STREETS.push({ a: { x: -114, z }, b: { x: 114, z }, width: 11 });
+// Country roads meet outer intersections with short approaches perpendicular to town.
+// Bends stay outside the grid, leaving the building blocks uninterrupted.
+export const FARM_ROADS = FARMS.map((farm, i) => ({
+  farm: i,
+  width: 12,
+  points: [
+    [
+      { x: 92, z: 40 },
+      { x: 46, z: 80 },
+      { x: -46, z: 80 },
+      { x: -92, z: -40 },
+      { x: -46, z: -80 },
+      { x: 46, z: -80 },
+    ][i],
+    [
+      { x: 150, z: 40 },
+      { x: 46, z: 140 },
+      { x: -46, z: 140 },
+      { x: -150, z: -40 },
+      { x: -46, z: -140 },
+      { x: 46, z: -140 },
+    ][i],
+    { x: farm.x, z: farm.z },
+  ],
+}));
+export const COUNTRY_ROADS = [
+  ...FARM_ROADS,
+  { farm: -1, width: 12, points: [{ x: 0, z: -80 }, { ...HOME }] },
+];
 export const inTown = (p) =>
   p.x > TOWN.west && p.x < TOWN.east && p.z > TOWN.north && p.z < TOWN.south;
 export const PARTS = [
@@ -91,8 +120,10 @@ export function segmentDistance(p, a, b) {
 export function road(p) {
   if (TOWN_STREETS.some((s) => segmentDistance(p, s.a, s.b) < s.width / 2))
     return true;
-  return [...FARMS, HOME].some(
-    (f) => segmentDistance(p, { x: 0, z: 0 }, f) < 6,
+  return COUNTRY_ROADS.some((r) =>
+    r.points
+      .slice(1)
+      .some((b, i) => segmentDistance(p, r.points[i], b) < r.width / 2),
   );
 }
 export function water(p) {
@@ -107,49 +138,90 @@ export function water(p) {
 }
 // These same obstacles drive rendering and movement; farm gates face the town.
 export const OBSTACLES = [];
-// Rectangular blocks with diagonal avenues kept clear for the farm traffic routes.
+export const TOWN_LOTS = [];
 let lot = 0;
-for (let x = -110; x <= 110; x += 11)
-  for (let z = -99; z <= 99; z += 11) {
-    const index = lot++,
-      kind = ["house", "house", "shop", "house", "warehouse", "gas", "shop"][
-        index % 7
-      ];
-    const hx = kind === "warehouse" ? 4.8 : kind === "gas" ? 4 : 3.3,
-      hz = kind === "warehouse" ? 4.8 : 3.3;
-    if (Math.hypot(x, z) < 36) continue;
-    let reserved = false;
-    for (const dx of [-hx - 0.8, 0, hx + 0.8])
-      for (const dz of [-hz - 0.8, 0, hz + 0.8])
-        if (road({ x: x + dx, z: z + dz })) reserved = true;
-    if (reserved) continue;
-    OBSTACLES.push({
+const addBuilding = (x, z, hx, hz, kind, front, index) =>
+  OBSTACLES.push({
+    x,
+    z,
+    hx,
+    hz,
+    kind,
+    front,
+    type: "town",
+    h:
+      kind === "warehouse"
+        ? 8 + (index % 2) * 2
+        : kind === "shop"
+          ? 5 + (index % 2) * 2
+          : kind === "gas"
+            ? 4
+            : 5 + (index % 3),
+    color: (kind === "house"
+      ? [0xe1c7a4, 0xe4d5b3, 0xc5cbb6, 0xd8bca5]
+      : kind === "shop"
+        ? [0xd6b0a1, 0xbccac3, 0xd9c898, 0xb5c5ca]
+        : [0xb6c6c4, 0xc2bb9e])[
+      index % (kind === "house" || kind === "shop" ? 4 : 2)
+    ],
+    name:
+      kind === "shop"
+        ? ["Clover Market", "Foam & Fun", "Moon Bakery", "County Supplies"][
+            index % 4
+          ]
+        : kind === "gas"
+          ? "Orbit Fuel"
+          : kind === "warehouse"
+            ? "County Freight"
+            : "Home",
+  });
+for (let ix = 0; ix < 4; ix++)
+  for (let iz = 0; iz < 4; iz++) {
+    const x = -69 + ix * 46,
+      z = -60 + iz * 40,
+      index = lot++,
+      central = ix > 0 && ix < 3 && iz > 0 && iz < 3,
+      industrial = ix === 3 && (iz === 0 || iz === 3),
+      gas = ix === 0 && (iz === 0 || iz === 3);
+    TOWN_LOTS.push({
       x,
       z,
-      hx,
-      hz,
-      h:
-        kind === "warehouse"
-          ? 8
-          : kind === "shop"
-            ? 5
-            : kind === "gas"
-              ? 4
-              : 5 + (index % 3),
-      type: "town",
-      kind,
-      color: [0xe1c7a4, 0xe2b6a3, 0xb6c6c4, 0xc9c19e][index % 4],
-      name:
-        kind === "shop"
-          ? ["Clover Market", "Foam & Fun", "Moon Bakery", "County Supplies"][
-              index % 4
-            ]
-          : kind === "gas"
-            ? "Orbit Fuel"
-            : kind === "warehouse"
-              ? "County Freight"
-              : "Home",
+      hx: 15.5,
+      hz: 12.5,
+      kind: industrial
+        ? "industrial"
+        : gas
+          ? "service"
+          : central
+            ? "commercial"
+            : "residential",
     });
+    if (central || industrial) {
+      for (const side of [-1, 1])
+        addBuilding(
+          x,
+          z + side * 7.2,
+          industrial ? 12 : 13,
+          4.8,
+          industrial ? "warehouse" : "shop",
+          side,
+          index + (side > 0 ? 1 : 0),
+        );
+    } else if (gas) {
+      addBuilding(x - 7, z - 5, 6, 5, "gas", -1, index);
+      addBuilding(x + 9, z + 7.5, 5.2, 4.5, "shop", 1, index + 1);
+    } else
+      for (const dx of [-10, 10])
+        for (const side of [-1, 1])
+          addBuilding(
+            x + dx,
+            z + side * 7.5,
+            5.2,
+            4.5,
+            "house",
+            side,
+            index + (dx > 0 ? 1 : 0) + (side > 0 ? 2 : 0),
+          );
   }
 for (const f of FARMS) {
   OBSTACLES.push({
@@ -202,7 +274,7 @@ export const treesInChunk = SCENERY.treesInChunk,
 export function buildingBlocks(b, p, r = 0) {
   if (b.type === "home") return houseBlocked(p, r);
   if (b.type === "home-barn") return houseBlocked(p, r, HOME_BARN);
-  const z = b.z - (b.kind === "gas" ? 1.5 : 0),
+  const z = b.z - (b.kind === "gas" ? 1.5 * (b.front || 1) : 0),
     hz = b.kind === "gas" ? b.hz / 2 : b.hz;
   return Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - z) < hz + r;
 }

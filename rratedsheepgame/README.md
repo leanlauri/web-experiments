@@ -6,7 +6,7 @@ An independent, child-friendly 3D farm-heist adventure. Open **http://localhost/
 
 Begin in Clover Meadow with twelve sheep. Walk close to recruit them and lead them north into the gold circle at your little home farm. Once all twelve arrive, the backyard rocket workshop opens, with $60, enough for the $50 foam pistol, and a free seven-seat van (six seats available for animals).
 
-The 920 × 920 m region has a 236 × 212 m central town with 65 solid buildings: houses, signed shops, gas stations and warehouses. Ten grid streets meet the farm avenues, with sidewalks and building-aware herd routes. The atlas offers Region and Town streets views, and the minimap follows the player with a nearby view and an edge marker for home. Six large faction farms connect to town by road. Six rivers divide the outer farms, with their headwaters outside town; the town street grid connects the counties. Farm gates face town. Sunflower Union raises sheep, Rosewood Riders pigs, Bluebell Dairy cows, Copper Carrot Co. rabbits, Mint Meadow goats, and Violet Valley alpacas. Each has its own colors, guard temperament and weapon preference.
+The 920 × 920 m region has a 236 × 212 m central town with 48 larger, street-aligned buildings: houses, signed shops, gas stations and warehouses. Country approaches meet the outer grid intersections at right angles, with their bends outside town. Residential blocks have front yards and paths, central blocks have shops facing the streets, and the outer blocks include warehouse yards and service stations. Ten grid streets connect the blocks with sidewalks and building-aware herd routes. The atlas offers Region and Town streets views, and the minimap follows the player with a nearby view and an edge marker for home. Six large faction farms connect to town by road. Six rivers divide the outer farms, with their headwaters outside town; the town street grid connects the counties. Farm gates face town. Sunflower Union raises sheep, Rosewood Riders pigs, Bluebell Dairy cows, Copper Carrot Co. rabbits, Mint Meadow goats, and Violet Valley alpacas. Each has its own colors, guard temperament and weapon preference.
 
 Recruit one species per trip. Followers keep a loose three-column formation with separation sized to the species: cows need more room than rabbits. A vehicle reserves one seat for the driver and one for each animal. Nearby conscious followers board automatically; overflow follows on foot. Forty-eight traffic vehicles follow continuous closed routes along all six farm roads and the rectangular town streets. Farm-end turns use smooth curves; cars keep their heading through route seams, slow for corners, follow queues and yield when merging. Their vehicles can be hijacked. Stealing an occupied moving vehicle ejects its driver into a nonlethal tumble; drivers recover and flee. The former inner and outer circular roads have been removed. Your own van is free to use without committing a vehicle crime.
 
@@ -47,6 +47,7 @@ The previous countryside implementation and its standalone physics tests remain 
 Run from the repository root:
 
 ```sh
+node rratedsheepgame/tests/town-layout.mjs
 node rratedsheepgame/tests/city-action.mjs
 node rratedsheepgame/tests/city-action-browser.cjs
 node rratedsheepgame/tests/scenery.mjs

@@ -94,5 +94,5 @@ for (const s of TOWN_STREETS)
   assert(steps < 2000, "town pathfinding routes a follower around buildings");
 }
 console.log(
-  "PASS: 65-building town, rectangular connected streets, opening club/pistol purchase, attack state, nine vehicle profiles/capacities/masses/tones and town follower routing.",
+  "PASS: 48-building town, rectangular connected streets, opening club/pistol purchase, attack state, nine vehicle profiles/capacities/masses/tones and town follower routing.",
 );

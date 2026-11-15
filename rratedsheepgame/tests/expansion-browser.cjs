@@ -36,7 +36,7 @@ const assert = require("node:assert/strict");
     await page.waitForFunction(() => window.sheepGame);
     assert.equal(
       (await page.evaluate(() => sheepGame.getState())).stats.townBuildings,
-      65,
+      48,
     );
     await page.keyboard.down("KeyQ");
     await page.locator("#wheel").waitFor({ state: "visible" });

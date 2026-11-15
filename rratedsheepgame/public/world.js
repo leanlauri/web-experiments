@@ -1,7 +1,7 @@
-import { createEquipment } from "./equipment.js?v=city-action-2";
-import { vehicleProfile } from "./vehicles.js?v=city-action-2";
+import { createEquipment } from "./equipment.js?v=town-blocks-1";
+import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
 import * as T from "./vendor/three.module.js";
-import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=city-action-2";
+import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=town-blocks-1";
 import {
   SIZE,
   HOME,
@@ -13,9 +13,11 @@ import {
   SOLID_PROPS,
   treesInChunk,
   TOWN_STREETS,
+  COUNTRY_ROADS,
+  TOWN_LOTS,
   RIVER_START,
   dist,
-} from "./region.js?v=city-action-2";
+} from "./region.js?v=town-blocks-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
@@ -349,32 +351,51 @@ export function createWorld(canvas) {
     );
     river.rotation.y = Math.PI / 2 - a;
   }
-  for (const f of [...FARMS, HOME]) {
-    const r = Math.hypot(f.x, f.z),
-      strip = shape(
+  for (const r of COUNTRY_ROADS)
+    for (let i = 1; i < r.points.length; i++) {
+      const a = r.points[i - 1],
+        b = r.points[i],
+        length = dist(a, b),
+        angle = Math.atan2(b.x - a.x, b.z - a.z);
+      const strip = shape(
         world,
         0x69766b,
-        ((f.x / r) * (r + 27)) / 2,
+        (a.x + b.x) / 2,
         0.08,
-        ((f.z / r) * (r + 27)) / 2,
-        11,
+        (a.z + b.z) / 2,
+        r.width,
         0.12,
-        r - 27,
+        length,
       );
-    strip.rotation.y = Math.atan2(f.x, f.z);
-    for (let d = 36; d < r; d += 10) {
-      const line = shape(
-        world,
-        0xd6d1af,
-        (f.x / r) * d,
-        0.16,
-        (f.z / r) * d,
-        0.18,
-        0.03,
-        3,
-      );
-      line.rotation.y = strip.rotation.y;
+      strip.rotation.y = angle;
+      for (let d = 8; d < length - 5; d += 10) {
+        const dash = shape(
+          world,
+          0xd6d1af,
+          a.x + ((b.x - a.x) * d) / length,
+          0.16,
+          a.z + ((b.z - a.z) * d) / length,
+          0.18,
+          0.03,
+          3,
+        );
+        dash.rotation.y = angle;
+      }
     }
+  for (const lot of TOWN_LOTS) {
+    shape(
+      world,
+      lot.kind === "residential" ? 0xadc188 : 0xc7c1aa,
+      lot.x,
+      0.035,
+      lot.z,
+      lot.hx * 2,
+      0.06,
+      lot.hz * 2,
+    );
+    if (lot.kind === "industrial" || lot.kind === "service")
+      for (let i = -2; i <= 2; i++)
+        shape(world, 0xeee3bf, lot.x + i * 3, 0.075, lot.z, 0.1, 0.02, 5);
   }
   for (const street of TOWN_STREETS) {
     const vertical = street.a.x === street.b.x;
@@ -443,6 +464,7 @@ export function createWorld(canvas) {
     );
     panel.position.set(x, y, z);
     world.add(panel);
+    return panel;
   }
   const houseWalls = [],
     houseDetails = [];
@@ -568,9 +590,18 @@ export function createWorld(canvas) {
   sign("BARN", HOME_BARN.x, 5.2, HOME_BARN.z + HOME_BARN.hz + 0.2, 4);
   for (const b of OBSTACLES) {
     if (b.type === "home" || b.type === "home-barn") continue;
+    const site = new T.Group();
+    site.position.set(b.x, 0, b.z);
+    world.add(site);
+    const buildingShape = (_parent, color, x, y, z, ...sizes) =>
+      shape(site, color, x - b.x, y, z - b.z, ...sizes);
+    const buildingSign = (...args) => {
+      const panel = sign(...args);
+      site.attach(panel);
+    };
     const gas = b.kind === "gas",
       height = gas ? b.h * 0.65 : b.h;
-    shape(
+    buildingShape(
       world,
       b.color,
       b.x,
@@ -582,13 +613,22 @@ export function createWorld(canvas) {
     );
     if (b.kind === "house") {
       const roof = new T.Mesh(new T.ConeGeometry(1, 1, 4), material(0x926f60));
-      roof.position.set(b.x, b.h + 1, b.z);
+      roof.position.set(0, b.h + 1, 0);
       roof.scale.set(b.hx * 1.65, 2.8, b.hz * 1.65);
       roof.rotation.y = Math.PI / 4;
-      world.add(roof);
-      shape(world, 0x8b7760, b.x + b.hx * 0.55, b.h + 1, b.z - 1, 0.7, 2, 0.8);
+      site.add(roof);
+      buildingShape(
+        world,
+        0x8b7760,
+        b.x + b.hx * 0.55,
+        b.h + 1,
+        b.z - 1,
+        0.7,
+        2,
+        0.8,
+      );
     } else if (!gas) {
-      shape(
+      buildingShape(
         world,
         b.kind === "warehouse" ? 0x6c7f80 : 0x6f8981,
         b.x,
@@ -600,7 +640,7 @@ export function createWorld(canvas) {
       );
     }
     for (const side of [-1, 1])
-      shape(
+      buildingShape(
         world,
         0xb8d7d8,
         b.x + side * b.hx * 0.55,
@@ -610,9 +650,18 @@ export function createWorld(canvas) {
         1.6,
         0.08,
       );
-    shape(world, 0x536e60, b.x, 0.9, b.z + b.hz + 0.07, 1.25, 1.8, 0.12);
+    buildingShape(
+      world,
+      0x536e60,
+      b.x,
+      0.9,
+      b.z + b.hz + 0.07,
+      1.25,
+      1.8,
+      0.12,
+    );
     if (b.kind === "shop") {
-      shape(
+      buildingShape(
         world,
         0xa3cdd2,
         b.x,
@@ -622,16 +671,34 @@ export function createWorld(canvas) {
         2.2,
         0.12,
       );
-      shape(world, 0xd79a73, b.x, 3.2, b.z + b.hz + 0.55, b.hx * 2, 0.25, 1.2);
-      sign(b.name, b.x, 4.25, b.z + b.hz + 0.2, b.hx * 1.9);
+      buildingShape(
+        world,
+        0xd79a73,
+        b.x,
+        3.2,
+        b.z + b.hz + 0.55,
+        b.hx * 2,
+        0.25,
+        1.2,
+      );
+      buildingSign(b.name, b.x, 4.25, b.z + b.hz + 0.2, b.hx * 1.9);
     }
     if (gas) {
-      sign("ORBIT FUEL", b.x, b.h + 0.3, b.z + b.hz + 0.4, b.hx * 1.8);
+      buildingSign("ORBIT FUEL", b.x, b.h + 0.3, b.z + b.hz + 0.4, b.hx * 1.8);
     }
     if (b.kind === "warehouse") {
-      shape(world, 0x869a9a, b.x, 2, b.z + b.hz + 0.1, b.hx * 1.6, 4, 0.15);
+      buildingShape(
+        world,
+        0x869a9a,
+        b.x,
+        2,
+        b.z + b.hz + 0.1,
+        b.hx * 1.6,
+        4,
+        0.15,
+      );
       for (let i = 0; i < 6; i++)
-        shape(
+        buildingShape(
           world,
           0xafb9ae,
           b.x,
@@ -641,7 +708,31 @@ export function createWorld(canvas) {
           0.08,
           0.05,
         );
-      sign("COUNTY FREIGHT", b.x, b.h - 0.6, b.z + b.hz + 0.2, b.hx * 1.8);
+      buildingSign(
+        "COUNTY FREIGHT",
+        b.x,
+        b.h - 0.6,
+        b.z + b.hz + 0.2,
+        b.hx * 1.8,
+      );
+    }
+    if (b.type === "town") {
+      site.rotation.y = b.front === -1 ? Math.PI : 0;
+      const front = b.front || 1,
+        edge = b.z + front * b.hz;
+      const nearest = Math.round((b.z + front * 8) / 40) * 40,
+        length = Math.abs(nearest - edge);
+      if (length > 0 && length < 18)
+        shape(
+          world,
+          0xd9cfaf,
+          b.x,
+          0.09,
+          (nearest + edge) / 2,
+          1.5,
+          0.025,
+          length,
+        );
     }
   }
   shape(world, 0xd9ce9e, HOME.x, 0.03, HOME.z - 4, 54, 0.12, 62);

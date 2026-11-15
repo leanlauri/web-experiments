@@ -1,11 +1,11 @@
-import { vehicleProfile } from "./vehicles.js?v=city-action-2";
+import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
 import {
   blocked,
   OBSTACLES,
   SIZE,
   SCENERY,
   buildingBlocks,
-} from "./region.js?v=city-action-2";
+} from "./region.js?v=town-blocks-1";
 export const vehicleSize = (v) => {
   if (v.halfLength !== undefined && v.halfWidth !== undefined)
     return { halfLength: v.halfLength, halfWidth: v.halfWidth, mass: Infinity };

@@ -35,7 +35,7 @@ const assert = require("node:assert/strict");
     assert(state.equipment.swing);
     await page.screenshot({ path: "/tmp/rratedsheepgame-club-swing.png" });
     state = await page.evaluate(() => fixture.town());
-    assert.equal(state.townBuildings, 65);
+    assert.equal(state.townBuildings, 48);
     await page.screenshot({ path: "/tmp/rratedsheepgame-town-expanded.png" });
     await page.evaluate(() => fixture.cars());
     await page.screenshot({ path: "/tmp/rratedsheepgame-vehicle-types.png" });

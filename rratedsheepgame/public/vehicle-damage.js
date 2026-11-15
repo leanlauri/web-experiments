@@ -1,4 +1,4 @@
-import { vehicleProfile } from "./vehicles.js?v=city-action-2";
+import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
 export const FIRE_SECONDS = 5,
   BLAST_RADIUS = 16;
 export function initVehicleHealth(v) {

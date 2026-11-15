@@ -1,59 +1,67 @@
-import { VEHICLES, vehicleProfile } from "./vehicles.js?v=city-action-2";
-import { FARMS, HOME } from "./region.js?v=city-action-2";
+import { VEHICLES, vehicleProfile } from "./vehicles.js?v=town-blocks-1";
+import { FARMS, HOME, FARM_ROADS } from "./region.js?v=town-blocks-1";
 import {
   vehicleBlocked,
   vehicleOverlap,
   vehicleSize,
-} from "./vehicle-collisions.js?v=city-action-2";
+} from "./vehicle-collisions.js?v=town-blocks-1";
 export const TRAFFIC_COUNT = 48;
 const LANE = 3,
   samples = [];
 const grid = [
   [-92, -80],
-  [-46, -80],
-  [-46, -40],
-  [46, -40],
-  [46, 0],
-  [-46, 0],
-  [-46, 40],
-  [46, 40],
-  [46, 80],
-  [92, 80],
-  [92, 40],
-  [92, 0],
-  [92, -40],
-  [92, -80],
   [0, -80],
   [0, -40],
-  [0, 0],
+  [-46, -40],
+  [-46, 0],
+  [46, 0],
+  [46, 40],
   [0, 40],
   [0, 80],
+  [92, 80],
+  [92, -80],
+  [46, -80],
+  [46, -40],
+  [0, -40],
+  [0, 0],
+  [-46, 0],
+  [-46, 40],
+  [-46, 80],
   [-92, 80],
-  [-92, 40],
-  [-92, 0],
   [-92, -40],
 ];
-const attachments = [
-  { segment: 10, x: 92, z: 92 * Math.tan(FARMS[0].angle) },
-  { segment: 6, x: 40 / Math.tan(FARMS[1].angle), z: 40 },
-  { segment: 18, x: -80, z: 80 },
-  { segment: 21, x: -92, z: -92 * Math.tan(FARMS[3].angle) },
-  { segment: 2, x: -40 / Math.tan(FARMS[4].angle), z: -40 },
-  { segment: 4, x: 0, z: 0 },
-];
+const attachments = FARM_ROADS.map((r, i) => ({
+  segment: [9, 8, 17, 18, 0, 10][i],
+  ...r.points[0],
+  via: r.points.slice(1, -1),
+}));
+// Reserve each country-road junction before vehicles turn across opposing lanes.
+// The holding line must clear the whole turn, including the tail of a bus.
+const forkZones = attachments.map((a) => ({ x: a.x, z: a.z, radius: 12 }));
 const points = [];
+const append = (p) => {
+  if (
+    !points.length ||
+    Math.hypot(points.at(-1).x - p.x, points.at(-1).z - p.z) > 0.001
+  )
+    points.push(p);
+};
 for (let i = 0; i < grid.length; i++) {
-  points.push({ x: grid[i][0], z: grid[i][1] });
+  append({ x: grid[i][0], z: grid[i][1] });
   attachments.forEach((a, farm) => {
     if (a.segment === i) {
-      points.push(
-        { x: a.x, z: a.z },
-        {
-          x: Math.cos(FARMS[farm].angle) * 275,
-          z: Math.sin(FARMS[farm].angle) * 275,
-        },
-        { x: a.x, z: a.z },
-      );
+      append({ x: a.x, z: a.z });
+      a.via.forEach(append);
+      const last = a.via.at(-1) || a,
+        destination = FARMS[farm],
+        length = Math.hypot(destination.x - last.x, destination.z - last.z),
+        t = Math.max(0, 1 - 55 / length);
+      append({
+        x: last.x + (destination.x - last.x) * t,
+        z: last.z + (destination.z - last.z) * t,
+      });
+      [...a.via].reverse().forEach(append);
+      append({ x: a.x, z: a.z });
     }
   });
 }
@@ -283,11 +291,54 @@ export function stepTraffic(v, dt, vehicles, level = 0) {
     trafficPose(v.trafficDistance + 14).limit,
   );
   const speed = v.trafficSpeed ?? v.currentSpeed ?? v.speed;
+  for (let i = 0; i < forkZones.length; i++) {
+    const zone = forkZones[i],
+      distance = Math.hypot(v.x - zone.x, v.z - zone.z),
+      release = zone.radius + 10;
+    if (v.forkToken === i && distance > release) v.forkToken = null;
+    if (distance > zone.radius + 18) continue;
+    const future = trafficPose(v.trafficDistance + 3),
+      approaching = Math.hypot(future.x - zone.x, future.z - zone.z) < distance;
+    if (!approaching && v.forkToken !== i) continue;
+    let owner = vehicles.find(
+      (o) =>
+        !o.stolen &&
+        o.forkToken === i &&
+        Math.hypot(o.x - zone.x, o.z - zone.z) <= release,
+    );
+    if (!owner) {
+      owner = vehicles
+        .filter(
+          (o) =>
+            !o.stolen &&
+            Math.hypot(o.x - zone.x, o.z - zone.z) < zone.radius + 18,
+        )
+        .filter((o) => {
+          const p = trafficPose((o.trafficDistance || 0) + 3);
+          return (
+            Math.hypot(p.x - zone.x, p.z - zone.z) <
+            Math.hypot(o.x - zone.x, o.z - zone.z)
+          );
+        })
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - zone.x, a.z - zone.z) -
+              Math.hypot(b.x - zone.x, b.z - zone.z) || a.id - b.id,
+        )[0];
+      if (owner) owner.forkToken = i;
+    }
+    if (owner && owner !== v)
+      target = Math.min(
+        target,
+        Math.max(0, (distance - zone.radius - 4) / 1.2),
+      );
+  }
   // Yield before perpendicular lane crossings. Arrival time breaks ties;
   // a stable vehicle ID decides simultaneous arrivals without a central queue.
   const forward = { x: Math.cos(pose.heading), z: Math.sin(pose.heading) };
   for (const other of vehicles) {
     if (
+      v.forkToken != null ||
       other === v ||
       other.stolen ||
       Math.hypot(other.x - v.x, other.z - v.z) > 30

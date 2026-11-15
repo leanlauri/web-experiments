@@ -118,8 +118,23 @@ export function createScenery({
   for (const f of FARMS) pole("flagpole", f.x + 26, f.z + 21, 0.1, 8, 0x806b4e);
   for (const b of OBSTACLES.filter((b) => b.kind === "gas")) {
     for (const side of [-1, 1]) {
-      pole("canopy-post", b.x + side * b.hx * 0.8, b.z + 2, 0.1, 5.2, 0xe6d9ab);
-      box("fuel-pump", b.x + side * 1.7, b.z + 1.7, 0.325, 0.35, 1.6, 0xd77761);
+      pole(
+        "canopy-post",
+        b.x + side * b.hx * 0.8,
+        b.z + 2 * (b.front || 1),
+        0.1,
+        5.2,
+        0xe6d9ab,
+      );
+      box(
+        "fuel-pump",
+        b.x + side * 1.7,
+        b.z + 1.7 * (b.front || 1),
+        0.325,
+        0.35,
+        1.6,
+        0xd77761,
+      );
     }
     box("canopy", b.x, b.z, b.hx + 0.35, b.hz + 0.35, 0.6, 0xe8c361, b.h);
   }

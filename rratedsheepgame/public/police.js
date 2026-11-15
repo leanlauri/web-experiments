@@ -1,22 +1,22 @@
-import { startTumble } from "./tumbles.js?v=city-action-2";
+import { startTumble } from "./tumbles.js?v=town-blocks-1";
 import {
   dist,
   blocked,
   routeTarget,
   HOME,
   road,
-} from "./region.js?v=city-action-2";
+} from "./region.js?v=town-blocks-1";
 import {
   trafficPose,
   nearestTrafficDistance,
-} from "./traffic.js?v=city-action-2";
+} from "./traffic.js?v=town-blocks-1";
 import {
   vehicleBlocked,
   vehicleOverlap,
-} from "./vehicle-collisions.js?v=city-action-2";
-import { initVehicleHealth } from "./vehicle-damage.js?v=city-action-2";
-import { drive } from "./driving.js?v=city-action-2";
-import { POLICE_VEHICLE } from "./vehicles.js?v=city-action-2";
+} from "./vehicle-collisions.js?v=town-blocks-1";
+import { initVehicleHealth } from "./vehicle-damage.js?v=town-blocks-1";
+import { drive } from "./driving.js?v=town-blocks-1";
+import { POLICE_VEHICLE } from "./vehicles.js?v=town-blocks-1";
 export const FIRST_WANTED_WALK_SPEED = 2.8;
 export function createOfficer(game, position, vehicle) {
   return {
@@ -94,20 +94,56 @@ export function spawnPatrol(game, count, options = {}) {
   if (!car) {
     const nearest = nearestTrafficDistance(game.player);
     let pose;
-    for (let i = 0; i < 24; i++) {
+    const clearSpawn = (p) => {
+      const v = { ...p, kind: "car", isPolice: true };
+      return (
+        dist(p, game.player) >= 65 &&
+        dist(p, game.player) <= 140 &&
+        !vehicleBlocked(v) &&
+        !game.vehicles.some((other) => vehicleOverlap(v, other))
+      );
+    };
+    // Stage roadblocks along their own street, rather than across occupied lots.
+    // Units still drive into place and turn across the lane before parking.
+    if (options.mode === "roadblock" && options.target) {
+      const target = options.target,
+        along = target.heading - Math.PI / 2;
+      for (const distance of [18, 26, 34, 42, 50]) {
+        for (const side of [-1, 1]) {
+          const p = {
+            x: target.x + Math.cos(along) * side * distance,
+            z: target.z + Math.sin(along) * side * distance,
+            heading: along + (side > 0 ? Math.PI : 0),
+          };
+          if (!clearSpawn(p)) continue;
+          let clear = true;
+          for (let d = 0; d <= distance; d += 2) {
+            const q = {
+              x: target.x + Math.cos(along) * side * d,
+              z: target.z + Math.sin(along) * side * d,
+              heading: p.heading,
+            };
+            if (
+              !road(q) ||
+              vehicleBlocked({ ...q, kind: "car", isPolice: true })
+            ) {
+              clear = false;
+              break;
+            }
+          }
+          if (clear) {
+            pose = p;
+            break;
+          }
+        }
+        if (pose) break;
+      }
+    }
+    for (let i = 0; !pose && i < 24; i++) {
       const p = trafficPose(
         nearest + (i % 2 ? 1 : -1) * (70 + Math.floor(i / 2) * 30),
       );
-      const v = { ...p, kind: "car", isPolice: true };
-      if (
-        dist(p, game.player) < 65 ||
-        dist(p, game.player) > 140 ||
-        vehicleBlocked(v) ||
-        game.vehicles.some((other) => vehicleOverlap(v, other))
-      )
-        continue;
-      pose = p;
-      break;
+      if (clearSpawn(p)) pose = p;
     }
     if (!pose) return false;
     car = initVehicleHealth({
