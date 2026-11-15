@@ -8,7 +8,7 @@
     />
     <meta name="theme-color" content="#192c28" />
     <title>Little Pastures · The Great Moon Heist</title>
-    <link rel="stylesheet" href="style.css?v=home-police-1" />
+    <link rel="stylesheet" href="style.css?v=console-menu-1" />
   </head>
   <body>
     <canvas
@@ -21,7 +21,9 @@
         <b>Little Pastures<span>THE GREAT MOON HEIST</span></b>
       </div>
       <div class="header-actions">
-        <button id="desktop-equipment">Items [Q]</button
+        <button id="pause-button" aria-label="Pause game" aria-controls="menu">
+          <span aria-hidden="true">Ⅱ</span></button
+        ><button id="desktop-equipment">Items [Q]</button
         ><button id="help-button" aria-label="Show controls">?</button
         ><button id="reset">New adventure</button>
       </div>
@@ -30,7 +32,7 @@
       <button id="mobile-map-button">Map</button
       ><button id="equipment-button" aria-controls="wheel">Items</button>
       <button id="menu-button" aria-controls="menu" aria-expanded="false">
-        Menu
+        <span aria-hidden="true">Ⅱ</span> Pause
       </button>
     </nav>
     <div id="mobile-summary" aria-label="Herd and home distance"></div>
@@ -101,22 +103,47 @@
         aria-labelledby="menu-title"
       >
         <button class="close" id="menu-close" aria-label="Close menu">×</button>
-        <div class="eyebrow">ADVENTURE PAUSED</div>
-        <h2 id="menu-title">Your adventure.</h2>
-        <h3 id="menu-objective"></h3>
-        <p id="menu-description"></p>
-        <p id="menu-progress"></p>
-        <p id="menu-loadout"></p>
-        <div class="menu-actions">
-          <button data-action="revive">Revive animal</button>
-          <button data-action="shop">Home shop</button>
-          <button data-action="cycle">Switch weapon</button>
-          <button id="sound-button">Sound: on</button
-          ><button id="menu-help">Controls & help</button>
-          <button id="menu-reset">New adventure</button>
+        <div class="eyebrow">LITTLE PASTURES / THE GREAT MOON HEIST</div>
+        <h2 id="menu-title">Paused<span class="title-dot">.</span></h2>
+        <div class="pause-layout">
+          <div class="menu-actions" aria-label="Pause options">
+            <button id="menu-resume" data-menu-default>
+              Resume adventure <span>Continue your journey</span>
+            </button>
+            <button id="menu-map">
+              County atlas <span>Region &amp; town streets</span>
+            </button>
+            <button data-action="cycle" id="menu-items">
+              Equipment <span>Weapons &amp; wake-up snacks</span>
+            </button>
+            <button data-action="shop" id="menu-shop">
+              Home workshop <span>Supplies &amp; rocket parts</span>
+            </button>
+            <button data-action="revive" id="menu-revive">
+              Revive animal <span>Use a wake-up snack nearby</span>
+            </button>
+            <button id="sound-button">Sound: on</button>
+            <button id="menu-help">
+              Field guide <span>Controls &amp; how to play</span>
+            </button>
+            <button id="menu-reset">
+              New adventure <span>Start again from Clover Meadow</span>
+            </button>
+          </div>
+          <aside class="pause-briefing">
+            <div class="eyebrow">YOUR NEXT MOVE</div>
+            <h3 id="menu-objective"></h3>
+            <p id="menu-description"></p>
+            <p id="menu-progress"></p>
+            <div class="eyebrow">CURRENT LOADOUT</div>
+            <p id="menu-loadout"></p>
+            <div class="briefing-orbit" aria-hidden="true">
+              ☾ <span>MOON MISSION</span>
+            </div>
+          </aside>
         </div>
-        <button id="menu-resume" class="primary">Resume game</button>
       </section>
+      <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
     <div
       id="wheel"
@@ -142,16 +169,22 @@
           </div>
         </div>
         <p class="wheel-hint">
-          Hold Q, point, then release. Or tap an item. Arrow keys and Enter also
-          work.
+          Hold Q / LB, choose a direction, then release. Or use the D-pad /
+          arrows and A / Enter. Tap an item on touch.
         </p>
       </div>
+      <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
     <div id="shop" class="overlay" hidden>
-      <section class="panel">
+      <section
+        class="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shop-title"
+      >
         <button class="close" id="shop-close" aria-label="Close shop">×</button>
         <div class="eyebrow">HOME SWEET SPACEPORT</div>
-        <h2>The backyard workshop.</h2>
+        <h2 id="shop-title">The workshop.</h2>
         <p id="shop-summary"></p>
         <div id="shop-items"></div>
         <button id="launch" class="primary" hidden>
@@ -163,12 +196,32 @@
           sleep.
         </p>
       </section>
+      <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
     <div id="help" class="overlay" hidden>
-      <section class="panel">
-        <button class="close" id="help-close" aria-label="Close help">×</button>
+      <section
+        class="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="help-title"
+      >
+        <button
+          class="close"
+          id="help-close"
+          data-menu-default
+          aria-label="Close help"
+        >
+          ×
+        </button>
         <div class="eyebrow">A LITTLE MISCHIEF. A VERY BIG DREAM.</div>
-        <h2>Your guide to the Moon.</h2>
+        <h2 id="help-title">Field guide.</h2>
+        <p class="controller-guide">
+          <b>Controller</b> · Left stick move · A jump · B ride / exit · X / RT
+          use item · Y revive · LB hold equipment wheel · RB run · LT brake ·
+          View map · Start pause. In menus: D-pad / left stick navigate, A
+          select, B back, right stick scroll. Keyboard: arrows / Enter / Escape;
+          Page Up / Down scrolls.
+        </p>
         <p>
           Walk near animals to invite them along. First bring all twelve of your
           sheep home. Then recruit animals from the six colorful farms. You can
@@ -224,14 +277,21 @@
         </p>
         <button id="help-done" class="primary">Let’s go</button>
       </section>
+      <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
     <div id="atlas" class="overlay" hidden>
-      <section class="panel">
+      <section
+        class="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="atlas-title"
+      >
         <button class="close" id="atlas-close" aria-label="Close map">×</button>
         <div class="eyebrow">THE SIX RIVER COUNTIES</div>
         <h2 id="atlas-title">A whole lot of pasture.</h2>
         <div class="map-tabs">
-          <button id="atlas-region" aria-pressed="true">Region</button
+          <button id="atlas-region" data-menu-default aria-pressed="true">
+            Region</button
           ><button id="atlas-town" aria-pressed="false">Town streets</button>
         </div>
         <canvas
@@ -247,6 +307,28 @@
           bridges.
         </p>
       </section>
+      <div class="menu-hints" aria-label="Menu controls"></div>
+    </div>
+    <div id="confirm" class="overlay" hidden>
+      <section
+        class="panel confirmation"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-description"
+      >
+        <div class="eyebrow">NEW ADVENTURE</div>
+        <h2 id="confirm-title">Back to the meadow?</h2>
+        <p id="confirm-description">
+          This replaces your saved rocket progress. Your current adventure will
+          be lost.
+        </p>
+        <div class="confirm-actions">
+          <button id="confirm-cancel" data-menu-default>Keep playing</button
+          ><button id="confirm-restart">Start new adventure</button>
+        </div>
+      </section>
+      <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
     <div id="jail" class="overlay" hidden>
       <section class="panel centered">
@@ -280,6 +362,6 @@
     <div id="error" hidden>
       We couldn’t start the 3D world. Please enable WebGL and reload.
     </div>
-    <script type="module" src="adventure.js?v=home-police-1"></script>
+    <script type="module" src="adventure.js?v=console-menu-1"></script>
   </body>
 </html>

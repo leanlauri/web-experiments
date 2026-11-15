@@ -1,7 +1,7 @@
-import { createEquipment } from "./equipment.js?v=home-police-1";
-import { vehicleProfile } from "./vehicles.js?v=home-police-1";
+import { createEquipment } from "./equipment.js?v=console-menu-1";
+import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
 import * as T from "./vendor/three.module.js";
-import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=home-police-1";
+import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=console-menu-1";
 import {
   SIZE,
   HOME,
@@ -15,7 +15,7 @@ import {
   road,
   water,
   dist,
-} from "./region.js?v=home-police-1";
+} from "./region.js?v=console-menu-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))

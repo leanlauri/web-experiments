@@ -130,9 +130,7 @@ const serveSource = async (route) => {
       "12 animal credit",
     );
     for (let i = 0; i < 5; i++)
-      await page
-        .getByRole("button", { name: "Install part", exact: true })
-        .click();
+      await page.locator('[data-menu-key="shop-part"]').click();
     await page.screenshot({ path: "/tmp/rratedsheepgame-shop.png" });
     await page.click("#launch");
     await page.waitForFunction(
@@ -214,10 +212,14 @@ const serveSource = async (route) => {
     await mobile.locator("#menu-help").tap();
     assert(await mobile.locator("#help").isVisible());
     await mobile.locator("#help-close").tap();
-    await mobile.locator("#menu-button").tap();
+    assert(
+      await mobile.locator("#menu").isVisible(),
+      "back returns to pause options",
+    );
     await mobile.locator("#menu [data-action=cycle]").tap();
     assert(!(await mobile.locator("#menu").isVisible()));
     await mobile.locator('#wheel [data-item="0"]').tap();
+    await mobile.locator("#menu-resume").tap();
     // Compact HUD also applies in landscape, keeping the player at screen center exposed.
     for (const viewport of [
       { width: 844, height: 390 },

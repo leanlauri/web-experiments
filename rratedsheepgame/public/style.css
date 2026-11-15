@@ -951,3 +951,418 @@ kbd {
   color: #fff5cf;
   font-weight: 700;
 }
+
+/* Console screens share a selection rail, typography and pinned control legend. */
+#pause-button {
+  font-size: 20px;
+  min-width: 44px;
+  min-height: 44px;
+}
+body[data-menu]:not([data-menu=""])
+  > :is(
+    header,
+    #status,
+    #navigation,
+    #touch,
+    #loadout,
+    #toast,
+    #mobile-toolbar,
+    #mobile-summary,
+    footer
+  ) {
+  visibility: hidden;
+  pointer-events: none;
+}
+.overlay {
+  z-index: 30;
+  padding: max(28px, env(safe-area-inset-top))
+    max(32px, env(safe-area-inset-right)) 82px;
+  background: linear-gradient(110deg, #0b1b21f7, #142c30ed 60%, #172e37bd);
+  backdrop-filter: blur(8px) saturate(0.5);
+}
+.panel {
+  max-width: 980px;
+  max-height: calc(100dvh - 125px);
+  padding: 26px 32px 30px;
+  color: #f6f1df;
+  background: linear-gradient(135deg, #1b3438e8, #11262cdd);
+  border: 1px solid #9fae9a30;
+  border-top: 3px solid #e8c775;
+  border-radius: 2px;
+  box-shadow: 0 24px 80px #0003;
+  scrollbar-color: #c9b47c #183036;
+  scrollbar-width: thin;
+  scroll-padding: 20px;
+}
+.panel .eyebrow,
+.wheel-panel .eyebrow {
+  color: #d7be82;
+  letter-spacing: 2.5px;
+}
+.panel h2 {
+  font:
+    800 clamp(30px, 4vw, 52px) / 1 system-ui,
+    sans-serif;
+  letter-spacing: -1.8px;
+  margin: 12px 44px 26px 0;
+}
+.title-dot {
+  color: #e8c775;
+}
+.panel p {
+  color: #b9c9c7;
+  font-size: 13px;
+}
+.panel .close {
+  color: #dce8de;
+  background: #ffffff0a;
+  border: 1px solid #ffffff25;
+  border-radius: 2px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.panel button {
+  border-radius: 2px;
+}
+.overlay button:focus-visible,
+.overlay button.menu-selected {
+  outline: 2px solid #f3d68e;
+  outline-offset: 3px;
+  color: #152d30;
+  background: #edd79c;
+  box-shadow: 0 0 24px #f3d68e12;
+}
+.overlay button:disabled {
+  opacity: 0.4;
+}
+.pause-layout {
+  display: grid;
+  grid-template-columns: 1fr 0.9fr;
+  gap: 48px;
+}
+#menu .menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  counter-reset: option;
+}
+#menu .menu-actions button {
+  position: relative;
+  counter-increment: option;
+  min-height: 58px;
+  border: 0;
+  border-left: 2px solid #d9e3cb25;
+  padding: 10px 14px 10px 46px;
+  font-size: 19px;
+  font-weight: 650;
+  text-align: left;
+  background: #ffffff04;
+  color: #e8eee2;
+}
+#menu .menu-actions button::before {
+  content: counter(option, decimal-leading-zero);
+  position: absolute;
+  left: 13px;
+  top: 17px;
+  font-size: 10px;
+  color: #aabeb4;
+}
+#menu .menu-actions button span {
+  display: block;
+  font-size: 10px;
+  font-weight: 450;
+  color: #a7bab3;
+  margin-top: 3px;
+}
+#menu .menu-actions button.menu-selected,
+#menu .menu-actions button:focus-visible {
+  background: #edd79c;
+  color: #152d30;
+  border-left-color: #fff4c9;
+  outline: none;
+}
+#menu .menu-actions button.menu-selected::before {
+  content: "▶";
+  color: #3c5147;
+}
+#menu .menu-actions button.menu-selected span {
+  color: #4c6254;
+}
+.pause-briefing {
+  border-left: 1px solid #b7c3af24;
+  padding: 14px 0 0 28px;
+}
+#menu h3 {
+  font: 700 28px/1.15 system-ui;
+  letter-spacing: -0.8px;
+  margin: 12px 0;
+}
+#menu-progress,
+#menu-loadout {
+  background: #ffffff05;
+  border-radius: 0;
+  border-left: 2px solid #b9a671;
+  padding: 14px;
+}
+.briefing-orbit {
+  font:
+    90px Georgia,
+    serif;
+  color: #d6c28a;
+  text-align: center;
+  margin-top: 34px;
+}
+.briefing-orbit span {
+  display: block;
+  font: 9px system-ui;
+  letter-spacing: 5px;
+  color: #b8c9bc;
+}
+.menu-hints {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: max(32px, env(safe-area-inset-left));
+  right: max(32px, env(safe-area-inset-right));
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  color: #d9e2d6;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+.menu-hints span {
+  white-space: nowrap;
+}
+.menu-hints kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  margin-right: 7px;
+  padding: 4px 7px;
+  border: 1px solid #d9e3cb6b;
+  background: #102c30;
+  font: 700 10px system-ui;
+  border-radius: 3px;
+  color: #f0d595;
+}
+.shop-item {
+  background: #ffffff06;
+  border: 1px solid #ffffff0d;
+  border-radius: 2px;
+  padding: 16px;
+}
+.shop-item b {
+  font-size: 15px;
+}
+.shop-item small,
+.faction small {
+  color: #a8bdb5;
+  font-size: 11px;
+}
+.shop-price {
+  color: #f1d48d;
+  font-size: 15px;
+}
+.shop-item:has(.menu-selected) {
+  border-color: #ecd19388;
+  background: #e4ce9311;
+}
+.shop-item button:disabled {
+  color: #a7b7b0;
+  background: #1b3337;
+  border-color: #7a8d8538;
+  opacity: 0.65;
+}
+.shop-item button {
+  background: #29484a;
+}
+.map-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.map-tabs button {
+  flex: 1;
+  padding: 14px;
+  font-weight: 700;
+}
+.map-tabs button[aria-pressed="true"] {
+  border-bottom: 3px solid #e4c884;
+}
+#atlas-map {
+  border-radius: 2px;
+  border: 1px solid #d6c28a4d;
+}
+.faction {
+  padding: 8px 12px;
+  background: #ffffff05;
+}
+.confirmation {
+  max-width: 600px;
+}
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 28px;
+}
+.confirm-actions button {
+  min-height: 54px;
+  font-size: 15px;
+}
+#confirm-restart {
+  border-color: #bd846c;
+}
+.controller-guide {
+  border-left: 3px solid #dfc17c;
+  background: #ffffff07;
+  padding: 16px;
+}
+.wheel-panel {
+  color: #f6f1df;
+}
+.wheel-ring {
+  background: radial-gradient(
+    circle,
+    #142e36fa 0 25%,
+    #39575ab0 26% 64%,
+    transparent 65%
+  );
+}
+.wheel-item {
+  border-radius: 4px;
+}
+.wheel-item.selected {
+  background: #edd79c;
+  color: #152d30;
+  outline: 2px solid #ffe8ac;
+}
+body[data-input="gamepad"] {
+  cursor: none;
+}
+body[data-input="gamepad"] button {
+  cursor: none;
+}
+body[data-input="gamepad"] #touch {
+  display: none;
+}
+@media (max-width: 720px) {
+  .overlay {
+    padding: max(14px, env(safe-area-inset-top)) 14px 83px;
+  }
+  .panel {
+    padding: 22px 20px;
+    max-height: calc(100dvh - 110px);
+  }
+  .panel h2 {
+    font-size: 38px;
+    margin-bottom: 22px;
+  }
+  .panel .eyebrow {
+    font-size: 8px;
+    letter-spacing: 1.8px;
+  }
+  .pause-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .pause-briefing {
+    order: -1;
+    border-left: 0;
+    border-bottom: 1px solid #b7c3af24;
+    padding: 0 0 14px;
+  }
+  #menu h3 {
+    font-size: 20px;
+    margin-top: 0;
+  }
+  .pause-briefing > .eyebrow,
+  #menu-loadout,
+  .briefing-orbit {
+    display: none;
+  }
+  #menu-description {
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 6px 0;
+  }
+  #menu-progress {
+    font-size: 10px;
+    padding: 0;
+    background: none;
+    border: 0;
+    margin-bottom: 0;
+  }
+  #menu .menu-actions button {
+    font-size: 17px;
+    min-height: 55px;
+  }
+  .menu-hints {
+    left: 14px;
+    right: 14px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    gap: 8px 14px;
+    font-size: 9px;
+  }
+  .menu-hints kbd {
+    height: 23px;
+    font-size: 9px;
+    margin-right: 3px;
+  }
+  .shop-item {
+    padding: 12px;
+    gap: 8px;
+  }
+  .shop-item b {
+    font-size: 13px;
+  }
+  .shop-actions {
+    flex-basis: 100px;
+  }
+  .confirm-actions {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+@media (max-height: 500px) {
+  .overlay {
+    padding: 10px 20px 55px;
+  }
+  .panel {
+    max-height: calc(100dvh - 75px);
+    padding-top: 18px;
+  }
+  .panel h2 {
+    font-size: 32px;
+    margin: 9px 40px 18px 0;
+  }
+  .menu-hints {
+    bottom: 10px;
+  }
+  #menu .menu-actions button {
+    min-height: 48px;
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay *,
+  .overlay *::before {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}
+#jail {
+  z-index: 25;
+}
+body:is([data-phase="launch"], [data-phase="credits"])
+  :is(#mobile-map-button, #equipment-button) {
+  display: none;
+}
+.wheel-ring:focus {
+  outline: none;
+}

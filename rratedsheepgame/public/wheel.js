@@ -1,6 +1,11 @@
-import { WEAPONS } from "./region.js?v=home-police-1";
-import { equipmentIcon } from "./equipment.js?v=home-police-1";
-export function createWheel(game, root) {
+import { WEAPONS } from "./region.js?v=console-menu-1";
+import { equipmentIcon } from "./equipment.js?v=console-menu-1";
+export function createWheel(
+  game,
+  root,
+  onClose = () =>
+    document.querySelector("#world").focus({ preventScroll: true }),
+) {
   let items = [],
     selected = 0,
     mode = "tap";
@@ -8,6 +13,9 @@ export function createWheel(game, root) {
     title = root.querySelector(".wheel-selected"),
     detail = root.querySelector(".wheel-detail");
   function highlight(index) {
+    root
+      .querySelectorAll(".menu-selected")
+      .forEach((b) => b.classList.remove("menu-selected"));
     selected = (index + items.length) % items.length;
     items.forEach((item, i) => {
       item.button.classList.toggle("selected", i === selected);
@@ -15,6 +23,7 @@ export function createWheel(game, root) {
     });
     const item = items[selected];
     title.textContent = item.name;
+    ring.setAttribute("aria-activedescendant", item.button.id);
     detail.textContent = item.owned ? item.description : item.cost;
   }
   function close(commit = false) {
@@ -27,7 +36,7 @@ export function createWheel(game, root) {
       }
     }
     root.hidden = true;
-    document.querySelector("#world").focus({ preventScroll: true });
+    onClose();
   }
   function open(kind = "tap") {
     if (game.jail || game.phase === "launch" || game.phase === "credits")
@@ -57,6 +66,7 @@ export function createWheel(game, root) {
     items.forEach((item, i) => {
       const b = document.createElement("button");
       b.className = "wheel-item";
+      b.id = "wheel-option-" + item.id;
       b.dataset.item = item.id;
       b.setAttribute("role", "option");
       b.setAttribute(
@@ -79,6 +89,7 @@ export function createWheel(game, root) {
             : item.cost.split(" · ")[0]) +
         "</small>";
       b.addEventListener("pointerenter", () => highlight(i));
+      b.addEventListener("focus", () => highlight(i));
       b.addEventListener("click", () => {
         highlight(i);
         close(true);
@@ -92,7 +103,11 @@ export function createWheel(game, root) {
         (i) => i.id === (game.item === "revive" ? "revive" : game.weapon),
       ),
     );
-    root.querySelector(".wheel-close").focus({ preventScroll: true });
+    root
+      .querySelectorAll(".menu-selected")
+      .forEach((b) => b.classList.remove("menu-selected"));
+    ring.tabIndex = -1;
+    ring.focus({ preventScroll: true });
   }
   ring.addEventListener("pointermove", (e) => {
     const rect = ring.getBoundingClientRect(),
@@ -109,7 +124,20 @@ export function createWheel(game, root) {
     release() {
       if (!root.hidden && mode === "hold") close(true);
     },
+    point(x, y) {
+      if (root.hidden || Math.hypot(x, y) < 0.35) return;
+      const a = (Math.atan2(x, -y) + Math.PI * 2) % (Math.PI * 2);
+      highlight(Math.round((a / (Math.PI * 2)) * items.length) % items.length);
+      ring.focus({ preventScroll: true });
+    },
     key(code) {
+      code =
+        {
+          KeyW: "ArrowUp",
+          KeyS: "ArrowDown",
+          KeyA: "ArrowLeft",
+          KeyD: "ArrowRight",
+        }[code] || code;
       if (root.hidden) return false;
       if (code === "Escape") {
         close();
@@ -123,6 +151,7 @@ export function createWheel(game, root) {
         highlight(
           selected + (code === "ArrowLeft" || code === "ArrowUp" ? -1 : 1),
         );
+        ring.focus({ preventScroll: true });
         return true;
       }
       return false;

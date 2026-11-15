@@ -1,37 +1,37 @@
-import { followAnimal, separateHerd } from "./herding.js?v=home-police-1";
+import { followAnimal, separateHerd } from "./herding.js?v=console-menu-1";
 import {
   FIRST_WANTED_WALK_SPEED,
   createOfficer,
   spawnPatrol,
   patrolStep,
   disembarkPatrol,
-} from "./police.js?v=home-police-1";
-import { freeVehicle } from "./vehicle-motion.js?v=home-police-1";
+} from "./police.js?v=console-menu-1";
+import { freeVehicle } from "./vehicle-motion.js?v=console-menu-1";
 import {
   initVehicleHealth,
   damageVehicle,
   FIRE_SECONDS,
   BLAST_RADIUS,
-} from "./vehicle-damage.js?v=home-police-1";
+} from "./vehicle-damage.js?v=console-menu-1";
 import {
   trafficPose,
   nearestTrafficDistance,
-} from "./traffic.js?v=home-police-1";
-import { vehicleProfile } from "./vehicles.js?v=home-police-1";
-import { createTraffic, stepTraffic } from "./traffic.js?v=home-police-1";
+} from "./traffic.js?v=console-menu-1";
+import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
+import { createTraffic, stepTraffic } from "./traffic.js?v=console-menu-1";
 import {
   resolveVehicleCollisions,
   vehiclePersonContact,
   circleVehicle,
   vehicleBlocked,
-} from "./vehicle-collisions.js?v=home-police-1";
+} from "./vehicle-collisions.js?v=console-menu-1";
 import {
   startTumble,
   stepTumble,
   clearTumble,
-} from "./tumbles.js?v=home-police-1";
-import { drive } from "./driving.js?v=home-police-1";
-import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js?v=home-police-1";
+} from "./tumbles.js?v=console-menu-1";
+import { drive } from "./driving.js?v=console-menu-1";
+import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js?v=console-menu-1";
 import {
   HOME,
   inHouse,
@@ -44,7 +44,7 @@ import {
   move,
   routeTarget,
   OBSTACLES,
-} from "./region.js?v=home-police-1";
+} from "./region.js?v=console-menu-1";
 export const NPC_KNOCKOUT_SECONDS = 60,
   EXIT_ROLL_SPEED = 8;
 export class Game {

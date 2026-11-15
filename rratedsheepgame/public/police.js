@@ -1,15 +1,15 @@
-import { dist, blocked, routeTarget } from "./region.js?v=home-police-1";
+import { dist, blocked, routeTarget } from "./region.js?v=console-menu-1";
 import {
   trafficPose,
   nearestTrafficDistance,
-} from "./traffic.js?v=home-police-1";
+} from "./traffic.js?v=console-menu-1";
 import {
   vehicleBlocked,
   vehicleOverlap,
-} from "./vehicle-collisions.js?v=home-police-1";
-import { initVehicleHealth } from "./vehicle-damage.js?v=home-police-1";
-import { drive } from "./driving.js?v=home-police-1";
-import { POLICE_VEHICLE } from "./vehicles.js?v=home-police-1";
+} from "./vehicle-collisions.js?v=console-menu-1";
+import { initVehicleHealth } from "./vehicle-damage.js?v=console-menu-1";
+import { drive } from "./driving.js?v=console-menu-1";
+import { POLICE_VEHICLE } from "./vehicles.js?v=console-menu-1";
 export const FIRST_WANTED_WALK_SPEED = 2.8;
 export function createOfficer(game, position, vehicle) {
   return {

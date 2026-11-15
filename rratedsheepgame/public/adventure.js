@@ -1,7 +1,9 @@
-import { createWheel } from "./wheel.js?v=home-police-1";
-import { createAudio } from "./audio.js?v=home-police-1";
-import { vehicleProfile } from "./vehicles.js?v=home-police-1";
-import { Game } from "./simulation.js?v=home-police-1";
+import { createMenus } from "./menus.js?v=console-menu-1";
+import { createController } from "./controller.js?v=console-menu-1";
+import { createWheel } from "./wheel.js?v=console-menu-1";
+import { createAudio } from "./audio.js?v=console-menu-1";
+import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
+import { Game } from "./simulation.js?v=console-menu-1";
 import {
   HOME,
   FARMS,
@@ -13,8 +15,8 @@ import {
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=home-police-1";
-import { createWorld } from "./world.js?v=home-police-1";
+} from "./region.js?v=console-menu-1";
+import { createWorld } from "./world.js?v=console-menu-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -23,7 +25,9 @@ try {
 } catch {}
 const game = new Game(saved);
 const audio = createAudio();
-const wheel = createWheel(game, $("wheel"));
+const wheel = createWheel(game, $("wheel"), () => {
+  if (menus.active() === "wheel") menus.back();
+});
 let atlasTown = false;
 let world;
 try {
@@ -34,13 +38,20 @@ try {
 }
 const keys = new Set(),
   stick = { x: 0, y: 0 },
-  panels = ["help", "atlas", "menu", "wheel"];
+  panels = ["help", "atlas", "menu", "wheel", "shop", "confirm"];
 const compactHUD = matchMedia("(max-width: 750px), (pointer: coarse)");
 let touchBrake = false;
 let jump = false,
   lastSave = null,
   shopSignature = "",
   hudTime = 0;
+const menus = createMenus({
+  ids: panels,
+  clearInput,
+  onClose: (id) => {
+    if (id === "shop") game.shop = false;
+  },
+});
 function openShop() {
   if (!game.atHome || game.phase !== "heist") {
     game.tell(
@@ -48,10 +59,20 @@ function openShop() {
     );
     return;
   }
-  game.shop = !game.shop;
+  if (menus.active() === "shop") {
+    menus.back();
+    return;
+  }
+  game.shop = true;
   shopSignature = "";
+  shop();
+  menus.open("shop");
 }
 function action(name) {
+  if (name === "cycle") {
+    openWheel("tap");
+    return;
+  }
   if (name === "shop") {
     openShop();
     return;
@@ -61,7 +82,6 @@ function action(name) {
   if (name === "attack") game.attack();
   if (name === "revive") game.revive();
   if (name === "jump") jump = true;
-  if (name === "cycle") openWheel("tap");
 }
 const actions = {
   KeyE: "interact",
@@ -71,29 +91,48 @@ const actions = {
 
   Space: "jump",
 };
+function togglePause() {
+  if (menus.active()) menus.closeAll();
+  else menus.open("menu");
+}
+function inputMode(mode) {
+  if (document.body.dataset.input === mode) return;
+  document.body.dataset.input = mode;
+  for (const hint of document.querySelectorAll(".menu-hints"))
+    hint.innerHTML =
+      mode === "gamepad"
+        ? "<span><kbd>✚ / LS</kbd> Navigate</span><span><kbd>A</kbd> Select</span><span><kbd>B</kbd> Back</span><span><kbd>RS</kbd> Scroll</span>"
+        : "<span><kbd>↑ ↓</kbd> Navigate</span><span><kbd>Enter</kbd> Select</span><span><kbd>Esc</kbd> Back</span><span><kbd>PgUp/Dn</kbd> Scroll</span>";
+}
 addEventListener("keydown", (e) => {
+  inputMode("keyboard");
+  if (e.code === "Escape") {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (menus.active() === "wheel") wheel.close();
+    else if (menus.active()) menus.back();
+    else menus.open("menu");
+    return;
+  }
+  if (menus.active() === "wheel" && wheel.key(e.code)) {
+    e.preventDefault();
+    return;
+  }
+  if (menus.keydown(e)) return;
+  if (menus.active()) return;
   if (
     ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
       e.code,
     )
   )
     e.preventDefault();
-  if (e.target.closest("button") && e.code === "Space") return;
   keys.add(e.code);
   if (e.repeat) return;
-  if (wheel.key(e.code)) {
-    e.preventDefault();
-    return;
-  }
   if (e.code === "KeyQ") {
     e.preventDefault();
     openWheel("hold");
-    return;
-  }
-  if (e.code === "Escape") {
-    for (const id of panels) $(id).hidden = true;
-    game.shop = false;
-  } else if (e.code === "KeyM") $("atlas").hidden = !$("atlas").hidden;
+  } else if (e.code === "KeyM") menus.open("atlas");
+  else if (e.code === "Enter" && game.phase === "credits") reset();
   else if (actions[e.code]) action(actions[e.code]);
 });
 addEventListener("keyup", (e) => {
@@ -109,20 +148,32 @@ function clearInput() {
 }
 addEventListener("blur", () => {
   clearInput();
-  wheel.close();
+  if (!menus.active() && game.phase !== "credits") menus.open("menu");
   audio.silence();
 });
 document.addEventListener("visibilitychange", () => {
   clearInput();
-  wheel.close();
+  if (!menus.active() && game.phase !== "credits") menus.open("menu");
   audio.silence();
 });
-addEventListener("pointerdown", () => audio.unlock(), { passive: true });
+addEventListener(
+  "pointerdown",
+  () => {
+    audio.unlock();
+    inputMode("touch");
+  },
+  { passive: true },
+);
 addEventListener("keydown", () => audio.unlock());
 function openWheel(mode) {
-  if (game.shop) return;
-  clearInput();
-  for (const id of panels) $(id).hidden = true;
+  if (
+    game.shop ||
+    game.jail ||
+    game.phase === "launch" ||
+    game.phase === "credits"
+  )
+    return;
+  menus.open("wheel");
   wheel.open(mode);
 }
 $("equipment-button").onclick = $("desktop-equipment").onclick = () =>
@@ -171,8 +222,7 @@ for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
 for (const b of document.querySelectorAll("[data-action]"))
   b.addEventListener(b.closest("#menu") ? "click" : "pointerdown", (e) => {
     e.preventDefault();
-    if (!$("menu").hidden) clearInput();
-    $("menu").hidden = true;
+    if (b.closest("#menu") && b.dataset.action === "revive") menus.closeAll();
     if (b.dataset.action === "jump" && game.vehicle !== null) {
       touchBrake = true;
       b.setPointerCapture(e.pointerId);
@@ -185,40 +235,22 @@ for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
     .addEventListener(event, () => {
       touchBrake = false;
     });
-function closeMenu() {
-  $("menu").hidden = true;
-}
-$("menu-button").onclick = () => {
-  clearInput();
-  $("menu").hidden = !$("menu").hidden;
-};
-$("menu-close").onclick = $("menu-resume").onclick = closeMenu;
-$("mobile-map-button").onclick = () => {
-  clearInput();
-  $("atlas").hidden = false;
-};
-$("menu-help").onclick = () => {
-  closeMenu();
-  $("help-button").click();
-};
-$("menu-reset").onclick = () => $("reset").click();
-compactHUD.addEventListener("change", () => {
-  closeMenu();
-  clearInput();
-});
-$("help-button").onclick = () => {
-  $("help").hidden = false;
-};
-$("help-close").onclick = $("help-done").onclick = () => {
-  $("help").hidden = true;
-};
-$("map-button").onclick = () => {
-  $("atlas").hidden = false;
-};
-$("atlas-close").onclick = () => {
-  $("atlas").hidden = true;
-};
-$("shop-close").onclick = () => (game.shop = false);
+$("pause-button").onclick = $("menu-button").onclick = togglePause;
+$("menu-close").onclick = $("menu-resume").onclick = () => menus.closeAll();
+$("mobile-map-button").onclick =
+  $("map-button").onclick =
+  $("menu-map").onclick =
+    () => menus.open("atlas");
+$("menu-help").onclick = $("help-button").onclick = () => menus.open("help");
+$("menu-reset").onclick = $("reset").onclick = () => menus.open("confirm");
+$("help-close").onclick =
+  $("help-done").onclick =
+  $("atlas-close").onclick =
+  $("shop-close").onclick =
+  $("confirm-cancel").onclick =
+    () => menus.back();
+$("confirm-restart").onclick = () => reset();
+compactHUD.addEventListener("change", clearInput);
 function reset() {
   game.reset();
   try {
@@ -227,17 +259,14 @@ function reset() {
   lastSave = null;
   shopSignature = "";
   clearInput();
-  wheel.close();
-  for (const id of [...panels, "credits"]) $(id).hidden = true;
+  menus.closeAll();
+  $("credits").hidden = true;
 }
-$("reset").onclick = () => {
-  if (
-    confirm("Start a new adventure? This replaces your saved rocket progress.")
-  )
-    reset();
-};
 $("play-again").onclick = reset;
-$("launch").onclick = () => game.launch();
+$("launch").onclick = () => {
+  game.launch();
+  menus.closeAll();
+};
 $("factions").innerHTML = FARMS.map(
   (f) =>
     `<div class="faction" style="--faction:#${f.color.toString(16)}"><b>${f.name}</b><small>${f.animal} · ${f.weapon}<br>${f.aggression > 1.2 ? "Feisty" : f.aggression < 1 ? "Laid-back" : "Watchful"} guards</small></div>`,
@@ -305,6 +334,8 @@ function shop() {
       const text = document.createElement("div");
       text.innerHTML = `<b>${item.name}</b><small>${item.detail}</small>`;
       const b = document.createElement("button");
+      b.dataset.menuKey = "shop-" + item.key;
+      b.setAttribute("aria-label", item.name + " · " + item.price);
       b.textContent = item.price;
       b.disabled = item.disabled;
       b.onclick = () => {
@@ -323,6 +354,7 @@ function shop() {
     }),
   );
   $("launch").hidden = game.parts < 5;
+  if (menus.active() === "shop") menus.refresh();
 }
 $("atlas-town").onclick = () => {
   atlasTown = true;
@@ -546,6 +578,7 @@ function hud() {
   $("menu-loadout").textContent =
     `${$("weapon").textContent} · ${$("snacks").textContent}${$("vehicle").textContent ? ` · ${$("vehicle").textContent}` : ""}`;
   $("menu-button").setAttribute("aria-expanded", String(!$("menu").hidden));
+  $("pause-button").setAttribute("aria-expanded", String(!!menus.active()));
   if (game.vehicle !== null) {
     const v = game.vehicles[game.vehicle],
       percent = Math.round((v.health / v.maxHealth) * 100),
@@ -559,8 +592,19 @@ function hud() {
     $("vehicle").textContent += " · " + condition;
     $("mobile-summary").dataset.danger = fire ? "true" : "false";
   } else $("mobile-summary").dataset.danger = "false";
-  $("shop").hidden = !game.shop;
-  if (game.shop) shop();
+  if (game.shop) {
+    shop();
+    if (!menus.contains("shop")) menus.open("shop");
+  }
+  $("menu-shop").disabled = !game.atHome || game.phase !== "heist";
+  $("menu-shop").querySelector("span").textContent =
+    game.phase === "intro"
+      ? "Bring your twelve sheep home first"
+      : !game.atHome
+        ? "Return to your home farm"
+        : "Supplies & rocket parts";
+  menus.refresh();
+  document.body.dataset.phase = game.phase;
   $("jail").hidden = !game.jail;
   $("jail-time").textContent =
     `Back to your farm in ${Math.ceil(game.jail)} seconds.`;
@@ -573,7 +617,6 @@ function hud() {
     "status",
     "loadout",
     "touch",
-    "mobile-toolbar",
     "mobile-summary",
   ]) {
     if (game.phase === "credits" || game.phase === "launch")
@@ -593,36 +636,86 @@ function hud() {
     }
   }
 }
+const controller = createController({
+  menu: () => menus.active(),
+  pause: togglePause,
+  back: () => (menus.active() === "wheel" ? wheel.close() : menus.back()),
+  confirm: () =>
+    menus.active() === "wheel" ? wheel.close(true) : menus.confirm(),
+  move: (direction) =>
+    menus.active() === "wheel"
+      ? wheel.key(
+          {
+            up: "ArrowUp",
+            down: "ArrowDown",
+            left: "ArrowLeft",
+            right: "ArrowRight",
+          }[direction],
+        )
+      : menus.move(direction),
+  scroll: (amount) => menus.scroll(amount),
+  wheel,
+  action: (name) => {
+    if (game.phase === "credits" && name === "jump") {
+      reset();
+      return;
+    }
+    if (name === "wheel") openWheel("hold");
+    else if (name === "map") menus.open("atlas");
+    else action(name);
+  },
+  wake: () => {
+    if (document.body.dataset.input !== "gamepad") audio.unlock();
+    inputMode("gamepad");
+  },
+  disconnect: () => {
+    clearInput();
+    if (!menus.active()) menus.open("menu");
+  },
+});
+inputMode("keyboard");
 let previous = performance.now(),
   accumulator = 0;
 function frame(now) {
   const elapsed = Math.min(0.15, (now - previous) / 1000);
   previous = now;
-  if (!document.hidden && panels.every((id) => $(id).hidden)) {
+  if (game.shop && !menus.contains("shop")) {
+    shop();
+    menus.open("shop");
+  }
+  const pad = controller.poll(now);
+  if (!document.hidden && !menus.active()) {
     accumulator += elapsed;
     while (accumulator >= 1 / 60) {
-      let x = stick.x,
-        z = stick.y;
+      let x = stick.x + pad.x,
+        z = stick.y + pad.z;
       if (keys.has("KeyW") || keys.has("ArrowUp")) z -= 1;
       if (keys.has("KeyS") || keys.has("ArrowDown")) z += 1;
       if (keys.has("KeyA") || keys.has("ArrowLeft")) x -= 1;
       if (keys.has("KeyD") || keys.has("ArrowRight")) x += 1;
       game.update(1 / 60, {
-        brake: touchBrake || keys.has("Space"),
+        brake: touchBrake || keys.has("Space") || pad.brake,
         x: x * 0.768 + z * 0.64,
         z: -x * 0.64 + z * 0.768,
         run:
+          pad.run ||
           keys.has("ShiftLeft") ||
           keys.has("ShiftRight") ||
           Math.hypot(stick.x, stick.y) > 0.85,
         jump,
       });
       jump = false;
-      if (keys.has("KeyF")) game.attack();
+      if (keys.has("KeyF") || pad.attack) game.attack();
       accumulator -= 1 / 60;
+      if (game.shop) {
+        shop();
+        menus.open("shop");
+        accumulator = 0;
+        break;
+      }
     }
   } else accumulator = 0;
-  audio.update(game, !panels.every((id) => $(id).hidden));
+  audio.update(game, !!menus.active());
   world.render(game);
   hudTime += elapsed;
   if (hudTime > 0.1) {
@@ -637,6 +730,10 @@ requestAnimationFrame(frame);
 window.sheepGame = {
   getState: () => ({
     phase: game.phase,
+    time: game.time,
+    paused: !!menus.active(),
+    menu: menus.active(),
+    input: document.body.dataset.input,
     player: [game.player.x, game.player.y, game.player.z],
     followers: game.herd.length,
     sheep: game.animals
