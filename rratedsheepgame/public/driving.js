@@ -1,6 +1,6 @@
-import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
-import { vehicleBlocked } from "./vehicle-collisions.js?v=town-equipment-1";
-import { road } from "./region.js?v=town-equipment-1";
+import { moveVehicle } from "./vehicle-motion.js?v=vehicle-damage-1";
+import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
+import { road } from "./region.js?v=vehicle-damage-1";
 
 const approach = (value, target, amount) =>
   value < target
@@ -13,6 +13,7 @@ const angleDifference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export function drive(v, dt, input = {}, level = 0) {
   if (dt <= 0) return;
   const profile = vehicleProfile(v);
+  if (v.destroyed) return;
   let dx = Number(input.x) || 0,
     dz = Number(input.z) || 0;
   const length = Math.hypot(dx, dz),
@@ -30,7 +31,10 @@ export function drive(v, dt, input = {}, level = 0) {
     const step = dt / steps,
       speed = Math.hypot(vx, vz),
       paved = road(v);
-    const top = profile.top * (paved ? 1 : 0.55);
+    const top =
+      profile.top *
+      (paved ? 1 : 0.55) *
+      (v.burnStarted !== undefined ? 0.65 : 1);
     const error =
       strength > 0.05 ? angleDifference(Math.atan2(dz, dx), v.heading) : 0;
     const yaw =
@@ -64,14 +68,11 @@ export function drive(v, dt, input = {}, level = 0) {
       vx *= remaining / magnitude;
       vz *= remaining / magnitude;
     }
-    const next = { x: v.x + vx * step, z: v.z + vz * step };
-    if (vehicleBlocked(v, { ...next, heading: v.heading }, level)) {
-      vx = vz = 0;
-      v.skidding = false;
-      break;
-    }
-    v.x = next.x;
-    v.z = next.z;
+    v.vx = vx;
+    v.vz = vz;
+    moveVehicle(v, step, level);
+    vx = v.vx;
+    vz = v.vz;
   }
   v.vx = vx;
   v.vz = vz;

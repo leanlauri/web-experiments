@@ -1,5 +1,5 @@
-import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
-import { blocked } from "./region.js?v=town-equipment-1";
+import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
+import { blocked, OBSTACLES, SIZE } from "./region.js?v=vehicle-damage-1";
 export const vehicleSize = (v) => {
   const p = vehicleProfile(v);
   return {
@@ -43,14 +43,27 @@ export function vehicleBlocked(v, p = v, level = 0) {
   for (const length of [-size.halfLength, 0, size.halfLength])
     for (const width of [-size.halfWidth, 0, size.halfWidth])
       if (
-        blocked(
-          {
-            x: p.x + f.x * length + n.x * width,
-            z: p.z + f.z * length + n.z * width,
-          },
-          0.12,
-          level,
-        )
+        (p.y ?? v.y ?? 0) > 2.5
+          ? ((q) =>
+              Math.abs(q.x) > SIZE - 4 ||
+              Math.abs(q.z) > SIZE - 4 ||
+              OBSTACLES.some(
+                (b) =>
+                  b.h > (p.y ?? v.y ?? 0) &&
+                  Math.abs(q.x - b.x) < b.hx + 0.12 &&
+                  Math.abs(q.z - b.z) < b.hz + 0.12,
+              ))({
+              x: p.x + f.x * length + n.x * width,
+              z: p.z + f.z * length + n.z * width,
+            })
+          : blocked(
+              {
+                x: p.x + f.x * length + n.x * width,
+                z: p.z + f.z * length + n.z * width,
+              },
+              0.12,
+              level,
+            )
       )
         return true;
   return false;
@@ -91,25 +104,37 @@ const poseAt = (v, t) => {
     x: p.x + (v.x - p.x) * t,
     z: p.z + (v.z - p.z) * t,
     heading: (p.heading ?? v.heading) + dh * t,
+    y: (p.y ?? v.y ?? 0) + ((v.y || 0) - (p.y ?? v.y ?? 0)) * t,
   };
 };
-export function vehiclePersonContact(v, from, to, r = 0.5) {
+export function vehiclePersonContact(v, from, to, r = 0.5, height = 2.1) {
   for (let i = 0; i <= 10; i++) {
     const t = i / 10,
       p = { x: from.x + (to.x - from.x) * t, z: from.z + (to.z - from.z) * t };
-    if ((from.y || 0) + ((to.y || 0) - (from.y || 0)) * t > 2.2) continue;
-    if (circleVehicle(p, poseAt(v, t), r)) return true;
+    const car = poseAt(v, t),
+      foot = (from.y || 0) + ((to.y || 0) - (from.y || 0)) * t;
+    if (foot > car.y + 2.2 || foot + height < car.y) continue;
+    if (circleVehicle(p, car, r)) return true;
   }
   return false;
 }
-export function resolveVehicleCollisions(vehicles, time, level = 0) {
+export function resolveVehicleCollisions(
+  vehicles,
+  time,
+  level = 0,
+  onImpact = () => {},
+) {
   let contacts = 0;
   for (let pass = 0; pass < 3; pass++)
     for (let i = 0; i < vehicles.length; i++)
       for (let j = i + 1; j < vehicles.length; j++) {
         const a = vehicles[i],
           b = vehicles[j];
-        if (Math.hypot(a.x - b.x, a.z - b.z) > 12) continue;
+        if (
+          Math.hypot(a.x - b.x, a.z - b.z) > 12 ||
+          Math.abs((a.y || 0) - (b.y || 0)) > 2.2
+        )
+          continue;
         let hit = vehicleOverlap(a, b);
         if (!hit && pass === 0) {
           for (let k = 1; k < 10; k++) {
@@ -138,32 +163,104 @@ export function resolveVehicleCollisions(vehicles, time, level = 0) {
           if (!vehicleBlocked(v, p, level)) {
             v.x = p.x;
             v.z = p.z;
-          } else if (v.previous) {
-            v.x = v.previous.x;
-            v.z = v.previous.z;
-            v.heading = v.previous.heading ?? v.heading;
+            return true;
           }
+          return false;
         };
-        push(a, (-(hit.depth + 0.02) * mb) / total);
-        push(b, ((hit.depth + 0.02) * ma) / total);
-        const av = { x: a.vx || 0, z: a.vz || 0 },
-          bv = { x: b.vx || 0, z: b.vz || 0 };
-        const closing = (av.x - bv.x) * hit.x + (av.z - bv.z) * hit.z;
+        const movedA = push(a, (-(hit.depth + 0.02) * mb) / total);
+        const movedB = push(b, ((hit.depth + 0.02) * ma) / total);
+        if (!movedA && movedB) push(b, ((hit.depth + 0.02) * mb) / total);
+        if (!movedB && movedA) push(a, (-(hit.depth + 0.02) * ma) / total);
+        const n = { x: hit.x, z: hit.z },
+          t = { x: -hit.z, z: hit.x };
+        const extent = (v, axis) => {
+          const basis = axes(v),
+            size = vehicleSize(v);
+          return (
+            Math.abs(axis.x * basis[0].x + axis.z * basis[0].z) *
+              size.halfLength +
+            Math.abs(axis.x * basis[1].x + axis.z * basis[1].z) * size.halfWidth
+          );
+        };
+        const dot = (v, axis) => v.x * axis.x + v.z * axis.z;
+        const normal =
+          (dot(a, n) + extent(a, n) + dot(b, n) - extent(b, n)) / 2;
+        const low = Math.max(
+            dot(a, t) - extent(a, t),
+            dot(b, t) - extent(b, t),
+          ),
+          high = Math.min(dot(a, t) + extent(a, t), dot(b, t) + extent(b, t));
+        const tangent = (low + high) / 2,
+          point = {
+            x: n.x * normal + t.x * tangent,
+            z: n.z * normal + t.z * tangent,
+          };
+        const ra = { x: point.x - a.x, z: point.z - a.z },
+          rb = { x: point.x - b.x, z: point.z - b.z };
+        const ia =
+            (ma *
+              ((vehicleSize(a).halfLength * 2) ** 2 +
+                (vehicleSize(a).halfWidth * 2) ** 2)) /
+            12,
+          ib =
+            (mb *
+              ((vehicleSize(b).halfLength * 2) ** 2 +
+                (vehicleSize(b).halfWidth * 2) ** 2)) /
+            12;
+        const cross = (r, d) => r.x * d.z - r.z * d.x;
+        const relative = () => ({
+          x:
+            (b.vx || 0) -
+            (b.omega || 0) * rb.z -
+            (a.vx || 0) +
+            (a.omega || 0) * ra.z,
+          z:
+            (b.vz || 0) +
+            (b.omega || 0) * rb.x -
+            (a.vz || 0) -
+            (a.omega || 0) * ra.x,
+        });
+        const velocity = relative(),
+          closing = -(velocity.x * n.x + velocity.z * n.z);
+        const impulse = (amount, d) => {
+          a.vx = (a.vx || 0) - (amount * d.x) / ma;
+          a.vz = (a.vz || 0) - (amount * d.z) / ma;
+          b.vx = (b.vx || 0) + (amount * d.x) / mb;
+          b.vz = (b.vz || 0) + (amount * d.z) / mb;
+          a.omega = (a.omega || 0) - (cross(ra, d) * amount) / ia;
+          b.omega = (b.omega || 0) + (cross(rb, d) * amount) / ib;
+        };
         if (closing > 0) {
-          const impulse = (1.12 * closing) / (1 / ma + 1 / mb);
-          a.vx = av.x - (impulse / ma) * hit.x;
-          a.vz = av.z - (impulse / ma) * hit.z;
-          b.vx = bv.x + (impulse / mb) * hit.x;
-          b.vz = bv.z + (impulse / mb) * hit.z;
+          const j =
+            (1.12 * closing) /
+            (1 / ma + 1 / mb + cross(ra, n) ** 2 / ia + cross(rb, n) ** 2 / ib);
+          impulse(j, n);
+          const after = relative(),
+            slip = after.x * t.x + after.z * t.z;
+          const jt =
+            -slip /
+            (1 / ma + 1 / mb + cross(ra, t) ** 2 / ia + cross(rb, t) ** 2 / ib);
+          impulse(Math.max(-j * 0.35, Math.min(j * 0.35, jt)), t);
+          if (closing > 3) {
+            const energy = 0.5 * ((ma * mb) / total) * closing * closing;
+            onImpact(a, (energy * 0.3) / Math.sqrt(ma));
+            onImpact(b, (energy * 0.3) / Math.sqrt(mb));
+          }
         }
         for (const v of [a, b]) {
           v.driveSpeed = Math.hypot(v.vx || 0, v.vz || 0);
           v.currentSpeed = v.driveSpeed;
           v.skidding = false;
           v.skidAnchor = null;
-          if (time >= (v.collisionUntil || 0)) {
+          if (closing > 0.2 && time >= (v.collisionUntil || 0)) {
             v.collisionUntil = time + 1;
             v.disabled = Math.max(v.disabled || 0, 0.8);
+            v.physicsUntil = Math.max(
+              v.physicsUntil || 0,
+              time + Math.min(1.5, 0.2 + closing * 0.06),
+            );
+            v.crashRecovering = true;
+            v.rejoinDistance = undefined;
             // Traffic keeps its route after a crash; never flip its lane or heading.
           }
         }

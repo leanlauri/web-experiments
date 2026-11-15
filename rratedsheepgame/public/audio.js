@@ -1,10 +1,11 @@
-import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
+import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
 export function createAudio() {
   let context,
     voices = [],
     enabled = true,
     available = true,
-    lastAttack = null;
+    lastAttack = null,
+    lastBlast = null;
   try {
     enabled = localStorage.getItem("little-pastures-sound") !== "off";
   } catch {}
@@ -112,6 +113,28 @@ export function createAudio() {
         0.1,
       );
     });
+    const blast = game.explosions.at(-1);
+    if (blast && blast !== lastBlast && game.time - blast.started < 0.4) {
+      lastBlast = blast;
+      const osc = context.createOscillator(),
+        gain = context.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(95, context.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(
+        24,
+        context.currentTime + 0.45,
+      );
+      gain.gain.setValueAtTime(0.08, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.55);
+      osc.connect(gain);
+      gain.connect(context.destination);
+      osc.start();
+      osc.stop(context.currentTime + 0.6);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+    }
     const attack = game.player.attack;
     if (attack && attack !== lastAttack) {
       lastAttack = attack;

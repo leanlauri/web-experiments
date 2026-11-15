@@ -1,10 +1,10 @@
-import { createEquipment } from "./equipment.js?v=town-equipment-1";
-import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
+import { createEquipment } from "./equipment.js?v=vehicle-damage-1";
+import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
 import * as T from "./vendor/three.module.js";
 import {
   MAX_SKID_SEGMENTS,
   skidOpacity,
-} from "./skidmarks.js?v=town-equipment-1";
+} from "./skidmarks.js?v=vehicle-damage-1";
 import {
   SIZE,
   HOME,
@@ -16,7 +16,7 @@ import {
   road,
   water,
   dist,
-} from "./region.js?v=town-equipment-1";
+} from "./region.js?v=vehicle-damage-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
@@ -267,6 +267,7 @@ function carModel(v) {
     if (v.kind === "electric")
       shape(g, 0xb8f1db, 0, 0.7, length * 0.5 + 0.04, width * 0.7, 0.15, 0.08);
   }
+  g.userData.isVehicle = true;
   g.userData.frontWheels = [];
   for (const side of [-1, 1])
     for (const z of [-length * 0.32, length * 0.32]) {
@@ -787,6 +788,68 @@ export function createWorld(canvas) {
     }
   }
   let currentTime = 0;
+  function vehicleEffects(g, p) {
+    const burning = p.burnStarted !== undefined && !p.destroyed,
+      smoking = p.destroyed && currentTime - (p.explodedAt || 0) < 8;
+    if (!g.userData.fire && !(burning || p.destroyed)) return;
+    if (!g.userData.fire) {
+      const fire = new T.Group(),
+        smoke = new T.Group();
+      g.add(fire, smoke);
+      g.userData.fire = fire;
+      g.userData.smoke = smoke;
+      for (let i = 0; i < 6; i++) {
+        const f = new T.Mesh(
+          new T.ConeGeometry(0.45, 1.8, 7),
+          new T.MeshBasicMaterial({ color: i % 2 ? 0xffcc63 : 0xed8244 }),
+        );
+        f.position.set(
+          Math.cos(i * 2.4) * 0.55,
+          1.6,
+          Math.sin(i * 2.4) * 0.5 + vehicleProfile(p).length * 0.25,
+        );
+        fire.add(f);
+      }
+      for (let i = 0; i < 4; i++) {
+        const puff = new T.Mesh(
+          sphere,
+          new T.MeshBasicMaterial({
+            color: 0x5e665e,
+            transparent: true,
+            opacity: 0.42,
+            depthWrite: false,
+          }),
+        );
+        smoke.add(puff);
+      }
+      g.userData.wreck = shape(
+        g,
+        0x45443b,
+        0,
+        1.2,
+        0,
+        vehicleProfile(p).width * 0.94,
+        1.25,
+        vehicleProfile(p).length * 0.8,
+      );
+    }
+    g.userData.fire.visible = burning;
+    g.userData.smoke.visible = burning || smoking;
+    g.userData.wreck.visible = !!p.destroyed;
+    g.userData.fire.children.forEach((f, i) => {
+      f.scale.set(1, 1 + Math.sin(currentTime * 19 + i * 2) * 0.25, 1);
+    });
+    g.userData.smoke.children.forEach((puff, i) => {
+      const phase = (currentTime * 0.65 + i * 0.25) % 1;
+      const size = 0.5 + phase * 1.3;
+      puff.scale.setScalar(size);
+      puff.position.set(
+        Math.sin(currentTime + i) * phase * 0.6,
+        2 + phase * 4,
+        vehicleProfile(p).length * 0.25,
+      );
+    });
+  }
   function actor(id, create, p, down = false, hidden = false) {
     let g = actors.get(id);
     if (hidden || dist(p, gamePlayer) > 150) {
@@ -816,7 +879,12 @@ export function createWorld(canvas) {
     g.userData.shadow.visible = true;
     g.userData.shadow.position.set(p.x, 0.22, p.z);
     g.position.set(p.x, p.y || 0, p.z);
-    g.rotation.set(0, Math.PI / 2 - p.heading, 0);
+    g.rotation.set(
+      g.userData.isVehicle ? p.pitch || 0 : 0,
+      Math.PI / 2 - p.heading,
+      g.userData.isVehicle ? p.roll || 0 : 0,
+    );
+    if (g.userData.isVehicle) vehicleEffects(g, p);
     poseBody(g, p, down);
     if (!down && !p.ragdoll)
       g.position.y +=
@@ -935,6 +1003,72 @@ export function createWorld(canvas) {
     skidMesh.instanceMatrix.needsUpdate = true;
     skidAlpha.needsUpdate = true;
   }
+  const blastVisuals = new Map();
+  function renderExplosions(game) {
+    const visible = new Set();
+    for (const e of game.explosions
+      .filter((e) => dist(e, game.player) < 140)
+      .slice(-16)) {
+      visible.add(e.id);
+      let fx = blastVisuals.get(e.id);
+      if (!fx) {
+        const group = new T.Group();
+        actorRoot.add(group);
+        const material = new T.MeshBasicMaterial({
+          color: 0xffcc69,
+          transparent: true,
+          opacity: 0.65,
+          depthWrite: false,
+        });
+        const bubble = new T.Mesh(sphere, material);
+        group.add(bubble);
+        const ring = new T.Mesh(
+          new T.RingGeometry(0.9, 1, 48),
+          new T.MeshBasicMaterial({
+            color: 0xffe7a1,
+            transparent: true,
+            opacity: 0.7,
+            side: T.DoubleSide,
+            depthWrite: false,
+          }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        group.add(ring);
+        const debris = [];
+        for (let i = 0; i < 8; i++)
+          debris.push(
+            shape(group, i % 2 ? 0x7b7767 : 0xb89361, 0, 0, 0, 0.3, 0.3, 0.3),
+          );
+        fx = { group, bubble, ring, material, debris };
+        blastVisuals.set(e.id, fx);
+      }
+      const age = game.time - e.started;
+      fx.group.position.set(e.x, e.y || 0, e.z);
+      fx.bubble.scale.setScalar(0.3 + Math.min(age, 0.55) * 12);
+      fx.bubble.position.y = 1.4;
+      fx.material.opacity = Math.max(0, 0.65 - age * 0.9);
+      fx.ring.position.y = 0.25;
+      fx.ring.scale.setScalar(Math.min(1, age / 0.65) * e.radius);
+      fx.ring.material.opacity = Math.max(0, 0.7 - age * 0.65);
+      fx.debris.forEach((piece, i) => {
+        const a = (i * Math.PI) / 4;
+        piece.position.set(
+          Math.cos(a) * age * 7,
+          Math.max(0.2, 1 + age * (6 + (i % 3)) - age * age * 6),
+          Math.sin(a) * age * 7,
+        );
+        piece.rotation.set(age * (i + 1), age * 3, age * 2);
+      });
+    }
+    for (const [id, fx] of blastVisuals)
+      if (!visible.has(id)) {
+        actorRoot.remove(fx.group);
+        fx.material.dispose();
+        fx.ring.material.dispose();
+        fx.ring.geometry.dispose();
+        blastVisuals.delete(id);
+      }
+  }
   let shotMeshes = [];
   const compactLabels = matchMedia("(max-width: 750px), (pointer: coarse)");
   const placeLabels = [];
@@ -943,6 +1077,7 @@ export function createWorld(canvas) {
   });
   function render(game) {
     currentTime = game.time;
+    renderExplosions(game);
     updateSkids(game);
     for (const sprite of placeLabels) sprite.visible = !compactLabels.matches;
     gamePlayer = game.player;
@@ -1084,6 +1219,13 @@ export function createWorld(canvas) {
     },
     stats() {
       return {
+        burningVehicles: [...actors.values()].filter(
+          (g) => g.visible && g.userData.fire?.visible,
+        ).length,
+        blastEffects: blastVisuals.size,
+        airborneVehicles: [...actors.values()].filter(
+          (g) => g.visible && g.userData.isVehicle && g.position.y > 0.1,
+        ).length,
         equipment: equipment.stats(),
         townBuildings: OBSTACLES.filter((b) => b.type === "town").length,
         recoveringActors: [player, ...actors.values()].filter(

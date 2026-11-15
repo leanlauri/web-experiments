@@ -945,3 +945,9 @@ kbd {
 #world:focus {
   outline: none;
 }
+
+#mobile-summary[data-danger="true"] {
+  background: #973c25;
+  color: #fff5cf;
+  font-weight: 700;
+}

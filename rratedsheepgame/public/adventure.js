@@ -1,7 +1,7 @@
-import { createWheel } from "./wheel.js?v=town-equipment-1";
-import { createAudio } from "./audio.js?v=town-equipment-1";
-import { vehicleProfile } from "./vehicles.js?v=town-equipment-1";
-import { Game } from "./simulation.js?v=town-equipment-1";
+import { createWheel } from "./wheel.js?v=vehicle-damage-1";
+import { createAudio } from "./audio.js?v=vehicle-damage-1";
+import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
+import { Game } from "./simulation.js?v=vehicle-damage-1";
 import {
   HOME,
   FARMS,
@@ -13,8 +13,8 @@ import {
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=town-equipment-1";
-import { createWorld } from "./world.js?v=town-equipment-1";
+} from "./region.js?v=vehicle-damage-1";
+import { createWorld } from "./world.js?v=vehicle-damage-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -546,6 +546,19 @@ function hud() {
   $("menu-loadout").textContent =
     `${$("weapon").textContent} · ${$("snacks").textContent}${$("vehicle").textContent ? ` · ${$("vehicle").textContent}` : ""}`;
   $("menu-button").setAttribute("aria-expanded", String(!$("menu").hidden));
+  if (game.vehicle !== null) {
+    const v = game.vehicles[game.vehicle],
+      percent = Math.round((v.health / v.maxHealth) * 100),
+      fire = v.burnStarted !== undefined;
+    const condition = fire
+      ? "FIRE " +
+        Math.max(0, Math.ceil(5 - (game.time - v.burnStarted))) +
+        "s — Exit!"
+      : "Car " + percent + "%";
+    $("mobile-summary").textContent += " · " + condition;
+    $("vehicle").textContent += " · " + condition;
+    $("mobile-summary").dataset.danger = fire ? "true" : "false";
+  } else $("mobile-summary").dataset.danger = "false";
   $("shop").hidden = !game.shop;
   if (game.shop) shop();
   $("jail").hidden = !game.jail;
@@ -636,6 +649,16 @@ window.sheepGame = {
             id: game.vehicle,
             heading: game.vehicles[game.vehicle].heading,
             speed: game.vehicles[game.vehicle].driveSpeed || 0,
+            health: game.vehicles[game.vehicle].health,
+            maxHealth: game.vehicles[game.vehicle].maxHealth,
+            burning: game.vehicles[game.vehicle].burnStarted !== undefined,
+            fireRemaining:
+              game.vehicles[game.vehicle].burnStarted === undefined
+                ? null
+                : Math.max(
+                    0,
+                    5 - (game.time - game.vehicles[game.vehicle].burnStarted),
+                  ),
             vx: game.vehicles[game.vehicle].vx || 0,
             vz: game.vehicles[game.vehicle].vz || 0,
             skidding: !!game.vehicles[game.vehicle].skidding,
@@ -658,6 +681,7 @@ window.sheepGame = {
       people: [...game.guards, ...game.police].filter((g) => g.ragdoll).length,
     },
     vehicleContacts: game.vehicleContacts || 0,
+    explosions: game.explosions.length,
     skidmarks: game.skidmarks.length,
     selectedItem: game.item || "weapon",
     equippedWeapon: game.weapon,

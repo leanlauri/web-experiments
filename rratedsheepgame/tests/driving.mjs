@@ -86,7 +86,10 @@ const difference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
     v = car();
   Object.assign(v, { x: b.x - b.hx - 4, z: b.z, heading: 0, driveSpeed: 25 });
   step(v, 1, { x: 1 });
-  assert.equal(v.driveSpeed, 0);
+  assert(
+    v.driveSpeed < 1,
+    "wall contact settles after a small physical rebound",
+  );
   assert(v.x < b.x - b.hx - 1.3);
   assert.equal(v.z, b.z);
   const g = new Game(),
@@ -108,8 +111,10 @@ const difference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   g.player.x = t.x;
   g.player.z = t.z;
   t.currentSpeed = 11;
+  t.vx = Math.cos(t.heading) * 11;
+  t.vz = Math.sin(t.heading) * 11;
   g.interact();
-  assert.equal(g.vehicles[g.vehicle].driveSpeed, 11);
+  assert(Math.abs(g.vehicles[g.vehicle].driveSpeed - 11) < 1e-8);
 }
 {
   const marks = [],

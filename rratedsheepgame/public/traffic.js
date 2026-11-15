@@ -1,10 +1,10 @@
-import { VEHICLES, vehicleProfile } from "./vehicles.js?v=town-equipment-1";
-import { FARMS, HOME } from "./region.js?v=town-equipment-1";
+import { VEHICLES, vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
+import { FARMS, HOME } from "./region.js?v=vehicle-damage-1";
 import {
   vehicleBlocked,
   vehicleOverlap,
   vehicleSize,
-} from "./vehicle-collisions.js?v=town-equipment-1";
+} from "./vehicle-collisions.js?v=vehicle-damage-1";
 export const TRAFFIC_COUNT = 48;
 const LANE = 3,
   INNER = 38,

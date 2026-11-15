@@ -182,7 +182,7 @@ for (const f of FARMS) {
   g.player.x = 200;
   g.player.z = 0;
   const v = g.vehicles[0];
-  Object.assign(v, { x: 200, z: 0, stolen: true, currentSpeed: 0 });
+  Object.assign(v, { x: 220, z: 30, stolen: true, currentSpeed: 0 });
   const a = g.animals.find((a) => a.farm === 0);
   Object.assign(a, { x: 202, z: 0, following: true });
   g.shots.push({

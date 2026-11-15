@@ -1,5 +1,5 @@
-import { WEAPONS } from "./region.js?v=town-equipment-1";
-import { equipmentIcon } from "./equipment.js?v=town-equipment-1";
+import { WEAPONS } from "./region.js?v=vehicle-damage-1";
+import { equipmentIcon } from "./equipment.js?v=vehicle-damage-1";
 export function createWheel(game, root) {
   let items = [],
     selected = 0,
