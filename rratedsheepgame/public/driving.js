@@ -1,6 +1,7 @@
-import { moveVehicle } from "./vehicle-motion.js?v=console-menu-1";
-import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
-import { road } from "./region.js?v=console-menu-1";
+import { moveVehicle } from "./vehicle-motion.js?v=scenery-colliders-1";
+import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
+import { road } from "./region.js?v=scenery-colliders-1";
+import { vehicleBlocked } from "./vehicle-collisions.js?v=scenery-colliders-1";
 
 const approach = (value, target, amount) =>
   value < target
@@ -40,7 +41,9 @@ export function drive(v, dt, input = {}, level = 0) {
     const yaw =
       (Math.max(-1, Math.min(1, error * 2)) * profile.turn) /
       (1 + speed * 0.025);
+    const oldHeading = v.heading;
     v.heading = angleDifference(v.heading + yaw * step, 0);
+    if (vehicleBlocked(v, v, level)) v.heading = oldHeading;
     v.steerAngle = approach(
       v.steerAngle || 0,
       Math.max(-0.6, Math.min(0.6, error)),

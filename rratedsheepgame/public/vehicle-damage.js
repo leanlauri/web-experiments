@@ -1,4 +1,4 @@
-import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
+import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
 export const FIRE_SECONDS = 5,
   BLAST_RADIUS = 16;
 export function initVehicleHealth(v) {

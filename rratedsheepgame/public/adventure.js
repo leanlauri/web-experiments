@@ -1,9 +1,9 @@
-import { createMenus } from "./menus.js?v=console-menu-1";
-import { createController } from "./controller.js?v=console-menu-1";
-import { createWheel } from "./wheel.js?v=console-menu-1";
-import { createAudio } from "./audio.js?v=console-menu-1";
-import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
-import { Game } from "./simulation.js?v=console-menu-1";
+import { createMenus } from "./menus.js?v=scenery-colliders-1";
+import { createController } from "./controller.js?v=scenery-colliders-1";
+import { createWheel } from "./wheel.js?v=scenery-colliders-1";
+import { createAudio } from "./audio.js?v=scenery-colliders-1";
+import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
+import { Game } from "./simulation.js?v=scenery-colliders-1";
 import {
   HOME,
   FARMS,
@@ -15,8 +15,8 @@ import {
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=console-menu-1";
-import { createWorld } from "./world.js?v=console-menu-1";
+} from "./region.js?v=scenery-colliders-1";
+import { createWorld } from "./world.js?v=scenery-colliders-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;

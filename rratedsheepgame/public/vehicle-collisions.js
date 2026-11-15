@@ -1,6 +1,14 @@
-import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
-import { blocked, OBSTACLES, SIZE } from "./region.js?v=console-menu-1";
+import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
+import {
+  blocked,
+  OBSTACLES,
+  SIZE,
+  SCENERY,
+  buildingBlocks,
+} from "./region.js?v=scenery-colliders-1";
 export const vehicleSize = (v) => {
+  if (v.halfLength !== undefined && v.halfWidth !== undefined)
+    return { halfLength: v.halfLength, halfWidth: v.halfWidth, mass: Infinity };
   const p = vehicleProfile(v);
   return {
     halfLength: p.length / 2,
@@ -40,6 +48,24 @@ export function vehicleBlocked(v, p = v, level = 0) {
   const size = vehicleSize(v),
     f = axes({ ...v, ...p })[0],
     n = { x: -f.z, z: f.x };
+  const pose = { ...v, ...p },
+    bottom = pose.y || 0,
+    radius = Math.hypot(size.halfLength, size.halfWidth);
+  for (const c of SCENERY.nearby(pose, radius)) {
+    if (bottom >= c.minY + c.h || bottom + 2.2 <= c.minY) continue;
+    if (c.radius) {
+      if (circleVehicle(c, pose, c.radius + 0.025)) return true;
+    } else if (
+      vehicleOverlap(pose, {
+        x: c.x,
+        z: c.z,
+        heading: 0,
+        halfLength: c.hx,
+        halfWidth: c.hz,
+      })
+    )
+      return true;
+  }
   for (const length of [-size.halfLength, 0, size.halfLength])
     for (const width of [-size.halfWidth, 0, size.halfWidth])
       if (
@@ -48,10 +74,7 @@ export function vehicleBlocked(v, p = v, level = 0) {
               Math.abs(q.x) > SIZE - 4 ||
               Math.abs(q.z) > SIZE - 4 ||
               OBSTACLES.some(
-                (b) =>
-                  b.h > (p.y ?? v.y ?? 0) &&
-                  Math.abs(q.x - b.x) < b.hx + 0.12 &&
-                  Math.abs(q.z - b.z) < b.hz + 0.12,
+                (b) => b.h > (p.y ?? v.y ?? 0) && buildingBlocks(b, q, 0.12),
               ))({
               x: p.x + f.x * length + n.x * width,
               z: p.z + f.z * length + n.z * width,
@@ -60,6 +83,7 @@ export function vehicleBlocked(v, p = v, level = 0) {
               {
                 x: p.x + f.x * length + n.x * width,
                 z: p.z + f.z * length + n.z * width,
+                y: bottom,
               },
               0.12,
               level,

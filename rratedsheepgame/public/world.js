@@ -1,7 +1,10 @@
-import { createEquipment } from "./equipment.js?v=console-menu-1";
-import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
+import { createEquipment } from "./equipment.js?v=scenery-colliders-1";
+import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
 import * as T from "./vendor/three.module.js";
-import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=console-menu-1";
+import {
+  MAX_SKID_SEGMENTS,
+  skidOpacity,
+} from "./skidmarks.js?v=scenery-colliders-1";
 import {
   SIZE,
   HOME,
@@ -9,13 +12,12 @@ import {
   SPACEPORT,
   FARMS,
   OBSTACLES,
+  SOLID_PROPS,
+  treesInChunk,
   TOWN_STREETS,
   RIVER_START,
-  inTown,
-  road,
-  water,
   dist,
-} from "./region.js?v=console-menu-1";
+} from "./region.js?v=scenery-colliders-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
@@ -443,7 +445,6 @@ export function createWorld(canvas) {
           sphere,
         );
     }
-    shape(world, 0x806b4e, f.x + 26, 4, f.z + 21, 0.2, 8, 0.2);
     shape(world, f.color, f.x + 27.7, 7, f.z + 21, 3.2, 1.8, 0.12);
   }
   function sign(text, x, y, z, width = 7) {
@@ -514,8 +515,6 @@ export function createWorld(canvas) {
     houseRoof.scale.set(8.2, 3.2, 8.2);
     houseRoof.rotation.y = Math.PI / 4;
     world.add(houseRoof);
-    shape(world, 0x657c69, HOUSE.x, 1, HOUSE.z - 3.3, 6, 2, 1.1);
-    shape(world, 0xe7c690, HOUSE.x, 2.1, HOUSE.z - 3.3, 6.4, 0.2, 1.3);
     for (let i = 0; i < 5; i++)
       shape(
         world,
@@ -551,10 +550,10 @@ export function createWorld(canvas) {
       roof.rotation.y = Math.PI / 4;
       world.add(roof);
       shape(world, 0x8b7760, b.x + b.hx * 0.55, b.h + 1, b.z - 1, 0.7, 2, 0.8);
-    } else {
+    } else if (!gas) {
       shape(
         world,
-        gas ? 0xe8c361 : b.kind === "warehouse" ? 0x6c7f80 : 0x6f8981,
+        b.kind === "warehouse" ? 0x6c7f80 : 0x6f8981,
         b.x,
         b.h + 0.3,
         b.z,
@@ -590,38 +589,6 @@ export function createWorld(canvas) {
       sign(b.name, b.x, 4.25, b.z + b.hz + 0.2, b.hx * 1.9);
     }
     if (gas) {
-      for (const side of [-1, 1]) {
-        shape(
-          world,
-          0xe6d9ab,
-          b.x + side * b.hx * 0.8,
-          2.6,
-          b.z + 2,
-          0.2,
-          5.2,
-          0.2,
-        );
-        shape(
-          world,
-          0xd77761,
-          b.x + side * 1.7,
-          0.8,
-          b.z + 1.7,
-          0.65,
-          1.6,
-          0.7,
-        );
-        shape(
-          world,
-          0x415b55,
-          b.x + side * 1.7,
-          1.1,
-          b.z + 2.08,
-          0.45,
-          0.4,
-          0.05,
-        );
-      }
       sign("ORBIT FUEL", b.x, b.h + 0.3, b.z + b.hz + 0.4, b.hx * 1.8);
     }
     if (b.kind === "warehouse") {
@@ -679,19 +646,39 @@ export function createWorld(canvas) {
     stripe.position.y = 0.26;
     launchPad.add(stripe);
   }
-  shape(launchPad, 0xbec5af, 0, 0.28, 0, 5.5, 0.2, 5.5);
-  for (const x of [-6, -4.5])
-    shape(launchPad, 0x6c8790, x, 4.5, -1, 0.22, 9, 0.22);
-  for (let y = 1; y < 9; y += 0.65)
-    shape(launchPad, 0xc0d0c4, -5.25, y, -1, 1.5, 0.1, 0.16);
-  shape(launchPad, 0x6c8790, -3, 8, -1, 6, 0.25, 0.3);
   shape(launchPad, 0xe7c57b, -0.2, 6.8, -1, 0.1, 2.4, 0.1);
-  for (let i = 0; i < 3; i++)
-    shape(launchPad, 0xb1ac8b, -4 + i, 0.6, 4.6, 0.8, 1.2, 0.8);
+  for (const prop of SOLID_PROPS) {
+    if (prop.type === "counter") {
+      shape(world, prop.color, prop.x, 1, prop.z, 6, 2, 1.1);
+      shape(
+        world,
+        0xe7c690,
+        prop.x,
+        2.1,
+        prop.z,
+        prop.hx * 2,
+        0.2,
+        prop.hz * 2,
+      );
+    } else
+      shape(
+        world,
+        prop.color,
+        prop.x,
+        prop.minY + prop.h / 2,
+        prop.z,
+        prop.radius || prop.hx * 2,
+        prop.h,
+        prop.radius || prop.hz * 2,
+        prop.radius ? cylinder : cube,
+      );
+    if (prop.type === "fuel-pump")
+      shape(world, 0x415b55, prop.x, 1.1, prop.z + 0.38, 0.45, 0.4, 0.05);
+  }
   sign("MOON PAD 01", SPACEPORT.x, 1.7, SPACEPORT.z + 7.2, 7);
   const rocket = new T.Group();
   world.add(rocket);
-  rocket.position.set(SPACEPORT.x, 0, SPACEPORT.z);
+  rocket.position.set(SPACEPORT.x, 1.1, SPACEPORT.z);
   const rocketParts = Array.from({ length: 5 }, () => {
     const group = new T.Group();
     rocket.add(group);
@@ -744,30 +731,7 @@ export function createWorld(canvas) {
   function chunk(cx, cz) {
     const group = new T.Group();
     world.add(group);
-    let seed = ((cx + 50) * 127 + (cz + 50) * 719) >>> 0;
-    const rand = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
-      return seed / 4294967296;
-    };
-    const positions = [];
-    for (let i = 0; i < 22; i++) {
-      const x = cx * 64 + rand() * 64,
-        z = cz * 64 + rand() * 64,
-        p = { x, z };
-      if (
-        Math.abs(x) > SIZE ||
-        Math.abs(z) > SIZE ||
-        road(p) ||
-        water(p) ||
-        inTown(p) ||
-        Math.hypot(x, z) < 72 ||
-        dist(p, HOME) < 36 ||
-        dist(p, { x: 0, z: -135 }) < 24 ||
-        FARMS.some((f) => dist(p, f) < 49)
-      )
-        continue;
-      positions.push({ x, z, h: 3 + rand() * 4 });
-    }
+    const positions = treesInChunk(cx, cz);
     const trunks = new T.InstancedMesh(
         cylinder,
         material(0x8c7957),
@@ -780,11 +744,11 @@ export function createWorld(canvas) {
       ),
       dummy = new T.Object3D();
     positions.forEach((p, i) => {
-      dummy.position.set(p.x, p.h * 0.4, p.z);
-      dummy.scale.set(0.3, p.h * 0.8, 0.3);
+      dummy.position.set(p.x, p.h / 2, p.z);
+      dummy.scale.set(p.radius, p.h, p.radius);
       dummy.updateMatrix();
       trunks.setMatrixAt(i, dummy.matrix);
-      dummy.position.y = p.h;
+      dummy.position.y = p.crownY;
       dummy.scale.set(2.1, 2.8, 2.1);
       dummy.updateMatrix();
       tops.setMatrixAt(i, dummy.matrix);
@@ -1390,9 +1354,8 @@ export function createWorld(canvas) {
       rocketParts.forEach((m, i) => (m.visible = i < game.parts));
       ghostParts.forEach((m, i) => (m.visible = i >= game.parts && !flight));
       flame.visible = flight;
-      rocket.position.y = flight
-        ? Math.max(0, game.launchTime - 1) ** 2 * 2
-        : 0;
+      rocket.position.y =
+        1.1 + (flight ? Math.max(0, game.launchTime - 1) ** 2 * 2 : 0);
       flame.scale.y = 2 + Math.sin(game.time * 40) * 0.6;
       const target = flight
         ? new T.Vector3(
@@ -1450,6 +1413,13 @@ export function createWorld(canvas) {
           (g) => g.visible && g.userData.isVehicle && g.position.y > 0.1,
         ).length,
         equipment: equipment.stats(),
+        scenery: {
+          trees: [...chunks.values()].reduce(
+            (n, c) => n + treesInChunk(c.cx, c.cz).length,
+            0,
+          ),
+          props: SOLID_PROPS.length,
+        },
         townBuildings: OBSTACLES.filter((b) => b.type === "town").length,
         recoveringActors: [player, ...actors.values()].filter(
           (g) => g.visible && g.userData.stars?.visible,

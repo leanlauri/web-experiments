@@ -1,37 +1,40 @@
-import { followAnimal, separateHerd } from "./herding.js?v=console-menu-1";
+import { followAnimal, separateHerd } from "./herding.js?v=scenery-colliders-1";
 import {
   FIRST_WANTED_WALK_SPEED,
   createOfficer,
   spawnPatrol,
   patrolStep,
   disembarkPatrol,
-} from "./police.js?v=console-menu-1";
-import { freeVehicle } from "./vehicle-motion.js?v=console-menu-1";
+} from "./police.js?v=scenery-colliders-1";
+import { freeVehicle } from "./vehicle-motion.js?v=scenery-colliders-1";
 import {
   initVehicleHealth,
   damageVehicle,
   FIRE_SECONDS,
   BLAST_RADIUS,
-} from "./vehicle-damage.js?v=console-menu-1";
+} from "./vehicle-damage.js?v=scenery-colliders-1";
 import {
   trafficPose,
   nearestTrafficDistance,
-} from "./traffic.js?v=console-menu-1";
-import { vehicleProfile } from "./vehicles.js?v=console-menu-1";
-import { createTraffic, stepTraffic } from "./traffic.js?v=console-menu-1";
+} from "./traffic.js?v=scenery-colliders-1";
+import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
+import { createTraffic, stepTraffic } from "./traffic.js?v=scenery-colliders-1";
 import {
   resolveVehicleCollisions,
   vehiclePersonContact,
   circleVehicle,
   vehicleBlocked,
-} from "./vehicle-collisions.js?v=console-menu-1";
+} from "./vehicle-collisions.js?v=scenery-colliders-1";
 import {
   startTumble,
   stepTumble,
   clearTumble,
-} from "./tumbles.js?v=console-menu-1";
-import { drive } from "./driving.js?v=console-menu-1";
-import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js?v=console-menu-1";
+} from "./tumbles.js?v=scenery-colliders-1";
+import { drive } from "./driving.js?v=scenery-colliders-1";
+import {
+  recordSkidmarks,
+  SKID_LIFETIME,
+} from "./skidmarks.js?v=scenery-colliders-1";
 import {
   HOME,
   inHouse,
@@ -42,9 +45,11 @@ import {
   PARTS,
   dist,
   move,
+  clearPosition,
   routeTarget,
-  OBSTACLES,
-} from "./region.js?v=console-menu-1";
+  solidBlocked,
+  solidPathClear,
+} from "./region.js?v=scenery-colliders-1";
 export const NPC_KNOCKOUT_SECONDS = 60,
   EXIT_ROLL_SPEED = 8;
 export class Game {
@@ -323,9 +328,26 @@ export class Game {
       return;
     if (this.vehicle !== null) {
       const v = this.vehicles[this.vehicle];
-      this.player.x = v.x + Math.cos(v.heading + Math.PI / 2) * 3;
-      this.player.z = v.z + Math.sin(v.heading + Math.PI / 2) * 3;
-      this.player.y = v.y || 0;
+      const free = (p) =>
+        !this.vehicles.some(
+          (car) => dist(car, p) < 10 && circleVehicle(p, car, 0.5),
+        );
+      const exit = clearPosition(
+        {
+          x: v.x + Math.cos(v.heading + Math.PI / 2) * 3,
+          z: v.z + Math.sin(v.heading + Math.PI / 2) * 3,
+          y: v.y || 0,
+          rocketParts: this.parts,
+        },
+        0.5,
+        this.level,
+        free,
+      );
+      if (!exit) {
+        this.tell("No clear space to get out. Move the vehicle into the open.");
+        return;
+      }
+      Object.assign(this.player, { x: exit.x, z: exit.z, y: exit.y });
       const speed = Math.hypot(v.vx || 0, v.vz || 0) || v.currentSpeed || 0;
       if (speed > EXIT_ROLL_SPEED) {
         this.player.exitRoll = {
@@ -343,8 +365,21 @@ export class Game {
       for (const a of this.herd)
         if (a.boarded === v.id) {
           a.boarded = null;
-          a.x = this.player.x + ((a.id % 3) - 1) * 1.3;
-          a.z = this.player.z + 2 + Math.floor((a.id % 9) / 3) * 1.3;
+          const spot =
+            clearPosition(
+              {
+                x: this.player.x + ((a.id % 3) - 1) * 1.3,
+                z: this.player.z + 2 + Math.floor((a.id % 9) / 3) * 1.3,
+                y: v.y || 0,
+                rocketParts: this.parts,
+              },
+              0.5,
+              this.level,
+              free,
+            ) || exit;
+          a.x = spot.x;
+          a.z = spot.z;
+          a.y = spot.y;
         }
       this.tell("Everyone out! Keep your herd together.");
       return;
@@ -455,7 +490,7 @@ export class Game {
       : this.player.heading;
     this.player.heading = angle;
     if (w.range < 6) {
-      if (target) {
+      if (target && solidPathClear(this.player, target)) {
         this.hitGuard(target, w.power);
         this.crime(0.5);
       }
@@ -539,6 +574,14 @@ export class Game {
   update(dt, input = {}) {
     dt = Math.min(0.05, Math.max(0, dt));
     this.time += dt;
+    for (const body of [
+      this.player,
+      ...this.animals,
+      ...this.vehicles,
+      ...this.guards,
+      ...this.police,
+    ])
+      body.rocketParts = this.parts;
     this.skidmarks = this.skidmarks.filter(
       (mark) => this.time - mark.born < SKID_LIFETIME,
     );
@@ -1106,14 +1149,19 @@ export class Game {
   updateShots(dt) {
     for (const s of this.shots) {
       s.life -= dt;
-      const steps = 3;
+      const steps = Math.max(
+        3,
+        Math.ceil((Math.hypot(s.vx || 0, s.vz || 0) * dt) / 0.2),
+      );
       for (let i = 0; i < steps && s.life > 0; i++) {
         s.x += (s.vx * dt) / steps;
         s.z += (s.vz * dt) / steps;
         if (s.owner === "swing") continue;
         if (
-          OBSTACLES.some(
-            (b) => Math.abs(s.x - b.x) < b.hx && Math.abs(s.z - b.z) < b.hz,
+          solidBlocked(
+            { ...s, y: s.y ?? 1.3, rocketParts: this.parts },
+            0.12,
+            0.12,
           )
         ) {
           s.life = 0;

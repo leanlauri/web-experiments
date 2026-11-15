@@ -4,7 +4,7 @@ import {
   move,
   blocked,
   routeTarget,
-} from "./region.js?v=console-menu-1";
+} from "./region.js?v=scenery-colliders-1";
 export const HERD_SPACING = {
   sheep: 2.5,
   cow: 3.2,

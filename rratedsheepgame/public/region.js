@@ -1,3 +1,4 @@
+import { createScenery } from "./scenery.js?v=scenery-colliders-1";
 export const SIZE = 460,
   HOME = { x: 0, z: -190, r: 22 },
   START = { x: 0, z: -135 };
@@ -175,30 +176,110 @@ export function fenceBlocks(p, level = 0) {
     return !(toward > 0 && side < (level > 2 ? 5 : 8));
   });
 }
+export const SCENERY = createScenery({
+  SIZE,
+  HOME,
+  START,
+  HOUSE,
+  SPACEPORT,
+  FARMS,
+  OBSTACLES,
+  road,
+  water,
+  inTown,
+});
+export const treesInChunk = SCENERY.treesInChunk,
+  SOLID_PROPS = SCENERY.props;
+export function buildingBlocks(b, p, r = 0) {
+  if (b.type === "home") return houseBlocked(p, r);
+  const z = b.z - (b.kind === "gas" ? 1.5 : 0),
+    hz = b.kind === "gas" ? b.hz / 2 : b.hz;
+  return Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - z) < hz + r;
+}
+export function solidBlocked(p, r = 0.65, height = 1.8) {
+  return (
+    OBSTACLES.some((b) => (p.y || 0) < b.h && buildingBlocks(b, p, r)) ||
+    SCENERY.blocks(p, r, height)
+  );
+}
+export function solidPathClear(a, b) {
+  const steps = Math.max(1, Math.ceil(dist(a, b) / 0.2));
+  for (let i = 1; i <= steps; i++)
+    if (
+      solidBlocked(
+        {
+          x: a.x + ((b.x - a.x) * i) / steps,
+          z: a.z + ((b.z - a.z) * i) / steps,
+          y: (a.y || 0) + 1.3,
+          rocketParts: a.rocketParts,
+        },
+        0.1,
+        0.1,
+      )
+    )
+      return false;
+  return true;
+}
 export function blocked(p, r = 0.65, level = 0) {
   return (
     Math.abs(p.x) > SIZE - 4 ||
     Math.abs(p.z) > SIZE - 4 ||
     water(p) ||
     fenceBlocks(p, level) ||
-    OBSTACLES.some((b) =>
-      b.type === "home"
-        ? houseBlocked(p, r)
-        : Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - b.z) < b.hz + r,
-    )
+    solidBlocked(p, r)
   );
 }
 export function move(p, dx, dz, r = 0.65, level = 0) {
   const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.6));
   for (let i = 0; i < steps; i++) {
-    if (!blocked({ x: p.x + dx / steps, z: p.z }, r, level)) p.x += dx / steps;
-    if (!blocked({ x: p.x, z: p.z + dz / steps }, r, level)) p.z += dz / steps;
+    if (
+      !blocked(
+        {
+          x: p.x + dx / steps,
+          z: p.z,
+          y: p.y || 0,
+          rocketParts: p.rocketParts,
+        },
+        r,
+        level,
+      )
+    )
+      p.x += dx / steps;
+    if (
+      !blocked(
+        {
+          x: p.x,
+          z: p.z + dz / steps,
+          y: p.y || 0,
+          rocketParts: p.rocketParts,
+        },
+        r,
+        level,
+      )
+    )
+      p.z += dz / steps;
   }
+}
+export function clearPosition(origin, r = 0.5, level = 0, accept = () => true) {
+  for (let ring = 0; ring <= 8; ring++)
+    for (let i = 0; i < (ring ? 16 : 1); i++) {
+      const angle = (i * Math.PI) / 8,
+        p = {
+          ...origin,
+          x: origin.x + Math.cos(angle) * ring,
+          z: origin.z + Math.sin(angle) * ring,
+        };
+      if (!blocked(p, r, level) && accept(p)) return p;
+    }
+  return null;
 }
 export function farmGate(f) {
   return { x: f.x - Math.cos(f.angle) * 39, z: f.z - Math.sin(f.angle) * 39 };
 }
 export function routeTarget(p, target) {
+  return SCENERY.waypoint(p, regionTarget(p, target));
+}
+function regionTarget(p, target) {
   for (const f of FARMS) {
     const a = dist(p, f) < 37,
       b = dist(target, f) < 37;
