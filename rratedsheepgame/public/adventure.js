@@ -1,7 +1,7 @@
-import { createWheel } from "./wheel.js?v=vehicle-damage-1";
-import { createAudio } from "./audio.js?v=vehicle-damage-1";
-import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
-import { Game } from "./simulation.js?v=vehicle-damage-1";
+import { createWheel } from "./wheel.js?v=home-police-1";
+import { createAudio } from "./audio.js?v=home-police-1";
+import { vehicleProfile } from "./vehicles.js?v=home-police-1";
+import { Game } from "./simulation.js?v=home-police-1";
 import {
   HOME,
   FARMS,
@@ -13,8 +13,8 @@ import {
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=vehicle-damage-1";
-import { createWorld } from "./world.js?v=vehicle-damage-1";
+} from "./region.js?v=home-police-1";
+import { createWorld } from "./world.js?v=home-police-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -665,6 +665,12 @@ window.sheepGame = {
           },
     wanted: game.wanted,
     hearts: game.player.hp,
+    exitRoll: !!game.player.exitRoll,
+    houseInside: game.houseInside,
+    police: {
+      onFoot: game.police.filter((p) => p.inVehicle === undefined).length,
+      riding: game.police.filter((p) => p.inVehicle !== undefined).length,
+    },
     recovery: game.player.ragdoll
       ? {
           phase: game.player.ragdoll.phase,

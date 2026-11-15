@@ -112,5 +112,15 @@ export const VEHICLES = {
     wave: "square",
   },
 };
+export const POLICE_VEHICLE = {
+  ...VEHICLES.car,
+  name: "County patrol car",
+  color: 0x526b8e,
+  top: 36,
+  acceleration: 10,
+  pitch: 85,
+};
 export const vehicleProfile = (v) =>
-  VEHICLES[typeof v === "string" ? v : v.kind] || VEHICLES.car;
+  typeof v === "object" && v.isPolice
+    ? POLICE_VEHICLE
+    : VEHICLES[typeof v === "string" ? v : v.kind] || VEHICLES.car;

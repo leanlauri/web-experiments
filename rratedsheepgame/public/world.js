@@ -1,13 +1,12 @@
-import { createEquipment } from "./equipment.js?v=vehicle-damage-1";
-import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
+import { createEquipment } from "./equipment.js?v=home-police-1";
+import { vehicleProfile } from "./vehicles.js?v=home-police-1";
 import * as T from "./vendor/three.module.js";
-import {
-  MAX_SKID_SEGMENTS,
-  skidOpacity,
-} from "./skidmarks.js?v=vehicle-damage-1";
+import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=home-police-1";
 import {
   SIZE,
   HOME,
+  HOUSE,
+  SPACEPORT,
   FARMS,
   OBSTACLES,
   TOWN_STREETS,
@@ -16,7 +15,7 @@ import {
   road,
   water,
   dist,
-} from "./region.js?v=vehicle-damage-1";
+} from "./region.js?v=home-police-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
@@ -287,6 +286,29 @@ function carModel(v) {
     }
   for (const x of [-width * 0.32, width * 0.32])
     shape(g, 0xffeab2, x, 0.8, length * 0.5 + 0.04, 0.3, 0.2, 0.08);
+  if (v.isPolice) {
+    shape(g, 0xf2efdf, 0, 0.95, 0, width * 1.01, 0.45, length * 0.65);
+    const roof = new T.Group();
+    roof.position.set(0, 2.05, 0);
+    g.add(roof);
+    for (const side of [-1, 1]) {
+      const light = shape(
+        roof,
+        side < 0 ? 0xd66c64 : 0x6a9cdc,
+        side * 0.42,
+        0,
+        0,
+        0.65,
+        0.22,
+        0.3,
+      );
+      light.material = new T.MeshBasicMaterial({
+        color: side < 0 ? 0xe4756a : 0x6a9fe4,
+      });
+    }
+    g.userData.policeLights = roof;
+  }
+  g.userData.intact = [...g.children];
   return g;
 }
 export function createWorld(canvas) {
@@ -442,7 +464,74 @@ export function createWorld(canvas) {
     panel.position.set(x, y, z);
     world.add(panel);
   }
+  const houseWalls = [],
+    houseDetails = [];
+  let houseRoof;
+  function buildHome() {
+    shape(world, 0xddcda6, HOUSE.x, 0.06, HOUSE.z, 10, 0.12, 10);
+    const wall = (x, z, w, d) => {
+      const m = shape(world, 0xe4c59a, x, 3, z, w, 6, d);
+      houseWalls.push(m);
+    };
+    wall(HOUSE.x - 5, HOUSE.z, 0.35, 10);
+    wall(HOUSE.x + 5, HOUSE.z, 0.35, 10);
+    wall(HOUSE.x, HOUSE.z - 5, 10, 0.35);
+    const width = 5 - HOUSE.doorHalf;
+    for (const side of [-1, 1])
+      wall(
+        HOUSE.x + side * (HOUSE.doorHalf + width / 2),
+        HOUSE.z + 5,
+        width,
+        0.35,
+      );
+    houseDetails.push(
+      shape(
+        world,
+        0xe4c59a,
+        HOUSE.x,
+        4.7,
+        HOUSE.z + 5,
+        HOUSE.doorHalf * 2,
+        2.6,
+        0.35,
+      ),
+    );
+    for (const side of [-1, 1])
+      houseDetails.push(
+        shape(
+          world,
+          0x6b8069,
+          HOUSE.x + side * HOUSE.doorHalf,
+          1.7,
+          HOUSE.z + 5.15,
+          0.16,
+          3.4,
+          0.2,
+        ),
+      );
+    houseRoof = new T.Mesh(new T.ConeGeometry(1, 1, 4), material(0x986f5a));
+    houseRoof.position.set(HOUSE.x, 7, HOUSE.z);
+    houseRoof.scale.set(8.2, 3.2, 8.2);
+    houseRoof.rotation.y = Math.PI / 4;
+    world.add(houseRoof);
+    shape(world, 0x657c69, HOUSE.x, 1, HOUSE.z - 3.3, 6, 2, 1.1);
+    shape(world, 0xe7c690, HOUSE.x, 2.1, HOUSE.z - 3.3, 6.4, 0.2, 1.3);
+    for (let i = 0; i < 5; i++)
+      shape(
+        world,
+        [0x7fb4c5, 0xdca066, 0x96b678][i % 3],
+        HOUSE.x - 2 + i,
+        2.5,
+        HOUSE.z - 4.3,
+        0.6,
+        0.6,
+        0.5,
+      );
+    sign("WORKSHOP · WALK IN", HOUSE.x, 4, HOUSE.z + 5.3, 8);
+  }
+  buildHome();
   for (const b of OBSTACLES) {
+    if (b.type === "home") continue;
     const gas = b.kind === "gas",
       height = gas ? b.h * 0.65 : b.h;
     shape(
@@ -570,19 +659,84 @@ export function createWorld(canvas) {
   );
   label(world, "CLOVER MEADOW", -18, 4, -143, "#fff6dc", 0.65);
   label(world, "RIVER CROSSING · TOWN", 0, 15, 0, "#fff6dc", 1.1);
+  const launchPad = new T.Group();
+  world.add(launchPad);
+  launchPad.position.set(SPACEPORT.x, 0, SPACEPORT.z);
+  shape(launchPad, 0x778a82, 0, 0.12, 0, 7, 0.24, 7, cylinder);
+  for (let i = 0; i < 12; i++) {
+    const stripe = new T.Mesh(
+      new T.RingGeometry(
+        5.8,
+        6.6,
+        8,
+        1,
+        (i * Math.PI) / 6,
+        (Math.PI / 6) * 0.85,
+      ),
+      material(i % 2 ? 0x414e46 : 0xe5bc63),
+    );
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.position.y = 0.26;
+    launchPad.add(stripe);
+  }
+  shape(launchPad, 0xbec5af, 0, 0.28, 0, 5.5, 0.2, 5.5);
+  for (const x of [-6, -4.5])
+    shape(launchPad, 0x6c8790, x, 4.5, -1, 0.22, 9, 0.22);
+  for (let y = 1; y < 9; y += 0.65)
+    shape(launchPad, 0xc0d0c4, -5.25, y, -1, 1.5, 0.1, 0.16);
+  shape(launchPad, 0x6c8790, -3, 8, -1, 6, 0.25, 0.3);
+  shape(launchPad, 0xe7c57b, -0.2, 6.8, -1, 0.1, 2.4, 0.1);
+  for (let i = 0; i < 3; i++)
+    shape(launchPad, 0xb1ac8b, -4 + i, 0.6, 4.6, 0.8, 1.2, 0.8);
+  sign("MOON PAD 01", SPACEPORT.x, 1.7, SPACEPORT.z + 7.2, 7);
   const rocket = new T.Group();
   world.add(rocket);
-  rocket.position.set(HOME.x - 11, 0, HOME.z - 8);
-  shape(rocket, 0x616e63, 0, 0.35, 0, 6, 0.6, 6);
-  const rocketParts = [];
-  rocketParts.push(shape(rocket, 0xdfdbc5, 0, 3, 0, 1.7, 5, 1.7, cylinder));
-  rocketParts.push(shape(rocket, 0x647b8c, 0, 1, 0, 2, 1.4, 2, cylinder));
-  rocketParts.push(shape(rocket, 0xcf9062, -2, 3, 0, 0.65, 4, 0.65, cylinder));
-  rocketParts.push(shape(rocket, 0xcf9062, 2, 3, 0, 0.65, 4, 0.65, cylinder));
-  const nose = new T.Mesh(new T.ConeGeometry(1.7, 3, 12), material(0xdd795c));
+  rocket.position.set(SPACEPORT.x, 0, SPACEPORT.z);
+  const rocketParts = Array.from({ length: 5 }, () => {
+    const group = new T.Group();
+    rocket.add(group);
+    return group;
+  });
+  shape(rocketParts[0], 0xdfdbc5, 0, 3, 0, 1.7, 5, 1.7, cylinder);
+  for (const x of [-1, 1])
+    shape(rocketParts[0], 0xd29b6a, x * 1.6, 1, 0, 0.2, 1.8, 1.1);
+  const engine = new T.Mesh(
+    new T.CylinderGeometry(0.75, 1.3, 1.2, 12),
+    material(0x637b88),
+  );
+  engine.position.y = 0.75;
+  rocketParts[1].add(engine);
+  for (const x of [-1, 1])
+    shape(rocketParts[2], 0xcb8b62, x * 2, 3, 0, 0.65, 4, 0.65, cylinder);
+  shape(rocketParts[3], 0x477f96, 0, 4.9, 1.64, 1.15, 1, 0.16);
+  shape(rocketParts[3], 0xbadfe2, 0, 5, 1.75, 0.85, 0.65, 0.08);
+  shape(rocketParts[3], 0xf0d184, 0.5, 5.65, 0, 0.1, 0.5, 0.1);
+  const nose = new T.Mesh(new T.ConeGeometry(1.7, 3, 16), material(0xdd795c));
   nose.position.y = 7;
-  rocket.add(nose);
-  rocketParts.push(nose);
+  rocketParts[4].add(nose);
+  const blueprint = new T.Group();
+  world.add(blueprint);
+  blueprint.position.copy(rocket.position);
+  const ghostMaterial = new T.MeshBasicMaterial({
+    color: 0xa9e4e3,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.4,
+  });
+  const ghostParts = rocketParts.map((source) => {
+    const group = new T.Group();
+    blueprint.add(group);
+    source.traverse((part) => {
+      if (part.isMesh) {
+        const ghost = new T.Mesh(part.geometry, ghostMaterial);
+        ghost.position.copy(part.position);
+        ghost.scale.copy(part.scale);
+        ghost.rotation.copy(part.rotation);
+        group.add(ghost);
+      }
+    });
+    return group;
+  });
   const flame = shape(rocket, 0xffc46c, 0, -1, 0, 1, 3, 1, sphere);
   flame.visible = false;
   const chunks = new Map();
@@ -748,15 +902,20 @@ export function createWorld(canvas) {
     }
     const pivot = g.userData.pivot,
       r = p.ragdoll,
+      roll = p.exitRoll,
       alpha = r?.phase === "recovering" ? r.recovery : 0;
-    pivot.rotation.set(r ? r.rx : 0, 0, r ? r.rz : down ? Math.PI / 2 : 0);
+    pivot.rotation.set(
+      roll ? (roll.age / roll.duration) * Math.PI * 2 : r ? r.rx : 0,
+      0,
+      r ? r.rz : down ? Math.PI / 2 : 0,
+    );
     pivot.position.y =
       0.9 - ((r && (p.y || 0) < 0.1) || down ? 0.45 : 0) * (1 - alpha);
     for (let i = 0; i < g.userData.limbs.length; i++)
       g.userData.limbs[i].rotation.x = r
         ? Math.sin(r.age * 11 + i * 1.8) * 1.1 * (1 - alpha)
         : 0;
-    if (r || down) {
+    if (r || down || roll) {
       g.updateMatrixWorld(true);
       const ignored = g.userData.equipmentGrip,
         parent = ignored?.parent;
@@ -769,7 +928,7 @@ export function createWorld(canvas) {
       pivot.rotation.z =
         Math.sin(((currentTime - p.hitAt) / 0.25) * Math.PI) * 0.3;
     const stars = g.userData.stars;
-    stars.visible = !!r || down || (p.starsUntil || 0) > currentTime;
+    stars.visible = !roll && (!!r || down || (p.starsUntil || 0) > currentTime);
     if (stars.visible) {
       pivot.updateMatrix();
       headPosition.copy(g.userData.head);
@@ -789,6 +948,13 @@ export function createWorld(canvas) {
   }
   let currentTime = 0;
   function vehicleEffects(g, p) {
+    for (const piece of g.userData.intact || []) piece.visible = !p.destroyed;
+    if (g.userData.policeLights && !p.destroyed)
+      g.userData.policeLights.children.forEach(
+        (light, i) =>
+          (light.scale.y =
+            0.6 + (Math.sin(currentTime * 12 + i * Math.PI) > 0 ? 0.8 : 0)),
+      );
     const burning = p.burnStarted !== undefined && !p.destroyed,
       smoking = p.destroyed && currentTime - (p.explodedAt || 0) < 8;
     if (!g.userData.fire && !(burning || p.destroyed)) return;
@@ -822,16 +988,44 @@ export function createWorld(canvas) {
         );
         smoke.add(puff);
       }
-      g.userData.wreck = shape(
-        g,
-        0x45443b,
-        0,
-        1.2,
-        0,
-        vehicleProfile(p).width * 0.94,
-        1.25,
-        vehicleProfile(p).length * 0.8,
+      const wreck = new T.Group();
+      g.add(wreck);
+      g.userData.wreck = wreck;
+      const psize = vehicleProfile(p);
+      shape(wreck, 0x252925, 0, 0.45, 0, psize.width, 0.7, psize.length);
+      const cabin = shape(
+        wreck,
+        0x30352f,
+        0.15,
+        0.95,
+        -0.2,
+        psize.width * 0.8,
+        0.65,
+        psize.length * 0.45,
       );
+      cabin.rotation.z = 0.14;
+      const hood = shape(
+        wreck,
+        0x1b211d,
+        0,
+        0.85,
+        psize.length * 0.34,
+        psize.width * 0.9,
+        0.12,
+        psize.length * 0.3,
+      );
+      hood.rotation.x = -0.35;
+      for (const side of [-1, 1])
+        shape(
+          wreck,
+          0x3c4239,
+          side * psize.width * 0.4,
+          0.28,
+          -psize.length * 0.25,
+          0.15,
+          0.45,
+          psize.length * 0.35,
+        );
     }
     g.userData.fire.visible = burning;
     g.userData.smoke.visible = burning || smoking;
@@ -1118,6 +1312,7 @@ export function createWorld(canvas) {
       player.visible =
         player.visible &&
         (!!game.player.ragdoll ||
+          !!game.player.exitRoll ||
           !(game.player.invulnerable > 0 && Math.floor(game.time * 12) % 2));
       equipment.update(game);
       const live = new Set();
@@ -1148,6 +1343,7 @@ export function createWorld(canvas) {
             ),
           g,
           g.down > 0,
+          g.inVehicle !== undefined,
         );
       }
       for (const [id, m] of actors)
@@ -1185,7 +1381,14 @@ export function createWorld(canvas) {
           trail.rotation.y = m.rotation.y;
           return [m, trail];
         });
+      houseRoof.visible = !game.houseInside;
+      houseWalls.forEach((w) => {
+        w.scale.y = game.houseInside ? 1.2 : 6;
+        w.position.y = game.houseInside ? 0.6 : 3;
+      });
+      houseDetails.forEach((w) => (w.visible = !game.houseInside));
       rocketParts.forEach((m, i) => (m.visible = i < game.parts));
+      ghostParts.forEach((m, i) => (m.visible = i >= game.parts && !flight));
       flame.visible = flight;
       rocket.position.y = flight
         ? Math.max(0, game.launchTime - 1) ** 2 * 2
@@ -1219,6 +1422,26 @@ export function createWorld(canvas) {
     },
     stats() {
       return {
+        rocket: {
+          built: rocketParts.filter((g) => g.visible).length,
+          blueprints: ghostParts.filter((g) => g.visible).length,
+          padY: launchPad.position.y,
+        },
+        houseOpen: !houseRoof.visible,
+        playerStars: !!player.userData.stars?.visible,
+        policeCars: [...actors.values()].filter(
+          (g) => g.visible && g.userData.policeLights?.visible,
+        ).length,
+        wrecks: [...actors.values()].filter(
+          (g) => g.visible && g.userData.wreck?.visible,
+        ).length,
+        wreckIntactPieces: [...actors.values()]
+          .filter((g) => g.userData.wreck?.visible)
+          .reduce(
+            (n, g) =>
+              n + (g.userData.intact || []).filter((p) => p.visible).length,
+            0,
+          ),
         burningVehicles: [...actors.values()].filter(
           (g) => g.visible && g.userData.fire?.visible,
         ).length,

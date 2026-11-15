@@ -1,4 +1,4 @@
-import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
+import { vehicleProfile } from "./vehicles.js?v=home-police-1";
 export const SKID_LIFETIME = 8;
 export const MAX_SKID_SEGMENTS = 1200;
 export function recordSkidmarks(marks, vehicle, time) {

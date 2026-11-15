@@ -1,5 +1,5 @@
-import { vehicleProfile } from "./vehicles.js?v=vehicle-damage-1";
-import { blocked, OBSTACLES, SIZE } from "./region.js?v=vehicle-damage-1";
+import { vehicleProfile } from "./vehicles.js?v=home-police-1";
+import { blocked, OBSTACLES, SIZE } from "./region.js?v=home-police-1";
 export const vehicleSize = (v) => {
   const p = vehicleProfile(v);
   return {

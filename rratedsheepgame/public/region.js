@@ -1,6 +1,28 @@
 export const SIZE = 460,
   HOME = { x: 0, z: -190, r: 22 },
   START = { x: 0, z: -135 };
+export const HOUSE = {
+  x: HOME.x + 13,
+  z: HOME.z - 7,
+  hx: 5,
+  hz: 5,
+  doorHalf: 1.1,
+};
+export const SPACEPORT = { x: HOME.x - 11, z: HOME.z - 8 };
+export const inHouse = (p) =>
+  Math.abs(p.x - HOUSE.x) < HOUSE.hx - 0.6 &&
+  p.z < HOUSE.z + HOUSE.hz - 0.6 &&
+  p.z > HOUSE.z - HOUSE.hz + 0.6;
+function houseBlocked(p, r) {
+  const dx = Math.abs(p.x - HOUSE.x),
+    dz = Math.abs(p.z - HOUSE.z);
+  if (dx >= HOUSE.hx + r || dz >= HOUSE.hz + r) return false;
+  return (
+    dx > HOUSE.hx - 0.35 - r ||
+    p.z < HOUSE.z - HOUSE.hz + 0.35 + r ||
+    (p.z > HOUSE.z + HOUSE.hz - 0.35 - r && dx > HOUSE.doorHalf - r)
+  );
+}
 export const FARMS = [
   ["Sunflower Union", "sheep", 0xe9b344, "Foam bat", 1],
   ["Rosewood Riders", "pig", 0xcf7797, "Bubble wand", 1.15],
@@ -159,8 +181,10 @@ export function blocked(p, r = 0.65, level = 0) {
     Math.abs(p.z) > SIZE - 4 ||
     water(p) ||
     fenceBlocks(p, level) ||
-    OBSTACLES.some(
-      (b) => Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - b.z) < b.hz + r,
+    OBSTACLES.some((b) =>
+      b.type === "home"
+        ? houseBlocked(p, r)
+        : Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - b.z) < b.hz + r,
     )
   );
 }

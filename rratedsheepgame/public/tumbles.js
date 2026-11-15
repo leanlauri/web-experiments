@@ -1,4 +1,4 @@
-import { move } from "./region.js?v=vehicle-damage-1";
+import { move } from "./region.js?v=home-police-1";
 export function startTumble(body, velocity, time) {
   if (body.ragdoll || time < (body.impactImmuneUntil || 0)) return false;
   const speed = Math.hypot(velocity.x, velocity.z),
@@ -35,8 +35,11 @@ export function stepTumble(body, dt, time, level = 0) {
       body.ragdoll = null;
       body.y = 0;
       body.vy = 0;
-      body.down = typeof body.down === "number" ? 0 : false;
-      if(body.type&&(body.hp??3)<=0)body.hp=1;
+      body.down =
+        typeof body.down === "number"
+          ? Math.max(0, (body.knockoutUntil || 0) - time)
+          : false;
+      if (body.type && (body.hp ?? 3) <= 0) body.hp = 1;
       body.starsUntil = time + 2;
       body.impactImmuneUntil = time + 2;
     }
