@@ -268,13 +268,20 @@ $("launch").onclick = () => {
   game.launch();
   menus.closeAll();
 };
-const animalIcons = ["🐑", "🐖", "🐄", "🐇", "🐐", "🦙"];
+const animalIcons = [
+  '<path d="M6 14C1 14 2 7 6 7C5 2 12 1 14 5C19 2 23 7 19 11C24 14 20 18 17 17"/><ellipse cx="12" cy="15" rx="5" ry="7"/>',
+  '<circle cx="12" cy="13" r="8"/><path d="M6 7L3 2L10 5M14 5L21 2L18 7"/><ellipse cx="12" cy="16" rx="5" ry="3"/><path d="M10 16h.1M14 16h.1"/>',
+  '<path d="M7 7C2 7 2 2 3 2M17 7C22 7 22 2 21 2M7 9L2 10L6 13M17 9L22 10L18 13"/><path d="M7 6H17L18 18L15 22H9L6 18Z"/><path d="M9 18h6"/>',
+  '<ellipse cx="8" cy="6" rx="2.5" ry="5"/><ellipse cx="16" cy="6" rx="2.5" ry="5"/><ellipse cx="12" cy="17" rx="7" ry="5"/>',
+  '<path d="M8 9Q2 4 7 1L10 8M16 9Q22 4 17 1L14 8M6 10L2 8M18 10L22 8"/><path d="M6 9H18L17 18L12 23L7 18Z"/>',
+  '<path d="M7 23V13Q4 11 6 7V1L10 6H14L18 1V7Q20 11 17 13V23M7 15H17"/>',
+];
 for (const f of FARMS) {
   const b = document.createElement("button");
   b.className = "faction-marker";
   b.style.setProperty("--faction", "#" + f.color.toString(16));
   b.setAttribute("aria-label", f.name + " · " + f.animal);
-  b.textContent = f.id + 1 + " " + animalIcons[f.id];
+  b.innerHTML = `<span>${f.id + 1}</span><svg viewBox="0 0 24 24" aria-hidden="true">${animalIcons[f.id]}</svg>`;
   b.onclick = () => {
     selectedFarm = f.id;
     $("atlas-selection").textContent = f.name + " · " + f.animal;
