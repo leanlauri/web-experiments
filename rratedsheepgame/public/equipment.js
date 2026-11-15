@@ -25,7 +25,9 @@ export function equipmentIcon(id) {
           : `<path d="M23 29l-5 22h12l5-20" fill="#f0b969"/><rect x="12" y="17" width="${id === 4 ? 44 : 38}" height="17" rx="5" fill="${id === 4 ? "#b8a3d7" : "#82c5d6"}"/><rect x="45" y="20" width="8" height="11" rx="2" fill="#f2ae6a"/>`;
   return `<svg viewBox="0 0 64 64" aria-hidden="true">${content}</svg>`;
 }
-export function createEquipment(player, scene) {
+export function createEquipment(player, scene, onlyWeapon = null) {
+  let aimingNow = false;
+  const supportArm = player.userData.leftArm;
   const arm = player.userData.rightArm,
     joint = new T.Group();
   joint.position.set(0.43, 1.3, 0);
@@ -39,9 +41,10 @@ export function createEquipment(player, scene) {
   player.userData.equipmentGrip = grip;
   const models = [];
   for (let id = 0; id < 6; id++) {
+    if (onlyWeapon !== null && id !== onlyWeapon) continue;
     const g = new T.Group();
     grip.add(g);
-    models.push(g);
+    models[id] = g;
     if (id < 2) {
       part(g, 0x9a7950, 0, 0.3, 0, 0.1, 0.7, 0.1, rod);
       part(
@@ -57,6 +60,7 @@ export function createEquipment(player, scene) {
       );
       part(g, 0xffedb7, 0, 1.3, 0, 0.22, 0.12, 0.23);
     } else if (id === 2) {
+      g.rotation.x = Math.PI / 2;
       part(g, 0xa48ac3, 0, 0.4, 0, 0.1, 0.9, 0.1, rod);
       const ring = new T.Mesh(
         new T.TorusGeometry(0.27, 0.07, 8, 16),
@@ -86,6 +90,10 @@ export function createEquipment(player, scene) {
   part(snacks, 0xfff0cf, 0, 0.1, 0.26, 0.12, 0.38, 0.04);
   part(snacks, 0xfff0cf, 0, 0.1, 0.27, 0.36, 0.12, 0.04);
   const flash = part(grip, 0xffe293, 0, 0.25, 0.99, 0.55, 0.55, 0.55, ball);
+  flash.material = new T.MeshBasicMaterial({
+    color: 0xfff0a1,
+    depthWrite: false,
+  });
   flash.visible = false;
   const slash = new T.Mesh(
     new T.RingGeometry(1.5, 1.7, 32, 1, 0, Math.PI * 0.8),
@@ -106,12 +114,21 @@ export function createEquipment(player, scene) {
       models.forEach((g, i) => (g.visible = selected === i));
       snacks.visible = selected === "revive";
       const usable =
-        game.vehicle === null && !game.player.ragdoll && !game.jail;
+        game.vehicle === null &&
+        !game.player.ragdoll &&
+        !(game.player.down > 0) &&
+        !game.player.exitRoll &&
+        !game.jail;
       grip.visible = usable;
       const attack = game.player.attack,
         age = attack ? game.time - attack.started : 10,
         active = !!attack && age >= 0 && age < attack.duration && usable;
       const progress = active ? age / attack.duration : 0;
+      const aiming = !!game.player.aim;
+      aimingNow = aiming;
+      if (supportArm)
+        supportArm.rotation.x =
+          aiming || (active && attack.kind === "shoot") ? -1.1 : 0;
       joint.rotation.set(0, 0, 0);
       grip.rotation.set(0, 0, 0);
       grip.position.z = 0.1;
@@ -119,32 +136,47 @@ export function createEquipment(player, scene) {
         if (selected === "revive") {
           joint.rotation.x = -0.6;
           grip.rotation.x = 0.6;
-        } else if (selected < 2 || selected === 2) {
+        } else if (selected < 2) {
           joint.rotation.z = -0.2;
           if (active) {
             joint.rotation.z = -0.2 - Math.sin(progress * Math.PI) * 1.5;
             joint.rotation.x = -0.8 + Math.sin(progress * Math.PI) * 1.4;
           }
         } else {
-          joint.rotation.x =
-            -0.35 - (active ? Math.sin(progress * Math.PI) * 0.95 : 0);
+          const raised = aiming || (active && attack.kind === "shoot");
+          joint.rotation.x = raised
+            ? -1.35 +
+              (active && attack.kind === "shoot"
+                ? Math.sin(progress * Math.PI) * 0.22
+                : 0)
+            : -0.5;
           grip.rotation.x = -joint.rotation.x;
           grip.position.z =
-            0.1 - (active ? Math.sin(progress * Math.PI) * 0.16 : 0);
+            0.1 -
+            (active && attack.kind === "shoot"
+              ? Math.sin(progress * Math.PI) * 0.24
+              : 0);
         }
       }
-      flash.visible = active && attack.kind === "shoot" && age < 0.095;
+      flash.visible = active && attack.kind === "shoot" && age < 0.13;
       flash.position.z = selected === 5 ? 0.8 : 1.05;
       slash.visible =
         active && attack.kind === "melee" && progress > 0.1 && progress < 0.9;
       slash.position.set(game.player.x, 1.15, game.player.z);
       slash.rotation.z = -game.player.heading + progress * 2;
     },
+    dispose() {
+      scene.remove(slash);
+      slash.geometry.dispose();
+      slash.material.dispose();
+    },
     stats() {
       return {
         visible: grip.visible,
-        weapon: snacks.visible ? "revive" : models.findIndex((g) => g.visible),
+        weapon: snacks.visible ? "revive" : models.findIndex((g) => g?.visible),
         muzzle: flash.visible,
+        aiming: aimingNow,
+        armAngle: joint.rotation.x,
         swing: slash.visible,
       };
     },

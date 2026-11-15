@@ -68,7 +68,7 @@ const assert = require("node:assert/strict");
     await page.screenshot({ path: "/tmp/rratedsheepgame-house-workshop.png" });
     s = await page.evaluate(() => fixture.roll());
     assert(s.roll);
-    assert.equal(s.hp, 3);
+    assert.equal(s.hp, 5);
     assert.equal(s.stars, 0);
     assert.equal(s.stats.playerStars, false);
     await page.screenshot({ path: "/tmp/rratedsheepgame-exit-roll.png" });

@@ -1,11 +1,11 @@
-import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
+import { vehicleProfile } from "./vehicles.js?v=city-action-2";
 import {
   blocked,
   OBSTACLES,
   SIZE,
   SCENERY,
   buildingBlocks,
-} from "./region.js?v=scenery-colliders-1";
+} from "./region.js?v=city-action-2";
 export const vehicleSize = (v) => {
   if (v.halfLength !== undefined && v.halfWidth !== undefined)
     return { halfLength: v.halfLength, halfWidth: v.halfWidth, mass: Infinity };

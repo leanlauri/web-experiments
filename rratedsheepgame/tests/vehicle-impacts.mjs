@@ -178,7 +178,7 @@ for (const kind of ["player", "animal", "guard"]) {
   const { g, body } = trafficScenario(kind);
   g.update(0.05);
   assert(body.ragdoll, `${kind} is launched by traffic`);
-  if (kind === "player") assert.equal(body.hp, 2, "one heart per impact");
+  if (kind === "player") assert.equal(body.hp, 4, "one heart per impact");
   const wasFollowing = body.following;
   let sawAir = false;
   for (let i = 0; i < 420 && body.ragdoll; i++) {

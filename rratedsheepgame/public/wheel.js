@@ -1,5 +1,5 @@
-import { WEAPONS } from "./region.js?v=scenery-colliders-1";
-import { equipmentIcon } from "./equipment.js?v=scenery-colliders-1";
+import { WEAPONS } from "./region.js?v=city-action-2";
+import { equipmentIcon } from "./equipment.js?v=city-action-2";
 export function createWheel(
   game,
   root,

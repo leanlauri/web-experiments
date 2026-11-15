@@ -69,7 +69,12 @@ export function createMenus({ ids, clearInput, onClose = () => {} }) {
     show();
   }
   function move(direction) {
-    if (active() === "help" && (direction === "up" || direction === "down")) {
+    const panel = document.querySelector("#" + active() + " .panel");
+    if (
+      active() === "help" &&
+      panel?.scrollHeight > panel?.clientHeight + 2 &&
+      (direction === "up" || direction === "down")
+    ) {
       scroll(direction === "up" ? -100 : 100);
       return;
     }

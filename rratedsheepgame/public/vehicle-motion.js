@@ -1,7 +1,7 @@
 import {
   vehicleBlocked,
   vehicleSize,
-} from "./vehicle-collisions.js?v=scenery-colliders-1";
+} from "./vehicle-collisions.js?v=city-action-2";
 export function moveVehicle(
   v,
   dt,

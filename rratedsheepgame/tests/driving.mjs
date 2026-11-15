@@ -29,7 +29,7 @@ const difference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   drive(v, 1 / 60, ahead);
   assert(v.driveSpeed > 0 && v.driveSpeed < 1);
   step(v, 2, ahead);
-  assert(v.driveSpeed > 10 && v.driveSpeed <= 32);
+  assert(v.driveSpeed > 10 && v.driveSpeed <= 38);
   const speed = v.driveSpeed,
     position = { ...v };
   step(v, 0.5);
@@ -45,7 +45,7 @@ const difference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   const grass = car();
   Object.assign(grass, { x: 180, z: 0, heading: 0 });
   step(grass, 4, { x: 1 });
-  assert(grass.driveSpeed <= 32 * 0.55 + 0.01);
+  assert(grass.driveSpeed <= 38 * 0.55 + 0.01);
 }
 {
   const v = car();

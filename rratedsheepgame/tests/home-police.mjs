@@ -87,13 +87,13 @@ const isolated = () => {
   g.vehicle = 0;
   g.interact();
   assert(g.player.exitRoll);
-  assert.equal(g.player.hp, 3);
+  assert.equal(g.player.hp, 5);
   assert.equal(g.player.starsUntil, 0);
   assert(g.vehicles[0].vx > 0, "car keeps coasting");
   const old = { ...g.player };
   tick(g, 1);
   assert(!g.player.exitRoll);
-  assert.equal(g.player.hp, 3);
+  assert.equal(g.player.hp, 5);
   assert(!g.player.ragdoll);
   assert.equal(g.player.starsUntil, 0);
   assert(dist(old, g.player) > 1, "roll moves with exit momentum");

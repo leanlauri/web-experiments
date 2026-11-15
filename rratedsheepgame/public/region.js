@@ -1,6 +1,6 @@
-import { createScenery } from "./scenery.js?v=scenery-colliders-1";
+import { createScenery } from "./scenery.js?v=city-action-2";
 export const SIZE = 460,
-  HOME = { x: 0, z: -190, r: 22 },
+  HOME = { x: 0, z: -190, r: 28 },
   START = { x: 0, z: -135 };
 export const HOUSE = {
   x: HOME.x + 13,
@@ -9,19 +9,27 @@ export const HOUSE = {
   hz: 5,
   doorHalf: 1.1,
 };
+export const BASE_HEARTS = 5;
+export const HOME_BARN = {
+  x: HOME.x,
+  z: HOME.z - 22,
+  hx: 7,
+  hz: 9,
+  doorHalf: 3.1,
+};
 export const SPACEPORT = { x: HOME.x - 11, z: HOME.z - 8 };
 export const inHouse = (p) =>
   Math.abs(p.x - HOUSE.x) < HOUSE.hx - 0.6 &&
   p.z < HOUSE.z + HOUSE.hz - 0.6 &&
   p.z > HOUSE.z - HOUSE.hz + 0.6;
-function houseBlocked(p, r) {
-  const dx = Math.abs(p.x - HOUSE.x),
-    dz = Math.abs(p.z - HOUSE.z);
-  if (dx >= HOUSE.hx + r || dz >= HOUSE.hz + r) return false;
+function houseBlocked(p, r, house = HOUSE) {
+  const dx = Math.abs(p.x - house.x),
+    dz = Math.abs(p.z - house.z);
+  if (dx >= house.hx + r || dz >= house.hz + r) return false;
   return (
-    dx > HOUSE.hx - 0.35 - r ||
-    p.z < HOUSE.z - HOUSE.hz + 0.35 + r ||
-    (p.z > HOUSE.z + HOUSE.hz - 0.35 - r && dx > HOUSE.doorHalf - r)
+    dx > house.hx - 0.35 - r ||
+    p.z < house.z - house.hz + 0.35 + r ||
+    (p.z > house.z + house.hz - 0.35 - r && dx > house.doorHalf - r)
   );
 }
 export const FARMS = [
@@ -83,14 +91,13 @@ export function segmentDistance(p, a, b) {
 export function road(p) {
   if (TOWN_STREETS.some((s) => segmentDistance(p, s.a, s.b) < s.width / 2))
     return true;
-  if (Math.abs(Math.hypot(p.x, p.z) - 100) < 6) return true;
   return [...FARMS, HOME].some(
     (f) => segmentDistance(p, { x: 0, z: 0 }, f) < 6,
   );
 }
 export function water(p) {
   const r = Math.hypot(p.x, p.z);
-  if (r < RIVER_START || Math.abs(r - 100) < 8) return false;
+  if (r < RIVER_START) return false;
   return FARMS.some((f) => {
     const a = f.angle + Math.PI / 6,
       along = p.x * Math.cos(a) + p.z * Math.sin(a),
@@ -165,6 +172,7 @@ OBSTACLES.push({
   type: "home",
   color: 0xe4c59a,
 });
+OBSTACLES.push({ ...HOME_BARN, h: 7, type: "home-barn", color: 0xc67c63 });
 export function fenceBlocks(p, level = 0) {
   return FARMS.some((f) => {
     const dx = p.x - f.x,
@@ -182,6 +190,7 @@ export const SCENERY = createScenery({
   START,
   HOUSE,
   SPACEPORT,
+  HOME_BARN,
   FARMS,
   OBSTACLES,
   road,
@@ -192,6 +201,7 @@ export const treesInChunk = SCENERY.treesInChunk,
   SOLID_PROPS = SCENERY.props;
 export function buildingBlocks(b, p, r = 0) {
   if (b.type === "home") return houseBlocked(p, r);
+  if (b.type === "home-barn") return houseBlocked(p, r, HOME_BARN);
   const z = b.z - (b.kind === "gas" ? 1.5 : 0),
     hz = b.kind === "gas" ? b.hz / 2 : b.hz;
   return Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - z) < hz + r;
@@ -288,7 +298,7 @@ function regionTarget(p, target) {
       if (dist(p, gate) > 4) return gate;
     }
   }
-  // Rivers divide sectors. Return through the bridged ring before crossing sectors.
+  // Return to the town street grid before crossing river-divided counties.
   const sector = (q) =>
     Math.floor(
       (Math.atan2(q.z, q.x) - Math.PI / 4 + Math.PI * 4) / (Math.PI / 3),

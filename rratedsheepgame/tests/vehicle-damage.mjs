@@ -125,7 +125,7 @@ const tick = (g, seconds) => {
   ];
   for (let i = 0; i < 10; i++) g.updateShots(1 / 60);
   assert(v.health < v.maxHealth);
-  assert.equal(g.player.hp, 3);
+  assert.equal(g.player.hp, 5);
   assert(!g.animals[0].down);
   assert.equal(g.animals[0].hp, 3, "vehicle protects passengers from bullets");
 }
@@ -164,12 +164,12 @@ const tick = (g, seconds) => {
   assert(!v.destroyed);
   tick(g, 4.9);
   assert(!v.destroyed, "zero-health car still burns for the full countdown");
-  assert.equal(g.player.hp, 3, "fire does not directly shoot the player");
+  assert.equal(g.player.hp, 5, "fire does not directly shoot the player");
   tick(g, 0.12);
   assert(v.destroyed);
   assert.equal(g.explosions.length, 1);
   assert.equal(g.vehicle, null);
-  assert.equal(g.player.hp, 1);
+  assert.equal(g.player.hp, 3);
   assert(g.player.ragdoll);
   assert.equal(sheep.boarded, null);
   assert(sheep.ragdoll && sheep.hp < 3);

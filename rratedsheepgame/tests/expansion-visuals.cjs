@@ -21,7 +21,7 @@ const assert = require("node:assert/strict");
         body: `<!doctype html><style>body{margin:0}canvas{width:100vw;height:100vh}</style><canvas></canvas><script type="module">
  import {Game} from '/web-experiments/rratedsheepgame/simulation.js';import {createWorld} from '/web-experiments/rratedsheepgame/world.js';import {VEHICLES} from '/web-experiments/rratedsheepgame/vehicles.js';
  const g=new Game(),w=createWorld(document.querySelector('canvas'));g.phase='heist';g.animals=[];g.guards=[];g.police=[];g.vehicles=[];g.player.x=46;g.player.z=-40;g.owned=[0,1,2,3,4,5];g.money=60;
- window.fixture={pose(id){g.weapon=id;g.item='weapon';g.cooldown=0;g.attack();g.time+=.08;w.zoom(-.3);w.render(g);return w.stats();},town(){g.player.x=40;g.player.z=0;w.zoom(.9);w.render(g);return w.stats();},cars(){g.player.x=0;g.player.z=0;g.player.attack=null;g.vehicles=Object.entries(VEHICLES).map(([kind,p],i)=>({id:i,x:-36+i*10,z:-15,heading:0,kind}));w.render(g);return w.stats();}};w.render(g);
+ window.fixture={pose(id){g.weapon=id;g.item='weapon';g.cooldown=0;g.player.aim=null;g.attack();if(id>=2){for(let i=0;i<18;i++)g.update(1/60);}else g.time+=.08;w.zoom(-.3);w.render(g);return w.stats();},town(){g.player.x=40;g.player.z=0;w.zoom(.9);w.render(g);return w.stats();},cars(){g.player.x=0;g.player.z=0;g.player.attack=null;g.vehicles=Object.entries(VEHICLES).map(([kind,p],i)=>({id:i,x:-36+i*10,z:-15,heading:0,kind}));w.render(g);return w.stats();}};w.render(g);
  </script>`,
       }),
     );
@@ -35,13 +35,13 @@ const assert = require("node:assert/strict");
     assert(state.equipment.swing);
     await page.screenshot({ path: "/tmp/rratedsheepgame-club-swing.png" });
     state = await page.evaluate(() => fixture.town());
-    assert.equal(state.townBuildings, 47);
+    assert.equal(state.townBuildings, 65);
     await page.screenshot({ path: "/tmp/rratedsheepgame-town-expanded.png" });
     await page.evaluate(() => fixture.cars());
     await page.screenshot({ path: "/tmp/rratedsheepgame-vehicle-types.png" });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: actual weapon/muzzle/swing meshes, expanded town, all eight vehicle models, no WebGL errors.",
+      "PASS: actual weapon/muzzle/swing meshes, expanded town, all nine vehicle models, no WebGL errors.",
     );
   } finally {
     await browser.close();

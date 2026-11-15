@@ -42,7 +42,7 @@ const assert = require("node:assert/strict");
     assert(state.player && state.animal && state.guard);
     assert(state.height > 0.5);
     assert(Math.abs(state.spin) > 0.5);
-    assert.equal(state.hp, 2);
+    assert.equal(state.hp, 4);
     assert.equal(state.stats.recoveringActors, 3);
     await page.screenshot({ path: "/tmp/rratedsheepgame-vehicle-tumbles.png" });
     state = await page.evaluate(() => fixture.step(210));

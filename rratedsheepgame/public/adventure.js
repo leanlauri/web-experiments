@@ -1,9 +1,9 @@
-import { createMenus } from "./menus.js?v=scenery-colliders-1";
-import { createController } from "./controller.js?v=scenery-colliders-1";
-import { createWheel } from "./wheel.js?v=scenery-colliders-1";
-import { createAudio } from "./audio.js?v=scenery-colliders-1";
-import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
-import { Game } from "./simulation.js?v=scenery-colliders-1";
+import { createMenus } from "./menus.js?v=city-action-2";
+import { createController } from "./controller.js?v=city-action-2";
+import { createWheel } from "./wheel.js?v=city-action-2";
+import { createAudio } from "./audio.js?v=city-action-2";
+import { vehicleProfile } from "./vehicles.js?v=city-action-2";
+import { Game } from "./simulation.js?v=city-action-2";
 import {
   HOME,
   FARMS,
@@ -15,8 +15,8 @@ import {
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=scenery-colliders-1";
-import { createWorld } from "./world.js?v=scenery-colliders-1";
+} from "./region.js?v=city-action-2";
+import { createWorld } from "./world.js?v=city-action-2";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -28,7 +28,8 @@ const audio = createAudio();
 const wheel = createWheel(game, $("wheel"), () => {
   if (menus.active() === "wheel") menus.back();
 });
-let atlasTown = false;
+let atlasTown = false,
+  selectedFarm = null;
 let world;
 try {
   world = createWorld($("world"));
@@ -267,10 +268,69 @@ $("launch").onclick = () => {
   game.launch();
   menus.closeAll();
 };
-$("factions").innerHTML = FARMS.map(
-  (f) =>
-    `<div class="faction" style="--faction:#${f.color.toString(16)}"><b>${f.name}</b><small>${f.animal} · ${f.weapon}<br>${f.aggression > 1.2 ? "Feisty" : f.aggression < 1 ? "Laid-back" : "Watchful"} guards</small></div>`,
-).join("");
+const animalIcons = ["🐑", "🐖", "🐄", "🐇", "🐐", "🦙"];
+for (const f of FARMS) {
+  const b = document.createElement("button");
+  b.className = "faction-marker";
+  b.style.setProperty("--faction", "#" + f.color.toString(16));
+  b.setAttribute("aria-label", f.name + " · " + f.animal);
+  b.textContent = f.id + 1 + " " + animalIcons[f.id];
+  b.onclick = () => {
+    selectedFarm = f.id;
+    $("atlas-selection").textContent = f.name + " · " + f.animal;
+    document
+      .querySelectorAll(".faction-marker")
+      .forEach((n, i) => n.setAttribute("aria-pressed", String(i === f.id)));
+  };
+  $("factions").append(b);
+}
+function guide(page) {
+  document
+    .querySelectorAll(".guide-tabs button")
+    .forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.id === "help-" + page)),
+    );
+  const rows =
+    page === "controls"
+      ? [
+          ["LS / WASD", "Move"],
+          ["A / Space", "Jump"],
+          ["B / E", "Ride / exit"],
+          ["X / F", "Use item"],
+          ["Y / R", "Revive"],
+          ["LB / Q", "Equipment"],
+          ["LT / Space", "Brake"],
+          ["Start / Esc", "Pause"],
+        ]
+      : page === "heists"
+        ? [
+            ["01", "Gather a herd"],
+            ["02", "Bring them home"],
+            ["03", "Build your rocket"],
+            ["04", "Fly to the Moon"],
+          ]
+        : [
+            ["★", "Walk patrols"],
+            ["★★", "Armed patrols"],
+            ["★★★", "Car pursuit"],
+            ["★★★★", "Roadblocks"],
+            ["★★★★★", "Full response"],
+            ["◆ Home", "Clear wanted"],
+          ];
+  $("guide-content").innerHTML = rows
+    .map(
+      ([key, text]) =>
+        '<div class="guide-card"><kbd>' +
+        key +
+        "</kbd><b>" +
+        text +
+        "</b></div>",
+    )
+    .join("");
+}
+for (const page of ["controls", "heists", "wanted"])
+  $("help-" + page).onclick = () => guide(page);
+guide("controls");
 function shop() {
   const signature = JSON.stringify([
     game.money,
@@ -283,14 +343,14 @@ function shop() {
   if (signature === shopSignature) return;
   shopSignature = signature;
   $("shop-summary").textContent =
-    `$${game.money} in your pocket · ${game.delivered} animal credit · ${game.heists} successful trips`;
+    `$${game.money} · ${game.delivered} credit · Rocket ${game.parts}/5`;
   const items = [];
   const part = PARTS[game.parts];
   if (part)
     items.push({
       key: "part",
       name: part.name,
-      detail: `Part ${game.parts + 1}/5 · cumulative animal credit, never spent`,
+      detail: `Rocket ${game.parts + 1}/5`,
       costLabel: `${part.animals} animal credit`,
       price:
         game.delivered >= part.animals
@@ -300,8 +360,8 @@ function shop() {
     });
   items.push({
     key: "revive",
-    name: "Wake-up snack pack",
-    detail: "Revives 3 sleepy animals · use R nearby",
+    name: "Wake-up snacks",
+    detail: "Pack of 3",
     costLabel: "$15",
     price: "$15",
     disabled: game.money < 15,
@@ -310,10 +370,10 @@ function shop() {
     items.push({
       key: "heart",
       name: "One extra heart",
-      detail: `Permanent upgrade · ${game.player.maxHp}/6 hearts now`,
-      costLabel: `$${(game.player.maxHp - 2) * 60}`,
-      price: `$${(game.player.maxHp - 2) * 60}`,
-      disabled: game.money < (game.player.maxHp - 2) * 60,
+      detail: `${game.player.maxHp}/6 hearts`,
+      costLabel: `$${(game.player.maxHp - 4) * 60}`,
+      price: `$${(game.player.maxHp - 4) * 60}`,
+      disabled: game.money < (game.player.maxHp - 4) * 60,
     });
   WEAPONS.map((w, i) => ({ w, i }))
     .sort((a, b) => a.w.cost - b.w.cost)
@@ -321,7 +381,7 @@ function shop() {
       items.push({
         key: i,
         name: w.name,
-        detail: `${w.range < 6 ? "Melee" : "Projectile"} · ${w.range} m range · cartoon knockout`,
+        detail: `${w.range < 6 ? "Melee" : "Foam"} · ${w.range} m`,
         costLabel: w.cost ? `$${w.cost}` : "Free",
         price: game.owned.includes(i) ? "Owned" : `$${w.cost}`,
         disabled: game.owned.includes(i) || game.money < w.cost,
@@ -356,24 +416,16 @@ function shop() {
   $("launch").hidden = game.parts < 5;
   if (menus.active() === "shop") menus.refresh();
 }
-$("atlas-town").onclick = () => {
-  atlasTown = true;
-  $("factions").hidden = true;
-  $("atlas-title").textContent = "River Crossing town.";
-  $("map-legend").textContent =
-    "Beige: homes · Rose: shops · Gold: fuel stations · Blue: warehouses. Streets connect to the six farm avenues.";
-  $("atlas-town").setAttribute("aria-pressed", "true");
-  $("atlas-region").setAttribute("aria-pressed", "false");
-};
-$("atlas-region").onclick = () => {
-  atlasTown = false;
-  $("factions").hidden = false;
-  $("atlas-title").textContent = "A whole lot of pasture.";
-  $("map-legend").textContent =
-    "White: you · Gold: home · Red: police · Dark lines: roads · Blue: rivers. All farms connect through town.";
-  $("atlas-town").setAttribute("aria-pressed", "false");
-  $("atlas-region").setAttribute("aria-pressed", "true");
-};
+function atlasView(town) {
+  atlasTown = town;
+  $("factions").hidden = town;
+  $("atlas-selection").hidden = town;
+  $("atlas-title").textContent = town ? "Town." : "Map.";
+  $("atlas-town").setAttribute("aria-pressed", String(town));
+  $("atlas-region").setAttribute("aria-pressed", String(!town));
+}
+$("atlas-town").onclick = () => atlasView(true);
+$("atlas-region").onclick = () => atlasView(false);
 function map(canvas, large = false) {
   const c = canvas.getContext("2d"),
     w = canvas.width,
@@ -412,22 +464,22 @@ function map(canvas, large = false) {
     );
     line({ x: 0, z: 0 }, f, "#5e7163", large ? 5 : 2);
     dot(f, `#${f.color.toString(16)}`, large ? 14 : 6);
-    if (large) {
+    if (large && !atlasTown) {
       const [x, y] = point(f);
-      c.fillStyle = "#253d31";
-      c.font = "bold 11px system-ui";
+      c.fillStyle = "#fff8df";
+      c.font = "bold 14px system-ui";
       c.textAlign = "center";
-      c.fillText(f.name, x, y + 28);
-      c.font = "10px system-ui";
-      c.fillText(f.animal, x, y + 41);
+      c.fillText(String(f.id + 1), x, y + 5);
+      if (selectedFarm === f.id) {
+        c.strokeStyle = "#fff8df";
+        c.lineWidth = 3;
+        c.beginPath();
+        c.arc(x, y, 19, 0, Math.PI * 2);
+        c.stroke();
+      }
     }
   }
   line({ x: 0, z: 0 }, HOME, "#5e7163", large ? 4 : 2);
-  c.strokeStyle = "#637667";
-  c.lineWidth = large ? 6 : 2;
-  c.beginPath();
-  c.arc(...point({ x: 0, z: 0 }), 100 * scale, 0, Math.PI * 2);
-  c.stroke();
   for (const street of TOWN_STREETS)
     line(street.a, street.b, "#68796a", Math.max(1, street.width * scale));
   for (const b of OBSTACLES.filter((b) => b.type === "town")) {
@@ -460,17 +512,6 @@ function map(canvas, large = false) {
       Math.PI * 2,
     );
     c.fill();
-  }
-  if (large) {
-    c.fillStyle = "#354b38";
-    c.textAlign = "center";
-    c.fillText(
-      atlasTown ? "RIVER CROSSING · STREETS & SERVICES" : "TOWN",
-      w / 2,
-      h / 2 + (atlasTown ? 0 : 26),
-    );
-    const [x, y] = point(HOME);
-    c.fillText("YOUR FARM", x, y - 15);
   }
   for (const a of game.herd)
     dot(a, a.down ? "#9c4f66" : "#f5e8bf", large ? 3 : 1.5);
@@ -570,13 +611,18 @@ function hud() {
   ).textContent = game.vehicle === null ? "Ride" : "Exit";
   $("status").dataset.wanted = stars > 0 ? "active" : "clear";
   $("mobile-summary").textContent =
-    `${intro ? `${herd.length}/${12 - game.introDelivered} sheep` : `${awake.length} ${herd[0]?.type || "animals"}`}${herd.some((a) => a.down) ? " · needs revival" : ""} · ${game.atHome ? (!game.homeInside && !intro ? `Home · settling ${Math.max(0, Math.ceil(4 - game.homeTimer))}s` : "At home") : `Home ${Math.round(dist(game.player, HOME))}m`}`;
-  $("menu-objective").textContent = $("objective").textContent;
-  $("menu-description").textContent = $("description").textContent;
+    `${intro ? `${herd.length}/${12 - game.introDelivered} sheep` : `${awake.length} ${herd[0]?.type || "animals"}`}${herd.some((a) => a.down) ? " · needs revival" : ""} · ${game.atHome ? (!game.homeInside && !intro ? (game.delivery ? "Unloading → Barn" : "At home") : "At home") : `Home ${Math.round(dist(game.player, HOME))}m`}`;
+  $("menu-objective").textContent = intro
+    ? "Bring sheep home"
+    : game.parts === 5
+      ? "Launch your rocket"
+      : "Bring animals home";
+  $("menu-description").textContent = intro
+    ? `${game.introDelivered}/12 sheep safe`
+    : `Next: ${PARTS[game.parts]?.name || "the Moon"}`;
   $("menu-progress").textContent =
-    `${$("count").textContent} ${$("cargo").textContent}${intro ? "" : ` · ${$("rocket-count").textContent}`}`;
-  $("menu-loadout").textContent =
-    `${$("weapon").textContent} · ${$("snacks").textContent}${$("vehicle").textContent ? ` · ${$("vehicle").textContent}` : ""}`;
+    `${awake.length} following · Rocket ${game.parts}/5`;
+  $("menu-loadout").textContent = $("weapon").textContent;
   $("menu-button").setAttribute("aria-expanded", String(!$("menu").hidden));
   $("pause-button").setAttribute("aria-expanded", String(!!menus.active()));
   if (game.vehicle !== null) {
@@ -597,12 +643,10 @@ function hud() {
     if (!menus.contains("shop")) menus.open("shop");
   }
   $("menu-shop").disabled = !game.atHome || game.phase !== "heist";
-  $("menu-shop").querySelector("span").textContent =
-    game.phase === "intro"
-      ? "Bring your twelve sheep home first"
-      : !game.atHome
-        ? "Return to your home farm"
-        : "Supplies & rocket parts";
+  $("menu-shop").setAttribute(
+    "aria-label",
+    game.atHome ? "Shop" : "Shop · At home",
+  );
   menus.refresh();
   document.body.dataset.phase = game.phase;
   $("jail").hidden = !game.jail;
@@ -730,6 +774,18 @@ requestAnimationFrame(frame);
 window.sheepGame = {
   getState: () => ({
     phase: game.phase,
+    aiming: !!game.player.aim,
+    civilians: game.civilians.length,
+    delivering: game.animals.filter((a) => a.delivering).length,
+    farmerCars: game.vehicles.filter((v) => v.farmerDriving).length,
+    civilianTumbles: game.civilians.filter((c) => c.ragdoll).length,
+    policeCars: {
+      pursuit: game.vehicles.filter(
+        (v) => v.policeDriving && v.policeMode === "pursuit",
+      ).length,
+      ramming: game.vehicles.filter((v) => v.policeDriving && v.ramming).length,
+      roadblocks: game.roadblocks,
+    },
     time: game.time,
     paused: !!menus.active(),
     menu: menus.active(),

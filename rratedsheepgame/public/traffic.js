@@ -1,20 +1,66 @@
-import { VEHICLES, vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
-import { FARMS, HOME } from "./region.js?v=scenery-colliders-1";
+import { VEHICLES, vehicleProfile } from "./vehicles.js?v=city-action-2";
+import { FARMS, HOME } from "./region.js?v=city-action-2";
 import {
   vehicleBlocked,
   vehicleOverlap,
   vehicleSize,
-} from "./vehicle-collisions.js?v=scenery-colliders-1";
+} from "./vehicle-collisions.js?v=city-action-2";
 export const TRAFFIC_COUNT = 48;
 const LANE = 3,
-  INNER = 38,
-  OUTER = 275,
-  CIRCLE = 22;
-const samples = [];
-const local = (farm, x, z) => ({
-  x: Math.cos(farm.angle) * x - Math.sin(farm.angle) * z,
-  z: Math.sin(farm.angle) * x + Math.cos(farm.angle) * z,
-});
+  samples = [];
+const grid = [
+  [-92, -80],
+  [-46, -80],
+  [-46, -40],
+  [46, -40],
+  [46, 0],
+  [-46, 0],
+  [-46, 40],
+  [46, 40],
+  [46, 80],
+  [92, 80],
+  [92, 40],
+  [92, 0],
+  [92, -40],
+  [92, -80],
+  [0, -80],
+  [0, -40],
+  [0, 0],
+  [0, 40],
+  [0, 80],
+  [-92, 80],
+  [-92, 40],
+  [-92, 0],
+  [-92, -40],
+];
+const attachments = [
+  { segment: 10, x: 92, z: 92 * Math.tan(FARMS[0].angle) },
+  { segment: 6, x: 40 / Math.tan(FARMS[1].angle), z: 40 },
+  { segment: 18, x: -80, z: 80 },
+  { segment: 21, x: -92, z: -92 * Math.tan(FARMS[3].angle) },
+  { segment: 2, x: -40 / Math.tan(FARMS[4].angle), z: -40 },
+  { segment: 4, x: 0, z: 0 },
+];
+const points = [];
+for (let i = 0; i < grid.length; i++) {
+  points.push({ x: grid[i][0], z: grid[i][1] });
+  attachments.forEach((a, farm) => {
+    if (a.segment === i) {
+      points.push(
+        { x: a.x, z: a.z },
+        {
+          x: Math.cos(FARMS[farm].angle) * 275,
+          z: Math.sin(FARMS[farm].angle) * 275,
+        },
+        { x: a.x, z: a.z },
+      );
+    }
+  });
+}
+const unit = (x, z) => {
+  const d = Math.hypot(x, z) || 1;
+  return { x: x / d, z: z / d };
+};
 function add(p, heading, limit) {
   const last = samples.at(-1);
   samples.push({
@@ -24,79 +70,84 @@ function add(p, heading, limit) {
     distance: last ? last.distance + Math.hypot(p.x - last.x, p.z - last.z) : 0,
   });
 }
-function line(f, x0, z0, x1, z1, limit = 14) {
-  const a = local(f, x0, z0),
-    b = local(f, x1, z1);
-  add(a, Math.atan2(b.z - a.z, b.x - a.x), limit);
-  add(b, Math.atan2(b.z - a.z, b.x - a.x), limit);
+// Collinear grid nodes do not need their own turns.
+for (let i = points.length - 1; i >= 0; i--) {
+  const a = points[(i + points.length - 1) % points.length],
+    p = points[i],
+    b = points[(i + 1) % points.length];
+  const f = unit(p.x - a.x, p.z - a.z),
+    g = unit(b.x - p.x, b.z - p.z);
+  if (f.x * g.x + f.z * g.z > 0.99999) points.splice(i, 1);
 }
-function bezier(f, points, limit = 7) {
-  for (let i = 0; i <= 40; i++) {
-    const t = i / 40,
-      u = 1 - t;
-    const p = {
-      x:
-        u * u * u * points[0][0] +
-        3 * u * u * t * points[1][0] +
-        3 * u * t * t * points[2][0] +
-        t * t * t * points[3][0],
-      z:
-        u * u * u * points[0][1] +
-        3 * u * u * t * points[1][1] +
-        3 * u * t * t * points[2][1] +
-        t * t * t * points[3][1],
+const geometry = points.map((p, i) => {
+  const a = points[(i + points.length - 1) % points.length],
+    b = points[(i + 1) % points.length],
+    f = unit(p.x - a.x, p.z - a.z),
+    g = unit(b.x - p.x, b.z - p.z),
+    dot = f.x * g.x + f.z * g.z;
+  if (dot < -0.99) {
+    const n = { x: -f.z, z: f.x };
+    return {
+      p,
+      f,
+      g,
+      dot,
+      start: { x: p.x + n.x * LANE, z: p.z + n.z * LANE },
+      end: { x: p.x - n.x * LANE, z: p.z - n.z * LANE },
     };
-    const dx =
-        3 * u * u * (points[1][0] - points[0][0]) +
-        6 * u * t * (points[2][0] - points[1][0]) +
-        3 * t * t * (points[3][0] - points[2][0]),
-      dz =
-        3 * u * u * (points[1][1] - points[0][1]) +
-        6 * u * t * (points[2][1] - points[1][1]) +
-        3 * t * t * (points[3][1] - points[2][1]);
-    add(local(f, p.x, p.z), f.angle + Math.atan2(dz, dx), limit);
   }
-}
-for (let i = 0; i < FARMS.length; i++) {
-  const f = FARMS[i],
-    next = FARMS[(i + 1) % FARMS.length];
-  line(f, INNER, LANE, OUTER - 12, LANE);
-  line(f, OUTER - 12, LANE, OUTER, LANE, 4);
-  for (let k = 0; k <= 64; k++) {
-    const a = Math.PI / 2 - (k / 64) * Math.PI;
-    add(
-      local(f, OUTER + Math.cos(a) * LANE, Math.sin(a) * LANE),
-      f.angle + a - Math.PI / 2,
-      3.8,
-    );
+  const scale = LANE / (1 + dot),
+    m = { x: p.x + (-f.z - g.z) * scale, z: p.z + (f.x + g.x) * scale };
+  return { p, f, g, dot, start: m, end: m };
+});
+const corners = geometry.map(({ p, f, g, dot, start, end }, i) => {
+  if (dot < -0.99) {
+    const n = { x: -f.z, z: f.x };
+    return Array.from({ length: 65 }, (_, j) => {
+      const t = (j / 64) * Math.PI;
+      return {
+        x: p.x + f.x * Math.sin(t) * LANE + n.x * Math.cos(t) * LANE,
+        z: p.z + f.z * Math.sin(t) * LANE + n.z * Math.cos(t) * LANE,
+        heading: Math.atan2(
+          f.z * Math.cos(t) - n.z * Math.sin(t),
+          f.x * Math.cos(t) - n.x * Math.sin(t),
+        ),
+        limit: 4.5,
+      };
+    });
   }
-  line(f, OUTER, -LANE, INNER + 12, -LANE);
-  line(f, INNER + 12, -LANE, INNER, -LANE, 7);
-  const delta = Math.PI / 10,
-    ex = CIRCLE * Math.cos(delta),
-    ez = CIRCLE * Math.sin(delta);
-  bezier(f, [
-    [INNER, -LANE],
-    [INNER - 10, -LANE],
-    [ex + Math.sin(delta) * 6, -ez + Math.cos(delta) * 6],
-    [ex, -ez],
-  ]);
-  const start = f.angle - delta,
-    arc = 2 * Math.PI - (Math.PI / 3 + 2 * delta);
-  for (let k = 0; k <= 128; k++) {
-    const a = start - (k / 128) * arc;
-    add(
-      { x: Math.cos(a) * CIRCLE, z: Math.sin(a) * CIRCLE },
-      a - Math.PI / 2,
-      8,
-    );
-  }
-  bezier(next, [
-    [ex, ez],
-    [ex + Math.sin(delta) * 6, ez - Math.cos(delta) * 6],
-    [INNER - 10, LANE],
-    [INNER, LANE],
-  ]);
+  const previous = geometry[(i + geometry.length - 1) % geometry.length].end,
+    next = geometry[(i + 1) % geometry.length].start;
+  const incoming = (start.x - previous.x) * f.x + (start.z - previous.z) * f.z,
+    outgoing = (next.x - start.x) * g.x + (next.z - start.z) * g.z;
+  const trim = Math.max(0.1, Math.min(10, incoming * 0.45, outgoing * 0.45)),
+    turn = Math.atan2(f.x * g.z - f.z * g.x, dot),
+    radius = trim / Math.abs(Math.tan(turn / 2)),
+    sign = Math.sign(turn);
+  const a = { x: start.x - f.x * trim, z: start.z - f.z * trim },
+    center = { x: a.x - f.z * sign * radius, z: a.z + f.x * sign * radius },
+    initial = Math.atan2(a.z - center.z, a.x - center.x);
+  return Array.from({ length: 49 }, (_, j) => {
+    const t = j / 48,
+      angle = initial + turn * t;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      z: center.z + Math.sin(angle) * radius,
+      heading: Math.atan2(f.z, f.x) + turn * t,
+      limit: Math.min(9, Math.max(3.5, radius * 1.4)),
+    };
+  });
+});
+for (let i = 0; i < corners.length; i++) {
+  for (const p of corners[i]) add(p, p.heading, p.limit);
+  const a = corners[i].at(-1),
+    b = corners[(i + 1) % corners.length][0];
+  // The last sample of each straight also starts the next smooth corner.
+  add(
+    b,
+    Math.atan2(b.z - a.z, b.x - a.x),
+    Math.hypot(b.x, b.z) > 125 ? 18 : 15,
+  );
 }
 export const TRAFFIC_LENGTH = samples.at(-1).distance;
 const wrap = (d) => ((d % TRAFFIC_LENGTH) + TRAFFIC_LENGTH) % TRAFFIC_LENGTH;
@@ -138,7 +189,7 @@ export function nearestTrafficDistance(v) {
     const score =
       (v.x - a.x - dx * t) ** 2 +
       (v.z - a.z - dz * t) ** 2 +
-      4 * angleDiff(v.heading, heading) ** 2;
+      4 * angleDiff(v.heading || 0, heading) ** 2;
     if (score < best) {
       best = score;
       result = a.distance + Math.sqrt(len) * t;
@@ -176,8 +227,8 @@ export function createTraffic() {
       id,
       ...pose,
       trafficDistance: distance,
-      trafficSpeed: Math.min(10 + (id % 3), pose.limit),
-      speed: 10 + (id % 3),
+      trafficSpeed: Math.min(13 + (id % 3), pose.limit),
+      speed: 13 + (id % 3),
       seats: vehicleProfile(kind).seats,
       kind,
       stolen: false,
@@ -232,41 +283,44 @@ export function stepTraffic(v, dt, vehicles, level = 0) {
     trafficPose(v.trafficDistance + 14).limit,
   );
   const speed = v.trafficSpeed ?? v.currentSpeed ?? v.speed;
-  const radius = Math.hypot(v.x, v.z),
-    inward =
-      pose.x * Math.cos(pose.heading) + pose.z * Math.sin(pose.heading) < -1;
-  if (radius < 23) v.enteringJunction = false;
-  if (!v.enteringJunction && inward && radius > 27 && radius < 60) {
-    const farm = FARMS.reduce(
-      (best, f) =>
-        Math.abs(angleDiff(Math.atan2(v.z, v.x), f.angle)) <
-        Math.abs(angleDiff(Math.atan2(v.z, v.x), best.angle))
-          ? f
-          : best,
-      FARMS[0],
-    );
-    const entry = farm.angle - Math.PI / 10;
-    const blockedMerge = vehicles.some((other) => {
-      if (other === v || Math.hypot(other.x, other.z) > 26) return false;
-      const upstream =
-        ((((Math.atan2(other.z, other.x) - entry) % (2 * Math.PI)) +
-          2 * Math.PI) %
-          (2 * Math.PI)) *
-        CIRCLE;
-      return (
-        upstream <
-          Math.max(
-            20,
-            (other.trafficSpeed || other.currentSpeed || 0) * 3.5 + 10,
-          ) || 2 * Math.PI * CIRCLE - upstream < 10
+  // Yield before perpendicular lane crossings. Arrival time breaks ties;
+  // a stable vehicle ID decides simultaneous arrivals without a central queue.
+  const forward = { x: Math.cos(pose.heading), z: Math.sin(pose.heading) };
+  for (const other of vehicles) {
+    if (
+      other === v ||
+      other.stolen ||
+      Math.hypot(other.x - v.x, other.z - v.z) > 30
+    )
+      continue;
+    const direction = {
+        x: Math.cos(other.heading),
+        z: Math.sin(other.heading),
+      },
+      cross = forward.x * direction.z - forward.z * direction.x;
+    if (Math.abs(cross) < 0.45) continue;
+    const dx = other.x - v.x,
+      dz = other.z - v.z,
+      a = (dx * direction.z - dz * direction.x) / cross,
+      b = (dx * forward.z - dz * forward.x) / cross;
+    if (a < 0 || b < 0 || a > 24 || b > 24) continue;
+    const eta = a / Math.max(2, speed),
+      theirEta = b / Math.max(2, other.trafficSpeed || 0);
+    if (
+      Math.abs(eta - theirEta) < 3 &&
+      (theirEta < eta - 0.6 ||
+        (Math.abs(eta - theirEta) <= 0.6 && other.id < v.id))
+    )
+      target = Math.min(
+        target,
+        Math.max(
+          0,
+          (a - vehicleSize(v).halfLength - vehicleSize(other).halfWidth - 2) /
+            1.2,
+        ),
       );
-    });
-    if (blockedMerge)
-      target = Math.min(target, Math.max(0, (radius - (INNER - 1)) / 1.2));
-    else if (radius < INNER + 4) v.enteringJunction = true;
   }
 
-  // Look ahead along the actual lane, including merges into the town circle.
   const look = Math.max(9, speed * 1.2 + vehicleSize(v).halfLength);
   const nearby = vehicles.filter(
     (other) =>
@@ -314,7 +368,7 @@ export function stepTraffic(v, dt, vehicles, level = 0) {
     v.mergeWait = (v.mergeWait || 0) + dt;
     // A long vehicle can block an imperfect merge with its rear corner. Back up
     // along the same lane, without a position or heading reset, to let it clear.
-    if (v.mergeWait > 1.5 && radius > 22.15 && radius < 32) {
+    if (v.mergeWait > 2.5 && v.id % 2 === 0) {
       v.mergeBackup = 6;
       v.mergeWait = 0;
     }

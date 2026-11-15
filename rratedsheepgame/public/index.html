@@ -8,7 +8,7 @@
     />
     <meta name="theme-color" content="#192c28" />
     <title>Little Pastures · The Great Moon Heist</title>
-    <link rel="stylesheet" href="style.css?v=scenery-colliders-1" />
+    <link rel="stylesheet" href="style.css?v=city-action-2" />
   </head>
   <body>
     <canvas
@@ -38,7 +38,8 @@
     <div id="mobile-summary" aria-label="Herd and home distance"></div>
     <section id="status" aria-label="Player status">
       <div>
-        <span id="hearts" aria-label="Hearts">♥ ♥ ♥</span><b id="cash">$0</b>
+        <span id="hearts" aria-label="Hearts">♥ ♥ ♥ ♥ ♥</span
+        ><b id="cash">$0</b>
       </div>
       <div id="wanted" aria-label="Wanted level">☆ ☆ ☆ ☆ ☆</div>
       <small id="escape">No trouble. Yet.</small>
@@ -107,35 +108,21 @@
         <h2 id="menu-title">Paused<span class="title-dot">.</span></h2>
         <div class="pause-layout">
           <div class="menu-actions" aria-label="Pause options">
-            <button id="menu-resume" data-menu-default>
-              Resume adventure <span>Continue your journey</span>
-            </button>
-            <button id="menu-map">
-              County atlas <span>Region &amp; town streets</span>
-            </button>
-            <button data-action="cycle" id="menu-items">
-              Equipment <span>Weapons &amp; wake-up snacks</span>
-            </button>
-            <button data-action="shop" id="menu-shop">
-              Home workshop <span>Supplies &amp; rocket parts</span>
-            </button>
-            <button data-action="revive" id="menu-revive">
-              Revive animal <span>Use a wake-up snack nearby</span>
-            </button>
+            <button id="menu-resume" data-menu-default>Resume</button>
+            <button id="menu-map">Map</button>
+            <button data-action="cycle" id="menu-items">Equipment</button>
+            <button data-action="shop" id="menu-shop">Shop</button>
+            <button data-action="revive" id="menu-revive">Revive</button>
             <button id="sound-button">Sound: on</button>
-            <button id="menu-help">
-              Field guide <span>Controls &amp; how to play</span>
-            </button>
-            <button id="menu-reset">
-              New adventure <span>Start again from Clover Meadow</span>
-            </button>
+            <button id="menu-help">Help</button>
+            <button id="menu-reset">New game</button>
           </div>
           <aside class="pause-briefing">
-            <div class="eyebrow">YOUR NEXT MOVE</div>
+            <div class="eyebrow">MISSION</div>
             <h3 id="menu-objective"></h3>
             <p id="menu-description"></p>
             <p id="menu-progress"></p>
-            <div class="eyebrow">CURRENT LOADOUT</div>
+
             <p id="menu-loadout"></p>
             <div class="briefing-orbit" aria-hidden="true">
               ☾ <span>MOON MISSION</span>
@@ -168,10 +155,7 @@
             <p class="wheel-detail"></p>
           </div>
         </div>
-        <p class="wheel-hint">
-          Hold Q / LB, choose a direction, then release. Or use the D-pad /
-          arrows and A / Enter. Tap an item on touch.
-        </p>
+        <p class="wheel-hint">Hold Q / LB · Choose · Release</p>
       </div>
       <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
@@ -184,17 +168,13 @@
       >
         <button class="close" id="shop-close" aria-label="Close shop">×</button>
         <div class="eyebrow">HOME SWEET SPACEPORT</div>
-        <h2 id="shop-title">The workshop.</h2>
+        <h2 id="shop-title">Workshop.</h2>
         <p id="shop-summary"></p>
         <div id="shop-items"></div>
         <button id="launch" class="primary" hidden>
           Launch to the Moon ↗
         </button>
-        <p class="fine">
-          Every animal delivered earns $8 and permanent rocket credit. No
-          animals are used as rocket fuel. All weapons cause temporary cartoon
-          sleep.
-        </p>
+        <p class="fine">Animal credit unlocks rocket parts.</p>
       </section>
       <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
@@ -205,76 +185,16 @@
         aria-modal="true"
         aria-labelledby="help-title"
       >
-        <button
-          class="close"
-          id="help-close"
-          data-menu-default
-          aria-label="Close help"
-        >
-          ×
-        </button>
-        <div class="eyebrow">A LITTLE MISCHIEF. A VERY BIG DREAM.</div>
-        <h2 id="help-title">Field guide.</h2>
-        <p class="controller-guide">
-          <b>Controller</b> · Left stick move · A jump · B ride / exit · X / RT
-          use item · Y revive · LB hold equipment wheel · RB run · LT brake ·
-          View map · Start pause. In menus: D-pad / left stick navigate, A
-          select, B back, right stick scroll. Keyboard: arrows / Enter / Escape;
-          Page Up / Down scrolls.
-        </p>
-        <p>
-          Walk near animals to invite them along. First bring all twelve of your
-          sheep home. Then recruit animals from the six colorful farms. You can
-          lead only one species per trip.
-        </p>
-        <p>
-          <b>WASD / arrows</b> move relative to the camera; <b>Shift</b> runs;
-          <b>Space</b> jumps. <b>E</b> boards a nearby vehicle or gets out. The
-          driver takes one seat; each animal takes another. Get close to your
-          herd before boarding. Extra animals follow on foot.
-        </p>
-        <p>
-          Vehicles use the same camera-relative directional controls as walking:
-          point the joystick or press WASD / arrows toward your destination. The
-          car turns toward that direction, while momentum carries it through the
-          turn. Release to coast. Hold Space / Brake for a quick stop. Sharp
-          turns and hard braking can break traction, leaving tire marks that
-          fade away.
-        </p>
-        <p>
-          Vehicles collide with other vehicles. Fast impacts send people and
-          animals tumbling, with stars circling their heads as they recover.
-          Bullets hit your vehicle hull instead of its occupants. Below 20% hull
-          health, a vehicle burns for five seconds, then explodes. Exit quickly:
-          blasts damage and launch nearby cars and characters. Traffic victims
-          wake automatically; a wake-up snack can revive an animal sooner.
-        </p>
-        <p>
-          <b>F</b> uses your weapon, aiming at the nearest opponent in range;
-          <b>Q</b> opens the equipment wheel: hold, point and release to choose.
-          On touch, tap Items then an item. Watch for friendly fire!
-          <b>R</b> gives a nearby unconscious animal a wake-up snack.
-          <b>B</b> opens your home shop. <b>M</b> opens the map. Scroll to zoom.
-        </p>
-        <p>
-          Rivers divide the outer farms. Use the town streets to travel between
-          counties. Farm gates face town. Borrowing animals or vehicles alerts
-          police. Stay more than 33 m from all awake police for 12 seconds to
-          lose one wanted star. Repeat until clear. Home prevents attacks, but
-          you must still escape the police search.
-        </p>
-        <p>
-          Pause at home for four seconds to settle a trip. Animals inside the
-          home circle or awake in your vehicle count. All other animals return
-          to their original farm. Every successful trip makes guards stronger
-          and more numerous, and later narrows farm gates.
-        </p>
-        <p>
-          Start with three hearts. A knockout costs one; losing all means five
-          seconds in jail, then a ride home without your herd. Home refills
-          hearts. Buy five rocket parts with cumulative animal credit, then
-          launch! Progress saves locally at home.
-        </p>
+        <button class="close" id="help-close" aria-label="Close help">×</button>
+        <div class="eyebrow">FIELD GUIDE</div>
+        <h2 id="help-title">How to play.</h2>
+        <nav class="guide-tabs">
+          <button id="help-controls" data-menu-default aria-pressed="true">
+            Controls</button
+          ><button id="help-heists" aria-pressed="false">Heists</button
+          ><button id="help-wanted" aria-pressed="false">Wanted</button>
+        </nav>
+        <div id="guide-content"></div>
         <button id="help-done" class="primary">Let’s go</button>
       </section>
       <div class="menu-hints" aria-label="Menu controls"></div>
@@ -288,11 +208,11 @@
       >
         <button class="close" id="atlas-close" aria-label="Close map">×</button>
         <div class="eyebrow">THE SIX RIVER COUNTIES</div>
-        <h2 id="atlas-title">A whole lot of pasture.</h2>
+        <h2 id="atlas-title">Map.</h2>
         <div class="map-tabs">
           <button id="atlas-region" data-menu-default aria-pressed="true">
             Region</button
-          ><button id="atlas-town" aria-pressed="false">Town streets</button>
+          ><button id="atlas-town" aria-pressed="false">Town</button>
         </div>
         <canvas
           id="atlas-map"
@@ -301,11 +221,12 @@
           aria-label="Full regional map"
         ></canvas>
         <div id="factions"></div>
-        <p class="fine" id="map-legend">
-          White: you · Gold: home · Red: police · Dark lines: roads · Blue:
-          rivers. All farms connect through town. Cross rivers on the town ring
-          bridges.
-        </p>
+        <p id="atlas-selection">Choose a farm</p>
+        <div id="map-legend" aria-label="Map legend">
+          <span class="legend-you">● You</span
+          ><span class="legend-home">◆ Home</span
+          ><span class="legend-police">★ Police</span>
+        </div>
       </section>
       <div class="menu-hints" aria-label="Menu controls"></div>
     </div>
@@ -319,13 +240,10 @@
       >
         <div class="eyebrow">NEW ADVENTURE</div>
         <h2 id="confirm-title">Back to the meadow?</h2>
-        <p id="confirm-description">
-          This replaces your saved rocket progress. Your current adventure will
-          be lost.
-        </p>
+        <p id="confirm-description">Replace your saved game?</p>
         <div class="confirm-actions">
           <button id="confirm-cancel" data-menu-default>Keep playing</button
-          ><button id="confirm-restart">Start new adventure</button>
+          ><button id="confirm-restart">Restart</button>
         </div>
       </section>
       <div class="menu-hints" aria-label="Menu controls"></div>
@@ -362,6 +280,6 @@
     <div id="error" hidden>
       We couldn’t start the 3D world. Please enable WebGL and reload.
     </div>
-    <script type="module" src="adventure.js?v=scenery-colliders-1"></script>
+    <script type="module" src="adventure.js?v=city-action-2"></script>
   </body>
 </html>

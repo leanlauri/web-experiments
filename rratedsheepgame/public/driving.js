@@ -1,7 +1,7 @@
-import { moveVehicle } from "./vehicle-motion.js?v=scenery-colliders-1";
-import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
-import { road } from "./region.js?v=scenery-colliders-1";
-import { vehicleBlocked } from "./vehicle-collisions.js?v=scenery-colliders-1";
+import { moveVehicle } from "./vehicle-motion.js?v=city-action-2";
+import { vehicleProfile } from "./vehicles.js?v=city-action-2";
+import { road } from "./region.js?v=city-action-2";
+import { vehicleBlocked } from "./vehicle-collisions.js?v=city-action-2";
 
 const approach = (value, target, amount) =>
   value < target

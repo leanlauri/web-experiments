@@ -1,14 +1,12 @@
-import { createEquipment } from "./equipment.js?v=scenery-colliders-1";
-import { vehicleProfile } from "./vehicles.js?v=scenery-colliders-1";
+import { createEquipment } from "./equipment.js?v=city-action-2";
+import { vehicleProfile } from "./vehicles.js?v=city-action-2";
 import * as T from "./vendor/three.module.js";
-import {
-  MAX_SKID_SEGMENTS,
-  skidOpacity,
-} from "./skidmarks.js?v=scenery-colliders-1";
+import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=city-action-2";
 import {
   SIZE,
   HOME,
   HOUSE,
+  HOME_BARN,
   SPACEPORT,
   FARMS,
   OBSTACLES,
@@ -17,7 +15,7 @@ import {
   TOWN_STREETS,
   RIVER_START,
   dist,
-} from "./region.js?v=scenery-colliders-1";
+} from "./region.js?v=city-action-2";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
@@ -172,6 +170,7 @@ function person(color = 0x52878c, police = false) {
     const arm = shape(g, color, x, 1, 0, 0.18, 0.65, 0.23);
     g.userData.limbs.push(arm);
     if (x > 0) g.userData.rightArm = arm;
+    else g.userData.leftArm = arm;
   }
   if (police) shape(g, 0xf5d779, -0.2, 1.2, 0.24, 0.13, 0.18, 0.04);
   return g;
@@ -220,6 +219,13 @@ function carModel(v) {
             0.12,
           );
     }
+  } else if (v.kind === "tractor") {
+    shape(g, color, 0, 1.4, 0.9, width * 0.65, 1.1, length * 0.42);
+    shape(g, 0x465b48, 0, 1.3, -0.75, 1.2, 0.3, 0.9);
+    shape(g, 0x323c32, 0.6, 2.1, 0.85, 0.14, 1.8, 0.14);
+    for (const side of [-1, 1])
+      shape(g, 0xeee3b4, side * 0.8, 2.1, -0.8, 0.1, 2.4, 0.1);
+    shape(g, color, 0, 3.25, -0.8, 2, 0.15, 1.5);
   } else if (v.kind === "buggy") {
     for (const side of [-1, 1]) {
       shape(g, 0x4c5c55, side * 0.85, 1.5, 0, 0.12, 1.2, 0.12);
@@ -276,11 +282,11 @@ function carModel(v) {
         g,
         0x37433c,
         side * width * 0.51,
-        0.45,
+        v.kind === "tractor" && z < 0 ? 0.78 : 0.45,
         z,
-        0.43,
+        v.kind === "tractor" && z < 0 ? 0.78 : 0.43,
         0.27,
-        0.43,
+        v.kind === "tractor" && z < 0 ? 0.78 : 0.43,
         cylinder,
       );
       wheel.rotation.z = Math.PI / 2;
@@ -343,7 +349,6 @@ export function createWorld(canvas) {
     );
     river.rotation.y = Math.PI / 2 - a;
   }
-  const roadMat = material(0x69766b);
   for (const f of [...FARMS, HOME]) {
     const r = Math.hypot(f.x, f.z),
       strip = shape(
@@ -372,14 +377,8 @@ export function createWorld(canvas) {
     }
   }
   for (const street of TOWN_STREETS) {
-    const vertical = street.a.x === street.b.x,
-      central = vertical ? street.a.x === 0 : street.a.z === 0;
-    const ranges = central
-      ? [
-          [-(vertical ? 102 : 114), -29],
-          [29, vertical ? 102 : 114],
-        ]
-      : [[-(vertical ? 102 : 114), vertical ? 102 : 114]];
+    const vertical = street.a.x === street.b.x;
+    const ranges = [[-(vertical ? 102 : 114), vertical ? 102 : 114]];
     for (const [from, to] of ranges) {
       const mid = (from + to) / 2,
         x = vertical ? street.a.x : mid,
@@ -407,26 +406,6 @@ export function createWorld(canvas) {
       );
     }
   }
-  const townJunction = new T.Mesh(
-    new T.RingGeometry(15, 29, 64),
-    material(0x69766b),
-  );
-  townJunction.renderOrder = 1;
-  townJunction.rotation.x = -Math.PI / 2;
-  townJunction.position.y = 0.155;
-  world.add(townJunction);
-  const townIsland = new T.Mesh(
-    new T.CircleGeometry(15, 48),
-    material(0x91b578),
-  );
-  townIsland.rotation.x = -Math.PI / 2;
-  townIsland.position.y = 0.155;
-  world.add(townIsland);
-  const ring = new T.Mesh(new T.RingGeometry(94, 106, 96), roadMat);
-  ring.renderOrder = 1;
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.14;
-  world.add(ring);
   for (const f of FARMS) {
     shape(world, 0xc2bc81, f.x, -0.02, f.z, 66, 0.15, 66);
     label(world, f.name, f.x, 13, f.z, `#${f.color.toString(16)}`, 1.2);
@@ -529,8 +508,66 @@ export function createWorld(canvas) {
     sign("WORKSHOP · WALK IN", HOUSE.x, 4, HOUSE.z + 5.3, 8);
   }
   buildHome();
+  const barnWalls = [];
+  shape(
+    world,
+    0xc5b991,
+    HOME_BARN.x,
+    0.06,
+    HOME_BARN.z,
+    HOME_BARN.hx * 2,
+    0.12,
+    HOME_BARN.hz * 2,
+  );
+  const barnWall = (x, z, w, d) =>
+    barnWalls.push(shape(world, 0xb86f57, x, 3.5, z, w, 7, d));
+  barnWall(HOME_BARN.x - HOME_BARN.hx, HOME_BARN.z, 0.35, HOME_BARN.hz * 2);
+  barnWall(HOME_BARN.x + HOME_BARN.hx, HOME_BARN.z, 0.35, HOME_BARN.hz * 2);
+  barnWall(HOME_BARN.x, HOME_BARN.z - HOME_BARN.hz, HOME_BARN.hx * 2, 0.35);
+  for (const side of [-1, 1]) {
+    const w = HOME_BARN.hx - HOME_BARN.doorHalf;
+    barnWall(
+      HOME_BARN.x + side * (HOME_BARN.doorHalf + w / 2),
+      HOME_BARN.z + HOME_BARN.hz,
+      w,
+      0.35,
+    );
+    shape(
+      world,
+      0xf5dcaa,
+      HOME_BARN.x + side * HOME_BARN.doorHalf,
+      2,
+      HOME_BARN.z + HOME_BARN.hz,
+      0.22,
+      4,
+      0.3,
+    );
+  }
+  const barnRoof = new T.Mesh(
+    new T.ConeGeometry(1, 1, 4),
+    new T.MeshLambertMaterial({
+      color: 0x706c59,
+      transparent: true,
+      opacity: 0.85,
+    }),
+  );
+  barnRoof.position.set(HOME_BARN.x, 8, HOME_BARN.z);
+  barnRoof.scale.set(10.6, 3.5, 13.5);
+  barnRoof.rotation.y = Math.PI / 4;
+  world.add(barnRoof);
+  shape(
+    world,
+    0xbead7c,
+    HOME_BARN.x,
+    0.16,
+    HOME_BARN.z + HOME_BARN.hz + 6.5,
+    5.8,
+    0.025,
+    13,
+  );
+  sign("BARN", HOME_BARN.x, 5.2, HOME_BARN.z + HOME_BARN.hz + 0.2, 4);
   for (const b of OBSTACLES) {
-    if (b.type === "home") continue;
+    if (b.type === "home" || b.type === "home-barn") continue;
     const gas = b.kind === "gas",
       height = gas ? b.h * 0.65 : b.h;
     shape(
@@ -607,7 +644,7 @@ export function createWorld(canvas) {
       sign("COUNTY FREIGHT", b.x, b.h - 0.6, b.z + b.hz + 0.2, b.hx * 1.8);
     }
   }
-  shape(world, 0xd9ce9e, HOME.x, 0.03, HOME.z, 43, 0.12, 43);
+  shape(world, 0xd9ce9e, HOME.x, 0.03, HOME.z - 4, 54, 0.12, 62);
   const homeRing = new T.Mesh(
     new T.RingGeometry(HOME.r - 0.5, HOME.r, 80),
     material(0xf5df8c),
@@ -910,7 +947,9 @@ export function createWorld(canvas) {
       });
     }
   }
-  let currentTime = 0;
+  let currentTime = 0,
+    civilianCount = 0,
+    deliveryCount = 0;
   function vehicleEffects(g, p) {
     for (const piece of g.userData.intact || []) piece.visible = !p.destroyed;
     if (g.userData.policeLights && !p.destroyed)
@@ -1239,6 +1278,8 @@ export function createWorld(canvas) {
     updateSkids(game);
     for (const sprite of placeLabels) sprite.visible = !compactLabels.matches;
     gamePlayer = game.player;
+    civilianCount = game.civilians?.length || 0;
+    deliveryCount = game.animals.filter((a) => a.delivering).length;
     const flight = game.phase === "launch" || game.phase === "credits";
     if (game.phase === "credits") {
       world.visible = false;
@@ -1300,18 +1341,40 @@ export function createWorld(canvas) {
         live.add(g.id);
         actor(
           g.id,
-          () =>
-            person(
+          () => {
+            const model = person(
               g.farm === undefined ? 0x3e6190 : FARMS[g.farm].color,
               g.farm === undefined,
-            ),
+            );
+            model.userData.equipment = createEquipment(
+              model,
+              actorRoot,
+              g.weapon ?? 5,
+            );
+            return model;
+          },
           g,
           g.down > 0,
           g.inVehicle !== undefined,
         );
+        const model = actors.get(g.id);
+        if (model?.visible)
+          model.userData.equipment?.update({
+            player: g,
+            time: game.time,
+            weapon: g.weapon ?? 5,
+            item: "weapon",
+            vehicle: null,
+            jail: 0,
+          });
+      }
+      for (const c of game.civilians || []) {
+        live.add(c.id);
+        actor(c.id, () => person(0xb58a70), c, c.down > 0);
       }
       for (const [id, m] of actors)
         if (!live.has(id)) {
+          m.userData.equipment?.dispose();
           actorRoot.remove(m);
           actorRoot.remove(m.userData.shadow);
           actors.delete(id);
@@ -1345,6 +1408,11 @@ export function createWorld(canvas) {
           trail.rotation.y = m.rotation.y;
           return [m, trail];
         });
+      barnRoof.visible = dist(game.player, HOME) > 45;
+      barnWalls.forEach((w) => {
+        w.scale.y = game.atHome ? 2.4 : 7;
+        w.position.y = game.atHome ? 1.2 : 3.5;
+      });
       houseRoof.visible = !game.houseInside;
       houseWalls.forEach((w) => {
         w.scale.y = game.houseInside ? 1.2 : 6;
@@ -1421,6 +1489,14 @@ export function createWorld(canvas) {
           props: SOLID_PROPS.length,
         },
         townBuildings: OBSTACLES.filter((b) => b.type === "town").length,
+        npcMuzzles: [...actors.values()].filter(
+          (m) => m.visible && m.userData.equipment?.stats().muzzle,
+        ).length,
+        aimingActors: [...actors.values()].filter(
+          (m) => m.visible && m.userData.equipment?.stats().aiming,
+        ).length,
+        civilians: civilianCount,
+        barn: { gate: true, queued: deliveryCount },
         recoveringActors: [player, ...actors.values()].filter(
           (g) => g.visible && g.userData.stars?.visible,
         ).length,

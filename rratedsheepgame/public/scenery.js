@@ -8,6 +8,7 @@ export function createScenery({
   START,
   HOUSE,
   SPACEPORT,
+  HOME_BARN,
   FARMS,
   OBSTACLES,
   road,
@@ -51,6 +52,17 @@ export function createScenery({
     props.push({ type, x, z, hx, hz, h, color, minY });
   const pole = (type, x, z, radius, h, color) =>
     props.push({ type, x, z, radius, h, color, minY: 0 });
+  if (HOME_BARN)
+    for (const side of [-1, 1])
+      box(
+        "barn-gate",
+        HOME_BARN.x + side * HOME_BARN.doorHalf,
+        HOME_BARN.z + HOME_BARN.hz + 1.5,
+        0.09,
+        1.5,
+        1.8,
+        0xc8b38b,
+      );
   box("counter", HOUSE.x, HOUSE.z - 3.3, 3.2, 0.65, 2.2, 0x657c69);
   box(
     "rocket-stand",

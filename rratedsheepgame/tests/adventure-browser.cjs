@@ -116,7 +116,7 @@ const serveSource = async (route) => {
     assert.equal(
       await page
         .locator(".shop-item")
-        .filter({ hasText: "Wake-up snack pack" })
+        .filter({ hasText: "Wake-up snacks" })
         .locator(".shop-price")
         .textContent(),
       "$15",

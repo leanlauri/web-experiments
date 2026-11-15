@@ -127,6 +127,9 @@ const assert = require("node:assert/strict");
     await focus("menu-help");
     await press(0);
     await screen("help");
+    await page
+      .locator("#help .panel")
+      .evaluate((el) => (el.style.maxHeight = "200px"));
     await page.evaluate(() => {
       testPad.axes[3] = 1;
     });
@@ -138,6 +141,9 @@ const assert = require("node:assert/strict");
       (await page.locator("#help .panel").evaluate((el) => el.scrollTop)) > 0,
       "right stick scrolls guide",
     );
+    await page
+      .locator("#help .panel")
+      .evaluate((el) => (el.style.maxHeight = ""));
     await press(1);
     await screen("menu");
     await focus("menu-help");

@@ -1,7 +1,7 @@
 export const VEHICLES = {
   buggy: {
     name: "Dune buggy",
-    top: 34,
+    top: 40,
     acceleration: 11,
     turn: 4,
     grip: 12,
@@ -15,7 +15,7 @@ export const VEHICLES = {
   },
   car: {
     name: "Town hatchback",
-    top: 32,
+    top: 38,
     acceleration: 9,
     turn: 3.3,
     grip: 13,
@@ -29,7 +29,7 @@ export const VEHICLES = {
   },
   van: {
     name: "Herd van",
-    top: 28,
+    top: 33,
     acceleration: 7,
     turn: 2.7,
     grip: 11,
@@ -43,7 +43,7 @@ export const VEHICLES = {
   },
   bus: {
     name: "County bus",
-    top: 24,
+    top: 28,
     acceleration: 5,
     turn: 1.9,
     grip: 10,
@@ -57,7 +57,7 @@ export const VEHICLES = {
   },
   pickup: {
     name: "Farm pickup",
-    top: 30,
+    top: 35,
     acceleration: 8,
     turn: 2.8,
     grip: 10,
@@ -71,7 +71,7 @@ export const VEHICLES = {
   },
   sport: {
     name: "Comet coupe",
-    top: 43,
+    top: 50,
     acceleration: 15,
     turn: 3.7,
     grip: 14,
@@ -85,7 +85,7 @@ export const VEHICLES = {
   },
   electric: {
     name: "Electric city car",
-    top: 33,
+    top: 39,
     acceleration: 13,
     turn: 3.6,
     grip: 13,
@@ -99,7 +99,7 @@ export const VEHICLES = {
   },
   truck: {
     name: "Livestock truck",
-    top: 22,
+    top: 26,
     acceleration: 4,
     turn: 1.7,
     grip: 11,
@@ -112,15 +112,35 @@ export const VEHICLES = {
     wave: "square",
   },
 };
+VEHICLES.tractor = {
+  name: "Farm tractor",
+  top: 28,
+  acceleration: 5.5,
+  turn: 1.7,
+  grip: 12,
+  mass: 4.5,
+  seats: 2,
+  length: 4.4,
+  width: 2.4,
+  color: 0x779361,
+  pitch: 29,
+  wave: "square",
+};
 export const POLICE_VEHICLE = {
   ...VEHICLES.car,
   name: "County patrol car",
+  mass: 2.4,
   color: 0x526b8e,
-  top: 36,
-  acceleration: 10,
+  top: 46,
+  acceleration: 12.5,
   pitch: 85,
 };
 export const vehicleProfile = (v) =>
   typeof v === "object" && v.isPolice
     ? POLICE_VEHICLE
-    : VEHICLES[typeof v === "string" ? v : v.kind] || VEHICLES.car;
+    : typeof v === "object" && v.isFarmer
+      ? {
+          ...(VEHICLES[v.kind] || VEHICLES.pickup),
+          color: v.factionColor ?? 0xb9925f,
+        }
+      : VEHICLES[typeof v === "string" ? v : v.kind] || VEHICLES.car;

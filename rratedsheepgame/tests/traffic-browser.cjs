@@ -37,7 +37,7 @@ const assert = require("node:assert/strict");
     assert.deepEqual(errors, []);
     await page.screenshot({ path: "/tmp/rratedsheepgame-town-traffic.png" });
     console.log(
-      "PASS: deployed 48-car traffic, smooth positions/headings in town, collision-free following/merges and WebGL roundabout rendering.",
+      "PASS: deployed 48-car traffic, smooth positions/headings in town, collision-free following/merges and WebGL street-grid rendering.",
       state,
     );
   } finally {

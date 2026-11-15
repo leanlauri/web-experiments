@@ -41,6 +41,7 @@ for (const s of TOWN_STREETS)
     });
   Object.assign(g.player, HOME);
   g.arrive();
+  for (let i = 0; i < 1800 && g.phase !== "heist"; i++) g.update(1 / 60);
   assert.equal(g.money, OPENING_REWARD);
   const pistol = WEAPONS.findIndex((w) => w.name === "Foam pistol");
   assert(OPENING_REWARD >= WEAPONS[pistol].cost);
@@ -49,6 +50,9 @@ for (const s of TOWN_STREETS)
   assert.equal(g.money, 10);
   g.shop = false;
   g.attack();
+  assert.equal(g.player.attack.kind, "aim");
+  assert.equal(g.shots.length, 0);
+  for (let i = 0; i < 18; i++) g.update(1 / 60);
   assert.equal(g.player.attack.kind, "shoot");
   assert.equal(g.shots[0].owner, "player");
   g.cooldown = 0;
@@ -90,5 +94,5 @@ for (const s of TOWN_STREETS)
   assert(steps < 2000, "town pathfinding routes a follower around buildings");
 }
 console.log(
-  "PASS: 47-building town, rectangular connected streets, opening club/pistol purchase, attack state, eight vehicle profiles/capacities/masses/tones and town follower routing.",
+  "PASS: 65-building town, rectangular connected streets, opening club/pistol purchase, attack state, nine vehicle profiles/capacities/masses/tones and town follower routing.",
 );

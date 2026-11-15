@@ -34,7 +34,7 @@ const home = (g, animals) => {
   });
   g.homeInside = false;
   g.homeTimer = 0;
-  tick(g, 4.1);
+  tick(g, 25);
 };
 assert.equal(FARMS.length, 6);
 for (const f of FARMS) {
@@ -61,7 +61,7 @@ for (const f of FARMS) {
   at(g, { x: 0, z: -165 });
   tick(g, 10);
   at(g, { x: 0, z: -185 });
-  tick(g, 10);
+  tick(g, 25);
   assert.equal(g.phase, "heist");
   assert.equal(g.introDelivered, 12);
   assert.equal(g.money, 60);
@@ -116,7 +116,7 @@ for (const f of FARMS) {
   assert(
     g.animals.filter((a) => a.farm === 2).every((a) => !a.down && !a.following),
   );
-  assert.equal(g.player.hp, 3);
+  assert.equal(g.player.hp, g.player.maxHp);
 }
 {
   const g = new Game();
@@ -139,7 +139,7 @@ for (const f of FARMS) {
 {
   const g = new Game();
   const animals = recruit(g, 0);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < g.player.maxHp; i++) {
     g.player.invulnerable = 0;
     g.hurt();
   }
@@ -147,7 +147,7 @@ for (const f of FARMS) {
   assert.equal(g.herd.length, 0);
   tick(g, 5.1);
   assert.equal(g.jail, 0);
-  assert.equal(g.player.hp, 3);
+  assert.equal(g.player.hp, g.player.maxHp);
   assert(g.atHome);
   assert(animals.every((a) => !a.down && !a.following));
 }
@@ -159,7 +159,7 @@ for (const f of FARMS) {
   g.delivered = 56;
   for (let i = 1; i < WEAPONS.length; i++) assert(g.buy(i));
   assert(g.buy("heart"));
-  assert.equal(g.player.maxHp, 4);
+  assert.equal(g.player.maxHp, 6);
   assert(!g.buy("heart"), "insufficient cash");
   for (const p of PARTS) assert(g.buy("part"));
   assert.equal(g.parts, 5);
@@ -169,7 +169,7 @@ for (const f of FARMS) {
   assert.equal(g.phase, "credits");
   const restored = new Game(g.lastSaved);
   assert.equal(restored.parts, 5);
-  assert.equal(restored.player.maxHp, 4);
+  assert.equal(restored.player.maxHp, 6);
   assert.equal(restored.delivered, 56);
 }
 {
@@ -202,9 +202,7 @@ for (const f of FARMS) {
   const g = new Game();
   unlock(g);
   g.guards.forEach((a) => (a.down = 10000));
-  g.vehicles.forEach((v) =>
-    Object.assign(v, { stolen: true, x: 440, z: -400 + v.id * 10 }),
-  );
+  g.vehicles = []; // Navigation is independent of traffic, which has a dedicated simulation test.
   at(g, { x: f.x - 8, z: f.z + 8 });
   g.animals.forEach((a) => (a.delivered = a.farm !== f.id));
   g.animals
@@ -212,6 +210,7 @@ for (const f of FARMS) {
     .slice(0, 6)
     .forEach((a) => (a.following = true));
   // Isolate navigation from combat; all movement, collision and flock logic stay real.
+  g.chasedFarms = new Set(FARMS.map((f) => f.id));
   g.updateOpponents = () => {};
   for (const target of [farmGate(f), { x: 0, z: 0 }, { x: 0, z: -185 }]) {
     let steps = 0;
@@ -224,7 +223,7 @@ for (const f of FARMS) {
     }
     assert(steps < 12000, `${f.name}: route must make progress`);
   }
-  tick(g, 10);
+  tick(g, 25);
   assert(
     g.delivered >= 6,
     `${f.name}: followers must reach home through its gate`,

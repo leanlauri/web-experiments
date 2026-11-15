@@ -1366,3 +1366,222 @@ body:is([data-phase="launch"], [data-phase="credits"])
 .wheel-ring:focus {
   outline: none;
 }
+/* Short labels and focused details keep menus readable from the sofa. */
+.header-actions :is(#help-button, #reset) {
+  display: none;
+}
+#menu .eyebrow {
+  display: none;
+}
+#menu .menu-actions button {
+  min-height: 51px;
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+#menu .menu-actions button::before {
+  top: 19px;
+}
+#menu .pause-briefing {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+#menu h3 {
+  font-size: 30px;
+  max-width: 250px;
+}
+#menu-progress {
+  font-size: 14px;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+}
+#menu-loadout,
+.briefing-orbit {
+  display: none;
+}
+#menu-description {
+  color: #dfc787;
+}
+.guide-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.guide-tabs button {
+  flex: 1;
+  min-height: 44px;
+}
+.guide-tabs button[aria-pressed="true"] {
+  border-bottom: 3px solid #e5c87e;
+}
+#guide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.guide-card {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  background: #ffffff06;
+}
+.guide-card kbd {
+  min-width: 88px;
+  padding: 10px;
+  text-align: center;
+  color: #e5c87e;
+  font-size: 11px;
+}
+.guide-card b {
+  font-size: 15px;
+}
+#factions {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 14px 0;
+}
+.faction-marker {
+  min-height: 44px;
+  font-size: 18px;
+  padding: 8px 4px;
+  border-bottom: 3px solid var(--faction);
+}
+.faction-marker[aria-pressed="true"] {
+  background: #e6d39a;
+  color: #163034;
+}
+#atlas-selection {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #eee2b9;
+  min-height: 24px;
+}
+#map-legend {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 16px;
+  font-size: 12px;
+}
+.legend-you {
+  color: #ecf3ec;
+}
+.legend-home {
+  color: #ecd08e;
+}
+.legend-police {
+  color: #ec9e8f;
+}
+#atlas .panel {
+  max-width: 940px;
+}
+#atlas-map {
+  display: block;
+  max-height: 56dvh;
+  object-fit: contain;
+  background: #a7bc89;
+}
+#shop .fine {
+  display: none;
+}
+@media (max-width: 720px) {
+  #menu .pause-briefing {
+    gap: 0;
+    padding-bottom: 8px;
+  }
+  #menu h3 {
+    font-size: 22px;
+    max-width: none;
+    margin: 0;
+  }
+  #menu-progress {
+    margin: 2px 0;
+    font-size: 11px;
+    padding: 0;
+  }
+  #menu .menu-actions button {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  #menu .menu-actions button::before {
+    top: 15px;
+  }
+  #guide-content {
+    gap: 6px;
+  }
+  .guide-card {
+    min-height: 68px;
+    flex-direction: column;
+    align-items: start;
+    gap: 6px;
+    padding: 10px;
+  }
+  .guide-card kbd {
+    min-width: 0;
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+  .guide-card b {
+    font-size: 12px;
+  }
+  #map-legend {
+    font-size: 10px;
+    gap: 16px;
+  }
+  #factions {
+    gap: 5px;
+  }
+  .faction-marker {
+    font-size: 14px;
+  }
+}
+@media (max-height: 500px) {
+  #guide-content {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .guide-card {
+    flex-direction: column;
+    align-items: start;
+    gap: 6px;
+  }
+  #atlas-map {
+    max-height: 50dvh;
+  }
+}
+#atlas .panel {
+  padding: 20px 24px;
+}
+#atlas .eyebrow {
+  display: none;
+}
+#atlas .panel h2 {
+  font-size: 32px;
+  margin: 0 44px 12px 0;
+}
+#atlas .map-tabs {
+  margin-bottom: 10px;
+}
+#atlas .map-tabs button {
+  padding: 10px;
+  min-height: 40px;
+}
+#atlas-map {
+  max-height: 40dvh;
+}
+#atlas #factions {
+  margin: 10px 0 6px;
+}
+#atlas-selection {
+  margin: 4px 0;
+  min-height: 18px;
+  font-size: 12px;
+}
+#map-legend {
+  margin-top: 6px;
+  font-size: 11px;
+}
