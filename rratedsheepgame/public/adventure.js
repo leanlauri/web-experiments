@@ -1,9 +1,10 @@
-import { createMenus } from "./menus.js?v=town-blocks-1";
-import { createController } from "./controller.js?v=town-blocks-1";
-import { createWheel } from "./wheel.js?v=town-blocks-1";
-import { createAudio } from "./audio.js?v=town-blocks-1";
-import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
-import { Game } from "./simulation.js?v=town-blocks-1";
+import { frameSteps } from "./quality.js?v=performance-1";
+import { createMenus } from "./menus.js?v=performance-1";
+import { createController } from "./controller.js?v=performance-1";
+import { createWheel } from "./wheel.js?v=performance-1";
+import { createAudio } from "./audio.js?v=performance-1";
+import { vehicleProfile } from "./vehicles.js?v=performance-1";
+import { Game } from "./simulation.js?v=performance-1";
 import {
   HOME,
   FARMS,
@@ -16,8 +17,8 @@ import {
   RIVER_START,
   inTown,
   dist,
-} from "./region.js?v=town-blocks-1";
-import { createWorld } from "./world.js?v=town-blocks-1";
+} from "./region.js?v=performance-1";
+import { createWorld } from "./world.js?v=performance-1";
 const $ = (id) => document.getElementById(id),
   SAVE = "little-pastures-moon-v1";
 let saved;
@@ -180,6 +181,20 @@ function openWheel(mode) {
 }
 $("equipment-button").onclick = $("desktop-equipment").onclick = () =>
   openWheel("tap");
+function qualityLabel() {
+  $("quality-button").textContent =
+    "Graphics: " +
+    { auto: "Auto", low: "Low", high: "High" }[world.quality.mode];
+}
+$("quality-button").onclick = () => {
+  const modes = ["auto", "low", "high"];
+  world.setQuality(
+    modes[(modes.indexOf(world.quality.mode) + 1) % modes.length],
+  );
+  renderDirty = true;
+  qualityLabel();
+};
+qualityLabel();
 function soundLabel() {
   $("sound-button").textContent = "Sound: " + (audio.enabled ? "on" : "off");
 }
@@ -728,8 +743,24 @@ const controller = createController({
   },
 });
 inputMode("keyboard");
+let lastHudTime = -1,
+  lastHudMenu = null;
 let previous = performance.now(),
+  accumulator = 0,
+  lastRender = 0,
+  lastMenu = null,
+  renderDirty = true,
+  wasPaused = false;
+const frameStats = { ticks: 0, renders: 0, maxCatchUp: 0 };
+for (const event of ["resize", "wheel", "pointerdown"])
+  addEventListener(event, () => {
+    renderDirty = true;
+  });
+document.addEventListener("visibilitychange", () => {
+  previous = performance.now();
   accumulator = 0;
+  renderDirty = true;
+});
 function frame(now) {
   const elapsed = Math.min(0.15, (now - previous) / 1000);
   previous = now;
@@ -737,10 +768,23 @@ function frame(now) {
     shop();
     menus.open("shop");
   }
+  if (document.hidden) {
+    accumulator = 0;
+    requestAnimationFrame(frame);
+    return;
+  }
   const pad = controller.poll(now);
+  const menu = menus.active();
+  if (menu !== lastMenu) {
+    renderDirty = true;
+    lastMenu = menu;
+  }
   if (!document.hidden && !menus.active()) {
-    accumulator += elapsed;
-    while (accumulator >= 1 / 60) {
+    const budget = frameSteps(accumulator, elapsed);
+    accumulator = budget.remainder;
+    frameStats.maxCatchUp = Math.max(frameStats.maxCatchUp, budget.steps);
+    for (let step = 0; step < budget.steps; step++) {
+      frameStats.ticks++;
       let x = stick.x + pad.x,
         z = stick.y + pad.z;
       if (keys.has("KeyW") || keys.has("ArrowUp")) z -= 1;
@@ -760,7 +804,7 @@ function frame(now) {
       });
       jump = false;
       if (keys.has("KeyF") || pad.attack) game.attack();
-      accumulator -= 1 / 60;
+
       if (game.shop) {
         shop();
         menus.open("shop");
@@ -769,11 +813,28 @@ function frame(now) {
       }
     }
   } else accumulator = 0;
-  audio.update(game, !!menus.active());
-  world.render(game);
+  const paused = !!menus.active();
+  if (!paused || paused !== wasPaused) audio.update(game, paused);
+  wasPaused = paused;
+  if (
+    renderDirty ||
+    (!paused && now - lastRender >= world.quality.interval * 1000 - 1)
+  ) {
+    if (!renderDirty && !paused && lastRender)
+      world.sampleFrame((now - lastRender) / 1000);
+    world.render(game);
+    frameStats.renders++;
+    lastRender = now;
+    renderDirty = false;
+  }
   hudTime += elapsed;
-  if (hudTime > 0.1) {
+  if (
+    hudTime > 0.1 &&
+    (!paused || game.time !== lastHudTime || menu !== lastHudMenu)
+  ) {
     hud();
+    lastHudTime = game.time;
+    lastHudMenu = menu;
     hudTime = 0;
   }
   requestAnimationFrame(frame);
@@ -855,6 +916,7 @@ window.sheepGame = {
     selectedItem: game.item || "weapon",
     equippedWeapon: game.weapon,
     audio: audio.stats(),
+    scheduling: { ...frameStats },
     stats: world.stats(),
   }),
 };

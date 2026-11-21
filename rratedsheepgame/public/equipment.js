@@ -108,6 +108,9 @@ export function createEquipment(player, scene, onlyWeapon = null) {
   slash.rotation.x = -Math.PI / 2;
   scene.add(slash);
   slash.visible = false;
+  grip.traverse((node) => {
+    if (node.isMesh) node.userData.equipmentOwned = true;
+  });
   return {
     update(game) {
       const selected = game.item === "revive" ? "revive" : game.weapon;
@@ -165,8 +168,18 @@ export function createEquipment(player, scene, onlyWeapon = null) {
       slash.position.set(game.player.x, 1.15, game.player.z);
       slash.rotation.z = -game.player.heading + progress * 2;
     },
+    hide() {
+      slash.visible = false;
+    },
     dispose() {
       scene.remove(slash);
+      const unique = new Set();
+      grip.traverse((node) => {
+        if (node.isMesh && ![geo, ball, rod].includes(node.geometry))
+          unique.add(node.geometry);
+      });
+      for (const geometry of unique) geometry.dispose();
+      flash.material.dispose();
       slash.geometry.dispose();
       slash.material.dispose();
     },

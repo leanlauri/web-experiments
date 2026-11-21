@@ -1,10 +1,10 @@
-import { VEHICLES, vehicleProfile } from "./vehicles.js?v=town-blocks-1";
-import { FARMS, HOME, FARM_ROADS } from "./region.js?v=town-blocks-1";
+import { VEHICLES, vehicleProfile } from "./vehicles.js?v=performance-1";
+import { FARMS, HOME, FARM_ROADS } from "./region.js?v=performance-1";
 import {
   vehicleBlocked,
   vehicleOverlap,
   vehicleSize,
-} from "./vehicle-collisions.js?v=town-blocks-1";
+} from "./vehicle-collisions.js?v=performance-1";
 export const TRAFFIC_COUNT = 48;
 const LANE = 3,
   samples = [];
@@ -424,4 +424,44 @@ export function stepTraffic(v, dt, vehicles, level = 0) {
       v.mergeWait = 0;
     }
   }
+}
+
+// Plan distant ordinary traffic at 10 Hz, but interpolate route position every
+// physics tick. Promotion is continuous; nearby interactions use full physics.
+export function stepDistantTraffic(v, dt, vehicles, level = 0) {
+  let plan = v.distantPlan;
+  if (!plan || plan.age >= 0.1) {
+    const before = {
+      x: v.x,
+      z: v.z,
+      heading: v.heading,
+      trafficDistance: v.trafficDistance ?? nearestTrafficDistance(v),
+    };
+    v.trafficDistance = before.trafficDistance;
+    stepTraffic(v, 0.1, vehicles, level);
+    plan = {
+      from: before,
+      to: {
+        x: v.x,
+        z: v.z,
+        heading: v.heading,
+        trafficDistance: v.trafficDistance,
+      },
+      age: 0,
+    };
+    Object.assign(v, before);
+    v.distantPlan = plan;
+  }
+  plan.age = Math.min(0.1, plan.age + dt);
+  const t = plan.age / 0.1;
+  v.x = plan.from.x + (plan.to.x - plan.from.x) * t;
+  v.z = plan.from.z + (plan.to.z - plan.from.z) * t;
+  v.heading =
+    plan.from.heading + angleDiff(plan.to.heading, plan.from.heading) * t;
+  const distance =
+    wrap(
+      plan.to.trafficDistance - plan.from.trafficDistance + TRAFFIC_LENGTH / 2,
+    ) -
+    TRAFFIC_LENGTH / 2;
+  v.trafficDistance = wrap(plan.from.trafficDistance + distance * t);
 }

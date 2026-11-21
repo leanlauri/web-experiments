@@ -1,4 +1,4 @@
-import { dist, solidPathClear } from "./region.js?v=town-blocks-1";
+import { dist, solidPathClear } from "./region.js?v=performance-1";
 export const BULLET_SPEED = 90,
   AIM_SECONDS = 0.28,
   SHOT_RECOVERY = 0.16;

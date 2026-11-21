@@ -42,11 +42,18 @@ The pause screen, workshop, help, map, confirmation and equipment wheel freeze t
 
 The previous countryside implementation and its standalone physics tests remain in the project as reference modules; they are not loaded by this new entry point. Old journey/layout browser assertions describe the former map. The active adventure checks below cover the replacement game. Published diagnostics expose read-only state, with no gameplay teleport or progression cheats.
 
+Performance settings are available in the pause menu through **Graphics: Auto / Low / High**, using touch, keyboard or controller. Auto starts phones at a 30 FPS rendering target and adapts resolution under load; High targets 60 FPS. Physics continues at 60 Hz in every preset. Low uses fewer tree chunks and projectile trails. Returning to High restores the larger scenery budget. The selection is saved separately from game progress.
+
+Nearby traffic, stolen cars, crashes and pursuits keep full physics. Ordinary traffic outside 210 m plans at 10 Hz with continuous movement between plans; it returns to full detail within 180 m, before becoming visible. Spatial grids narrow collision candidates while retaining exact shapes and swept contacts. Static scenery and fences are instanced by material and region. Hidden models leave the scene immediately, with only 24 (Low) or 48 (High) recently used inactive models retained, for at most 20 seconds of game time. Projectile visuals are pooled. Paused and hidden scenes stop continuous drawing; long stalls cannot request more than four simulation steps in one frame.
+
 ## Verification and deployment
 
 Run from the repository root:
 
 ```sh
+node rratedsheepgame/tests/performance.mjs
+node rratedsheepgame/tests/performance.mjs --benchmark
+node rratedsheepgame/tests/performance-browser.cjs
 node rratedsheepgame/tests/town-layout.mjs
 node rratedsheepgame/tests/city-action.mjs
 node rratedsheepgame/tests/city-action-browser.cjs

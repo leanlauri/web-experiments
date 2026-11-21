@@ -1,4 +1,5 @@
-import { createScenery } from "./scenery.js?v=town-blocks-1";
+import { SpatialGrid } from "./spatial.js?v=performance-1";
+import { createScenery } from "./scenery.js?v=performance-1";
 export const SIZE = 460,
   HOME = { x: 0, z: -190, r: 28 },
   START = { x: 0, z: -135 };
@@ -278,9 +279,14 @@ export function buildingBlocks(b, p, r = 0) {
     hz = b.kind === "gas" ? b.hz / 2 : b.hz;
   return Math.abs(p.x - b.x) < b.hx + r && Math.abs(p.z - z) < hz + r;
 }
+const buildingGrid = new SpatialGrid(24);
+for (const b of OBSTACLES) buildingGrid.insert(b, b.hx, b.hz);
+export const nearbyBuildings = (p, r = 0) => buildingGrid.query(p, r);
 export function solidBlocked(p, r = 0.65, height = 1.8) {
   return (
-    OBSTACLES.some((b) => (p.y || 0) < b.h && buildingBlocks(b, p, r)) ||
+    buildingGrid
+      .query(p, r)
+      .some((b) => (p.y || 0) < b.h && buildingBlocks(b, p, r)) ||
     SCENERY.blocks(p, r, height)
   );
 }
@@ -302,14 +308,16 @@ export function solidPathClear(a, b) {
       return false;
   return true;
 }
-export function blocked(p, r = 0.65, level = 0) {
+export function terrainBlocked(p, level = 0) {
   return (
     Math.abs(p.x) > SIZE - 4 ||
     Math.abs(p.z) > SIZE - 4 ||
     water(p) ||
-    fenceBlocks(p, level) ||
-    solidBlocked(p, r)
+    fenceBlocks(p, level)
   );
+}
+export function blocked(p, r = 0.65, level = 0) {
+  return terrainBlocked(p, level) || solidBlocked(p, r);
 }
 export function move(p, dx, dz, r = 0.65, level = 0) {
   const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.6));

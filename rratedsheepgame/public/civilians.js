@@ -1,6 +1,6 @@
-import { clearPosition, dist, move } from "./region.js?v=town-blocks-1";
-import { startTumble } from "./tumbles.js?v=town-blocks-1";
-import { circleVehicle } from "./vehicle-collisions.js?v=town-blocks-1";
+import { clearPosition, dist, move } from "./region.js?v=performance-1";
+import { startTumble } from "./tumbles.js?v=performance-1";
+import { circleVehicle } from "./vehicle-collisions.js?v=performance-1";
 export function ejectDriver(game, car) {
   if (!car.occupied || car.isPolice || car.isFarmer) return;
   const side = car.heading + Math.PI / 2,

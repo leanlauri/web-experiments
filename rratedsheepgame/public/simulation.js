@@ -1,23 +1,24 @@
+import { SpatialGrid } from "./spatial.js?v=performance-1";
 import {
   beginDelivery,
   stepBarnAnimal,
   finishDelivery,
   inBarn,
-} from "./delivery.js?v=town-blocks-1";
+} from "./delivery.js?v=performance-1";
 import {
   startFarmerChase,
   stepFarmer,
   ejectFarmer,
   endFarmerChases,
-} from "./farmers.js?v=town-blocks-1";
+} from "./farmers.js?v=performance-1";
 import {
   startAim,
   stepAim,
   friendlyInLine,
   AIM_SECONDS,
-} from "./combat.js?v=town-blocks-1";
-import { ejectDriver, stepCivilians } from "./civilians.js?v=town-blocks-1";
-import { followAnimal, separateHerd } from "./herding.js?v=town-blocks-1";
+} from "./combat.js?v=performance-1";
+import { ejectDriver, stepCivilians } from "./civilians.js?v=performance-1";
+import { followAnimal, separateHerd } from "./herding.js?v=performance-1";
 import {
   FIRST_WANTED_WALK_SPEED,
   createOfficer,
@@ -25,33 +26,37 @@ import {
   patrolStep,
   disembarkPatrol,
   updatePoliceDispatch,
-} from "./police.js?v=town-blocks-1";
-import { freeVehicle } from "./vehicle-motion.js?v=town-blocks-1";
+} from "./police.js?v=performance-1";
+import { freeVehicle } from "./vehicle-motion.js?v=performance-1";
 import {
   initVehicleHealth,
   damageVehicle,
   FIRE_SECONDS,
   BLAST_RADIUS,
-} from "./vehicle-damage.js?v=town-blocks-1";
+} from "./vehicle-damage.js?v=performance-1";
 import {
   trafficPose,
   nearestTrafficDistance,
-} from "./traffic.js?v=town-blocks-1";
-import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
-import { createTraffic, stepTraffic } from "./traffic.js?v=town-blocks-1";
+} from "./traffic.js?v=performance-1";
+import { vehicleProfile } from "./vehicles.js?v=performance-1";
+import {
+  createTraffic,
+  stepTraffic,
+  stepDistantTraffic,
+} from "./traffic.js?v=performance-1";
 import {
   resolveVehicleCollisions,
   vehiclePersonContact,
   circleVehicle,
   vehicleBlocked,
-} from "./vehicle-collisions.js?v=town-blocks-1";
+} from "./vehicle-collisions.js?v=performance-1";
 import {
   startTumble,
   stepTumble,
   clearTumble,
-} from "./tumbles.js?v=town-blocks-1";
-import { drive } from "./driving.js?v=town-blocks-1";
-import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js?v=town-blocks-1";
+} from "./tumbles.js?v=performance-1";
+import { drive } from "./driving.js?v=performance-1";
+import { recordSkidmarks, SKID_LIFETIME } from "./skidmarks.js?v=performance-1";
 import {
   HOME,
   BASE_HEARTS,
@@ -67,7 +72,7 @@ import {
   routeTarget,
   solidBlocked,
   solidPathClear,
-} from "./region.js?v=town-blocks-1";
+} from "./region.js?v=performance-1";
 export const NPC_KNOCKOUT_SECONDS = 60,
   EXIT_ROLL_SPEED = 8;
 export class Game {
@@ -76,6 +81,8 @@ export class Game {
   }
   reset(save) {
     this.time = 0;
+    this.vehicleGrid = new SpatialGrid();
+    this.aiTimers = new WeakMap();
     this.phase = "intro";
     this.player = {
       ...START,
@@ -704,6 +711,8 @@ export class Game {
     }
     if (this.vehicle !== null) {
       const v = this.vehicles[this.vehicle];
+      v.distantTraffic = false;
+      v.distantPlan = null;
       v.previous = { x: v.x, z: v.z, heading: v.heading, y: v.y || 0 };
       const inactive = this.shop || p.stun > 0;
       v.motionTime = this.time;
@@ -741,6 +750,8 @@ export class Game {
       (this.wanted > 0 || this.police.length || this.chasedFarms.size)
     )
       this.clearWanted();
+    this.vehicleGrid.clear();
+    for (const v of this.vehicles) this.vehicleGrid.insert(v);
     for (const v of this.vehicles) {
       if (v.id === this.vehicle) continue;
       v.previous = { x: v.x, z: v.z, heading: v.heading, y: v.y || 0 };
@@ -795,11 +806,22 @@ export class Game {
           v.crashRecovering = false;
         } else if (dist(v, target) < 5) v.rejoinDistance = nearest;
       } else {
-        stepTraffic(v, dt, this.vehicles, this.level);
+        const distance = dist(v, p);
+        v.distantTraffic =
+          !v.disabled && distance > (v.distantTraffic ? 180 : 210);
+        if (!v.distantTraffic) v.distantPlan = null;
+        const neighbors = this.vehicleGrid.query(v, 64);
+        if (v.distantTraffic) stepDistantTraffic(v, dt, neighbors, this.level);
+        else stepTraffic(v, dt, neighbors, this.level);
         v.vx = dt ? (v.x - v.previous.x) / dt : 0;
         v.vz = dt ? (v.z - v.previous.z) / dt : 0;
         v.currentSpeed = Math.hypot(v.vx, v.vz);
       }
+      if (dynamic || v.farmerDriving || v.policeDriving || v.crashRecovering) {
+        v.distantTraffic = false;
+        v.distantPlan = null;
+      }
+      this.vehicleGrid.insert(v);
     }
     for (const v of this.vehicles)
       if (v.wallDamage) {
@@ -887,6 +909,8 @@ export class Game {
     }
     this.updateOpponents(dt, recovering);
     this.updateShots(dt);
+    this.vehicleGrid.clear();
+    for (const v of this.vehicles) this.vehicleGrid.insert(v);
     for (const body of [
       p,
       ...this.animals,
@@ -904,7 +928,7 @@ export class Game {
         (body === p && (this.vehicle !== null || this.jail))
       )
         continue;
-      for (const v of this.vehicles) {
+      for (const v of this.vehicleGrid.query(body, 14)) {
         if (dist(v, body) > 14) continue;
         const velocity = v.impactVelocity || { x: 0, z: 0 },
           speed = Math.hypot(velocity.x, velocity.z);
@@ -1067,8 +1091,19 @@ export class Game {
       }
       if (this.time < (g.shotUntil || 0)) continue;
       const f = g.farm === undefined ? null : FARMS[g.farm];
+      let guardDt = dt;
       const d = dist(g, p);
       if (d > 120 && !g.chasing) continue;
+      if (d > 80 && !g.chasing && g.farm !== undefined && !this.wanted) {
+        const age = (this.aiTimers.get(g) || 0) + dt;
+        if (age < 0.1) {
+          this.aiTimers.set(g, age);
+          continue;
+        }
+        this.aiTimers.set(g, 0);
+        // Patrol intent refreshes at 10 Hz; move at its normal integrated speed.
+        guardDt = Math.min(age, 0.12);
+      }
       const hostile =
         !f ||
         (g.chasing && !this.atHome) ||
@@ -1098,7 +1133,7 @@ export class Game {
           : 1.7;
         const dx = (target.x - g.x) / len,
           dz = (target.z - g.z) / len;
-        move(g, dx * speed * dt, dz * speed * dt, 0.6, this.level);
+        move(g, dx * speed * guardDt, dz * speed * guardDt, 0.6, this.level);
         g.heading = Math.atan2(dz, dx);
       }
       const range = f

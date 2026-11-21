@@ -5,11 +5,11 @@ import {
   move,
   clearPosition,
   routeTarget,
-} from "./region.js?v=town-blocks-1";
+} from "./region.js?v=performance-1";
 import {
   circleVehicle,
   vehicleSize,
-} from "./vehicle-collisions.js?v=town-blocks-1";
+} from "./vehicle-collisions.js?v=performance-1";
 export const inBarn = (p) =>
   Math.abs(p.x - HOME_BARN.x) < HOME_BARN.hx - 0.8 &&
   p.z < HOME_BARN.z + HOME_BARN.hz - 1 &&

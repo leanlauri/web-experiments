@@ -1,4 +1,4 @@
-import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
+import { vehicleProfile } from "./vehicles.js?v=performance-1";
 export const SKID_LIFETIME = 8;
 export const MAX_SKID_SEGMENTS = 1200;
 export function recordSkidmarks(marks, vehicle, time) {

@@ -1,5 +1,5 @@
-import { WEAPONS } from "./region.js?v=town-blocks-1";
-import { equipmentIcon } from "./equipment.js?v=town-blocks-1";
+import { WEAPONS } from "./region.js?v=performance-1";
+import { equipmentIcon } from "./equipment.js?v=performance-1";
 export function createWheel(
   game,
   root,

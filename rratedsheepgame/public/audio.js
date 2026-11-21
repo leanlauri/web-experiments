@@ -1,4 +1,4 @@
-import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
+import { vehicleProfile } from "./vehicles.js?v=performance-1";
 export function createAudio() {
   let context,
     voices = [],

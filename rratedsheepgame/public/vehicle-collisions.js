@@ -1,11 +1,12 @@
-import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
+import { SpatialGrid } from "./spatial.js?v=performance-1";
+import { vehicleProfile } from "./vehicles.js?v=performance-1";
 import {
-  blocked,
-  OBSTACLES,
+  terrainBlocked,
+  nearbyBuildings,
   SIZE,
   SCENERY,
   buildingBlocks,
-} from "./region.js?v=town-blocks-1";
+} from "./region.js?v=performance-1";
 export const vehicleSize = (v) => {
   if (v.halfLength !== undefined && v.halfWidth !== undefined)
     return { halfLength: v.halfLength, halfWidth: v.halfWidth, mass: Infinity };
@@ -51,7 +52,9 @@ export function vehicleBlocked(v, p = v, level = 0) {
   const pose = { ...v, ...p },
     bottom = pose.y || 0,
     radius = Math.hypot(size.halfLength, size.halfWidth);
-  for (const c of SCENERY.nearby(pose, radius)) {
+  const colliders = SCENERY.nearby(pose, radius + 0.12),
+    buildings = nearbyBuildings(pose, radius + 0.12);
+  for (const c of colliders) {
     if (bottom >= c.minY + c.h || bottom + 2.2 <= c.minY) continue;
     if (c.radius) {
       if (circleVehicle(c, pose, c.radius + 0.025)) return true;
@@ -73,21 +76,30 @@ export function vehicleBlocked(v, p = v, level = 0) {
           ? ((q) =>
               Math.abs(q.x) > SIZE - 4 ||
               Math.abs(q.z) > SIZE - 4 ||
-              OBSTACLES.some(
+              buildings.some(
                 (b) => b.h > (p.y ?? v.y ?? 0) && buildingBlocks(b, q, 0.12),
               ))({
               x: p.x + f.x * length + n.x * width,
               z: p.z + f.z * length + n.z * width,
             })
-          : blocked(
-              {
-                x: p.x + f.x * length + n.x * width,
-                z: p.z + f.z * length + n.z * width,
-                y: bottom,
-              },
-              0.12,
-              level,
-            )
+          : ((q) =>
+              terrainBlocked(q, level) ||
+              buildings.some(
+                (b) => bottom < b.h && buildingBlocks(b, q, 0.12),
+              ) ||
+              colliders.some((c) => {
+                if (bottom >= c.minY + c.h || bottom + 1.8 <= c.minY)
+                  return false;
+                const dx = Math.abs(q.x - c.x),
+                  dz = Math.abs(q.z - c.z);
+                return c.radius
+                  ? Math.hypot(dx, dz) < c.radius + 0.12
+                  : Math.hypot(Math.max(0, dx - c.hx), Math.max(0, dz - c.hz)) <
+                      0.12;
+              }))({
+              x: p.x + f.x * length + n.x * width,
+              z: p.z + f.z * length + n.z * width,
+            })
       )
         return true;
   return false;
@@ -149,11 +161,19 @@ export function resolveVehicleCollisions(
   onImpact = () => {},
 ) {
   let contacts = 0;
-  for (let pass = 0; pass < 3; pass++)
+  const order = new Map(vehicles.map((v, i) => [v, i]));
+  const grid = new SpatialGrid();
+  for (let pass = 0; pass < 3; pass++) {
+    const previousContacts = contacts;
+    grid.clear();
+    for (const v of vehicles) grid.insert(v);
     for (let i = 0; i < vehicles.length; i++)
-      for (let j = i + 1; j < vehicles.length; j++) {
-        const a = vehicles[i],
-          b = vehicles[j];
+      for (const b of grid
+        .query(vehicles[i], 12)
+        .filter((v) => order.get(v) > i)
+        .sort((a, b) => order.get(a) - order.get(b))) {
+        const a = vehicles[i];
+        if (a.distantTraffic && b.distantTraffic) continue;
         if (
           Math.hypot(a.x - b.x, a.z - b.z) > 12 ||
           Math.abs((a.y || 0) - (b.y || 0)) > 2.2
@@ -289,5 +309,7 @@ export function resolveVehicleCollisions(
           }
         }
       }
+    if (contacts === previousContacts) break;
+  }
   return contacts;
 }

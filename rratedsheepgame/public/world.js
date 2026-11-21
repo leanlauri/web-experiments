@@ -1,7 +1,8 @@
-import { createEquipment } from "./equipment.js?v=town-blocks-1";
-import { vehicleProfile } from "./vehicles.js?v=town-blocks-1";
+import { createQuality } from "./quality.js?v=performance-1";
+import { createEquipment } from "./equipment.js?v=performance-1";
+import { vehicleProfile } from "./vehicles.js?v=performance-1";
 import * as T from "./vendor/three.module.js";
-import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=town-blocks-1";
+import { MAX_SKID_SEGMENTS, skidOpacity } from "./skidmarks.js?v=performance-1";
 import {
   SIZE,
   HOME,
@@ -17,7 +18,7 @@ import {
   TOWN_LOTS,
   RIVER_START,
   dist,
-} from "./region.js?v=town-blocks-1";
+} from "./region.js?v=performance-1";
 const materials = new Map();
 const material = (c) => {
   if (!materials.has(c))
@@ -321,9 +322,70 @@ function carModel(v) {
   g.userData.intact = [...g.children];
   return g;
 }
+function batchStatic(root, excluded = new Set()) {
+  root.updateWorldMatrix(true, true);
+  const inverse = root.matrixWorld.clone().invert(),
+    buckets = new Map(),
+    remove = [];
+  const visit = (node) => {
+    if (excluded.has(node)) return;
+    if (
+      node.isMesh &&
+      !node.isInstancedMesh &&
+      !node.material.transparent &&
+      !node.material.map
+    ) {
+      const position = new T.Vector3().setFromMatrixPosition(node.matrixWorld);
+      const key = [
+        Math.floor(position.x / 64),
+        Math.floor(position.z / 64),
+        node.geometry.uuid,
+        node.material.uuid,
+        node.renderOrder,
+      ].join(":");
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(node);
+      remove.push(node);
+    }
+    for (const child of node.children) visit(child);
+  };
+  for (const child of root.children) visit(child);
+  for (const list of buckets.values()) {
+    const first = list[0],
+      mesh = new T.InstancedMesh(first.geometry, first.material, list.length);
+    mesh.renderOrder = first.renderOrder;
+    list.forEach((node, i) =>
+      mesh.setMatrixAt(
+        i,
+        new T.Matrix4().multiplyMatrices(inverse, node.matrixWorld),
+      ),
+    );
+    mesh.computeBoundingSphere();
+    mesh.matrixAutoUpdate = false;
+    root.add(mesh);
+  }
+  for (const node of remove) node.removeFromParent();
+  // Empty static site groups no longer need matrix traversal.
+  const prune = (node) => {
+    for (const child of [...node.children]) {
+      if (excluded.has(child)) continue;
+      prune(child);
+      if (child.isGroup && !child.children.length) node.remove(child);
+    }
+  };
+  prune(root);
+}
 export function createWorld(canvas) {
-  const renderer = new T.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+  const weak =
+    matchMedia("(pointer: coarse)").matches ||
+    (navigator.hardwareConcurrency || 8) <= 4;
+  let savedQuality = "auto";
+  try {
+    savedQuality = localStorage.getItem("little-pastures-quality") || "auto";
+  } catch {}
+  const quality = createQuality(savedQuality, weak);
+  const renderer = new T.WebGLRenderer({ canvas, antialias: false });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, quality.ratio));
   renderer.setClearColor(0xbdd3b4);
   const scene = new T.Scene();
   const daytimeFog = new T.Fog(0xbdd3b4, 120, 240);
@@ -887,18 +949,20 @@ export function createWorld(canvas) {
   function updateChunks(p) {
     const cx = Math.floor(p.x / 64),
       cz = Math.floor(p.z / 64),
-      key = `${cx},${cz}`;
+      key = `${cx},${cz},${quality.low && zoom <= 1.25 ? 2 : 3}`;
     if (key === chunkOrigin) return;
     chunkOrigin = key;
+    const limit = quality.low && zoom <= 1.25 ? 2 : 3;
     for (const [key, c] of chunks) {
-      if (Math.abs(c.cx - cx) > 3 || Math.abs(c.cz - cz) > 3) {
+      if (Math.abs(c.cx - cx) > limit || Math.abs(c.cz - cz) > limit) {
         world.remove(c.group);
         for (const m of c.group.children) m.dispose();
         chunks.delete(key);
       }
     }
-    for (let x = cx - 3; x <= cx + 3; x++)
-      for (let z = cz - 3; z <= cz + 3; z++)
+    const radius = quality.low && zoom <= 1.25 ? 2 : 3;
+    for (let x = cx - radius; x <= cx + radius; x++)
+      for (let z = cz - radius; z <= cz + radius; z++)
         if (!chunks.has(`${x},${z}`)) chunk(x, z);
   }
   const actors = new Map(),
@@ -913,6 +977,9 @@ export function createWorld(canvas) {
   function fences(level) {
     if (level === fenceLevel) return;
     fenceLevel = level;
+    fenceGroup.traverse((node) => {
+      if (node.isInstancedMesh) node.dispose();
+    });
     fenceGroup.clear();
     for (const f of FARMS)
       for (let i = 0; i < 72; i++) {
@@ -948,6 +1015,7 @@ export function createWorld(canvas) {
           rail2.rotation.y = rail.rotation.y;
         }
       }
+    batchStatic(fenceGroup);
   }
   const starCanvas = document.createElement("canvas");
   starCanvas.width = starCanvas.height = 64;
@@ -1143,7 +1211,9 @@ export function createWorld(canvas) {
     if (hidden || dist(p, gamePlayer) > 150) {
       if (g) {
         g.visible = false;
+        g.userData.equipment?.hide();
         if (g.userData.shadow) g.userData.shadow.visible = false;
+        actorRoot.remove(g, g.userData.shadow);
       }
       return;
     }
@@ -1161,6 +1231,8 @@ export function createWorld(canvas) {
       actorRoot.add(shadow);
       g.userData.shadow = shadow;
     }
+    g.userData.lastSeen = currentTime;
+    if (g.parent !== actorRoot) actorRoot.add(g, g.userData.shadow);
     g.visible = true;
     for (const wheel of g.userData.frontWheels || [])
       wheel.rotation.y = -(p.steerAngle || 0);
@@ -1358,6 +1430,40 @@ export function createWorld(canvas) {
       }
   }
   let shotMeshes = [];
+  batchStatic(
+    world,
+    new Set([
+      ...houseWalls,
+      ...houseDetails,
+      houseRoof,
+      ...barnWalls,
+      barnRoof,
+      rocket,
+      blueprint,
+      fenceGroup,
+      skidMesh,
+    ]),
+  );
+  function releaseActor(model) {
+    model.userData.equipment?.dispose();
+    model.traverse((node) => {
+      if (!node.isMesh) return;
+      if (
+        ![cube, sphere, cylinder, shadowGeo].includes(node.geometry) &&
+        !node.userData.equipmentOwned
+      )
+        node.geometry.dispose();
+      // Shared palette materials are retained; effects own their materials.
+      if (
+        !node.userData.equipmentOwned &&
+        ![...materials.values(), shadowMaterial, starMaterial].includes(
+          node.material,
+        )
+      )
+        node.material.dispose();
+    });
+    actorRoot.remove(model, model.userData.shadow);
+  }
   const compactLabels = matchMedia("(max-width: 750px), (pointer: coarse)");
   const placeLabels = [];
   world.traverse((node) => {
@@ -1465,40 +1571,49 @@ export function createWorld(canvas) {
       }
       for (const [id, m] of actors)
         if (!live.has(id)) {
-          m.userData.equipment?.dispose();
-          actorRoot.remove(m);
-          actorRoot.remove(m.userData.shadow);
+          releaseActor(m);
           actors.delete(id);
         }
-      for (const m of shotMeshes) actorRoot.remove(m);
-      shotMeshes = game.shots
+      const inactive = [...actors]
+        .filter(([, m]) => !m.visible)
+        .sort(
+          (a, b) =>
+            (b[1].userData.lastSeen || 0) - (a[1].userData.lastSeen || 0),
+        );
+      inactive.forEach(([id, m], i) => {
+        if (
+          i >= (quality.low ? 24 : 48) ||
+          currentTime - (m.userData.lastSeen || 0) > 20
+        ) {
+          releaseActor(m);
+          actors.delete(id);
+        }
+      });
+      const visibleShots = game.shots
         .filter((s) => dist(s, game.player) < 100 && s.owner !== "swing")
-        .flatMap((s) => {
-          const m = shape(
-            actorRoot,
-            s.owner === "enemy" ? 0xea9388 : 0xb2e4f2,
-            s.x,
-            1.3,
-            s.z,
-            0.25,
-            0.25,
-            0.65,
-            sphere,
-          );
-          m.rotation.y = Math.atan2(s.vx, s.vz);
-          const trail = shape(
-            actorRoot,
-            s.owner === "enemy" ? 0xefc4a5 : 0xe2fbff,
-            s.x - s.vx * 0.018,
-            1.3,
-            s.z - s.vz * 0.018,
-            0.08,
-            0.08,
-            1.1,
-          );
-          trail.rotation.y = m.rotation.y;
-          return [m, trail];
-        });
+        .slice(0, quality.low ? 48 : 96);
+      visibleShots.forEach((shot, i) => {
+        if (!shotMeshes[i])
+          shotMeshes[i] = [
+            shape(actorRoot, 0xb2e4f2, 0, 0, 0, 0.25, 0.25, 0.65, sphere),
+            shape(actorRoot, 0xe2fbff, 0, 0, 0, 0.08, 0.08, 1.1),
+          ];
+        const [m, trail] = shotMeshes[i];
+        m.visible = true;
+        trail.visible = !quality.low;
+        m.material = material(shot.owner === "enemy" ? 0xea9388 : 0xb2e4f2);
+        m.position.set(shot.x, 1.3, shot.z);
+        m.rotation.y = Math.atan2(shot.vx, shot.vz);
+        trail.position.set(
+          shot.x - shot.vx * 0.018,
+          1.3,
+          shot.z - shot.vz * 0.018,
+        );
+        trail.rotation.y = m.rotation.y;
+      });
+      shotMeshes.forEach((pair, i) => {
+        if (i >= visibleShots.length) pair.forEach((m) => (m.visible = false));
+      });
       barnRoof.visible = dist(game.player, HOME) > 45;
       barnWalls.forEach((w) => {
         w.scale.y = game.atHome ? 2.4 : 7;
@@ -1539,11 +1654,32 @@ export function createWorld(canvas) {
   resize();
   return {
     render,
+    quality,
+    setQuality(mode) {
+      quality.setMode(mode);
+      try {
+        localStorage.setItem("little-pastures-quality", quality.mode);
+      } catch {}
+      renderer.setPixelRatio(Math.min(devicePixelRatio, quality.ratio));
+      resize();
+    },
+    sampleFrame(seconds) {
+      if (quality.sample(seconds)) {
+        renderer.setPixelRatio(Math.min(devicePixelRatio, quality.ratio));
+        resize();
+      }
+    },
     zoom(delta) {
       zoom = Math.max(0.65, Math.min(1.65, zoom + delta));
     },
     stats() {
       return {
+        quality: {
+          mode: quality.mode,
+          low: quality.low,
+          ratio: renderer.getPixelRatio(),
+          targetFps: quality.low ? 30 : 60,
+        },
         rocket: {
           built: rocketParts.filter((g) => g.visible).length,
           blueprints: ghostParts.filter((g) => g.visible).length,
